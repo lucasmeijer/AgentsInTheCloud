@@ -42,5 +42,8 @@
     "oxlint": "1.78.0",
     "typebox": "^1.0.57",
     "typescript": "6.0.3"
+  },
+  "patchedDependencies": {
+    "@earendil-works/pi-ai@1.0.0": "patches/@earendil-works%2Fpi-ai@1.0.0.patch"
   }
 }

@@ -1,0 +1,39 @@
+diff --git a/dist/api/openai-codex-responses.js b/dist/api/openai-codex-responses.js
+index 40014b3b7eacb3a8e5e43daac2cec6446e8810c2..2c10fe5b890ef63eb85dd15f1e9ddb0154ece488 100644
+--- a/dist/api/openai-codex-responses.js
++++ b/dist/api/openai-codex-responses.js
+@@ -1290,7 +1290,7 @@ function buildBaseCodexHeaders(initHeaders, additionalHeaders, accountId, token)
+     }
+     headers.set("Authorization", `Bearer ${token}`);
+     headers.set("chatgpt-account-id", accountId);
+-    headers.set("originator", "pi");
++    headers.set("originator", "AgentsInTheCloud");
+     headers.set("User-Agent", getPiUserAgent());
+     return headers;
+ }
+diff --git a/dist/auth/oauth/openai-codex.js b/dist/auth/oauth/openai-codex.js
+index 2ea03fc282a4ce547122e7f1031bb2aff5293422..0921f616dc04808dcbb7ba9cf1739b667f3ec8f2 100644
+--- a/dist/auth/oauth/openai-codex.js
++++ b/dist/auth/oauth/openai-codex.js
+@@ -222,7 +222,7 @@ async function pollOpenAICodexDeviceAuth(device, signal) {
+         },
+     });
+ }
+-async function createAuthorizationFlow(originator = "pi") {
++async function createAuthorizationFlow(originator = "AgentsInTheCloud") {
+     const { verifier, challenge } = await generatePKCE();
+     const state = createState();
+     const url = new URL(AUTHORIZE_URL);
+diff --git a/dist/utils/pi-user-agent.js b/dist/utils/pi-user-agent.js
+index a310aae05c50c1a6116ed53af545a9928875c447..b0263814137e61affc8c34d86ed28065ccb0c3f9 100644
+--- a/dist/utils/pi-user-agent.js
++++ b/dist/utils/pi-user-agent.js
+@@ -7,6 +7,6 @@ function loadNodeOs() {
+ // Keep runtime OS loading browser-safe. A top-level runtime import of node:os breaks browser/Vite builds.
+ const nodeOs = loadNodeOs();
+ export function getPiUserAgent() {
+-    return nodeOs ? `pi (${nodeOs.platform()} ${nodeOs.release()}; ${nodeOs.arch()})` : "pi (browser)";
++    return nodeOs ? `AgentsInTheCloud (${nodeOs.platform()} ${nodeOs.release()}; ${nodeOs.arch()})` : "AgentsInTheCloud (browser)";
+ }
+ //# sourceMappingURL=pi-user-agent.js.map
+\ No newline at end of file
