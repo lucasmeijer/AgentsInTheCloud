@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getCustomModelsJson, getEnabledModels, loginPiOAuthProvider, setCustomModelsJson, setEnabledModels } from "../../src/server/pi-config-models.ts";
+import { getCustomModelsJson, getEnabledModels, loginPiOAuthProvider, setCustomModelsJson, setEnabledModels, validateModelProviderApiKey } from "../../src/server/pi-config-models.ts";
 import { updateJsonSettings } from "@agents-in-the-cloud/core/json-settings";
 let dataDir: string;
 beforeEach(async () => {
@@ -12,6 +12,26 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.ATELIER_DATA_DIR;
   await rm(dataDir, { recursive: true, force: true });
+});
+
+describe("API key validation", () => {
+  test("OpenCode Go probes carry the session header OpenCode requires for routing", async () => {
+    const realFetch = globalThis.fetch;
+    const sessions: (string | null)[] = [];
+    globalThis.fetch = Object.assign(async (input: URL | RequestInfo, init?: RequestInit) => {
+      sessions.push(new Request(input, init).headers.get("x-opencode-session"));
+      return Response.json({ type: "MissingSessionID" }, { status: 400 });
+    }, { preconnect: realFetch.preconnect });
+    try {
+      await expect(validateModelProviderApiKey("opencode-go", "test-key")).rejects.toThrow();
+      await expect(validateModelProviderApiKey("opencode-go", "test-key")).rejects.toThrow();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(sessions.length).toBeGreaterThanOrEqual(2);
+    for (const session of sessions) expect(session).toMatch(/^[0-9a-f-]{36}$/);
+    expect(new Set(sessions).size).toBeGreaterThan(1);
+  });
 });
 
 describe("enabled model storage", () => {
@@ -79,9 +99,11 @@ describe("custom Pi model configuration", () => {
       let authUrl: string | undefined;
       await expect(loginPiOAuthProvider("openai", {
         signal: abort.signal,
-        notify: (event) => { if (event.type === "auth_url") { authUrl = event.url; abort.abort(); } },
-        prompt: (prompt) => new Promise((_resolve, reject) => prompt.signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })),
-      })).rejects.toThrow();
+        notify: (event) => { if (event.type === "auth_url") authUrl = event.url; },
+        // Reject the prompt so the provider reaches its cleanup before we start
+        // another login. Aborting in notify races the prompt's abort listener.
+        prompt: async () => { throw new Error("cancelled by test"); },
+      })).rejects.toThrow("cancelled by test");
       return new URL(authUrl!).searchParams.get("ext_agent_host_id");
     }
     const first = await agentHostId();

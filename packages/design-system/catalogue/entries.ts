@@ -209,7 +209,7 @@ export const entries: CatalogueEntry[] = [
             initialContent: { kind: "text", text: "Start activity" },
             activeContent: { kind: "text", text: "Stop activity" },
             type: "button",
-            attributesHtml: 'data-action="catalogue#activity"',
+            actions: "catalogue#activity",
           }),
       },
       {
@@ -223,8 +223,8 @@ export const entries: CatalogueEntry[] = [
             variant: "secondary",
             initialContent: { kind: "text", text: "Run task" },
             progressContent: { kind: "text", text: "Working…" },
-            attributesHtml:
-              'data-action="catalogue#progress" data-catalogue-progress-param="25"',
+            actions: "catalogue#progress",
+            attributesHtml: 'data-catalogue-progress-param="25"',
           }) +
           '<div class="form-actions">' +
           [
@@ -497,7 +497,7 @@ export const entries: CatalogueEntry[] = [
               initialLabel: "Start", activeLabel: "Stop",
               initialContent: { kind: "html", html: Icons.Agent },
               activeContent: { kind: "html", html: Icons.Close },
-              attributesHtml: 'data-action="catalogue#activity"',
+              actions: "catalogue#activity",
             }) +
             '<form data-action="submit->catalogue#submit">' +
             buttonHtml({ type: "submit", variant: "secondary", content: { kind: "caption", caption: "Save workspace" } }) +
@@ -670,7 +670,7 @@ export const entries: CatalogueEntry[] = [
           state: "active",
           initialContent: { kind: "text", text: "Start preparing the development workspace" },
           activeContent: { kind: "text", text: "Stop preparing the development workspace" },
-          attributesHtml: 'data-action="catalogue#activity"',
+          actions: "catalogue#activity",
         }),
       },
       {
@@ -689,7 +689,7 @@ export const entries: CatalogueEntry[] = [
                 activeLabel: "Stop agent",
                 initialContent: { kind: "html", html: Icons.Agent },
                 activeContent: { kind: "html", html: Icons.Close },
-                attributesHtml: 'data-action="catalogue#activity"',
+                actions: "catalogue#activity",
               }) +
               progressButtonHtml({
                 variant: "secondary",
@@ -710,14 +710,14 @@ export const entries: CatalogueEntry[] = [
             state: "initial",
             initialContent: { kind: "text", text: "Start" },
             activeContent: { kind: "text", text: "Stop operation" },
-            attributesHtml: 'data-action="catalogue#activity"',
+            actions: "catalogue#activity",
           }) +
           activityButtonHtml({
             variant: "primary",
             state: "active",
             initialContent: { kind: "text", text: "Start" },
             activeContent: { kind: "text", text: "Stop operation" },
-            attributesHtml: 'data-action="catalogue#activity"',
+            actions: "catalogue#activity",
           }),
       },
     ],
@@ -1007,18 +1007,18 @@ export const entries: CatalogueEntry[] = [
     title: "Popup select",
     when: "A native form select enhanced into a consistent popover. Prefer Toggle for a few short options.",
     contract:
-      "Native interface: select.popup-select, an accessible label, named options, selected and disabled. Wrap each select in its own span. data-popup-placement=above is optional. Native change and form value remain authoritative; never manipulate generated menu DOM.",
+      "Native interface: select.popup-select with data-controller=popup-select, an accessible label, named options, selected and disabled. Wrap each select in its own span. data-popup-placement=above is optional. Native change and form value remain authoritative; never manipulate generated menu DOM.",
     sources: ["popup/popup-controller.ts", "popup/popup-position.ts"],
     examples: [
       {
         title: "Select with disabled option",
         render: () =>
-          '<span><select class="popup-select" name="environment" aria-label="Environment"><option>Development</option><option>Staging</option><option disabled>Production (restricted)</option></select></span>',
+          '<span><select class="popup-select" data-controller="popup-select" name="environment" aria-label="Environment"><option>Development</option><option>Staging</option><option disabled>Production (restricted)</option></select></span>',
       },
       {
         title: "Long choices · native form reset · disabled select",
         render: () =>
-          '<form class="form-stack" data-action="submit->catalogue#submit"><span><select class="popup-select" name="region" aria-label="Region"><option value="local">Local development</option><option value="remote">A remote development environment with a deliberately long regional name</option></select></span><span><select class="popup-select" aria-label="Unavailable environment" disabled><option>Unavailable environment</option></select></span>' +
+          '<form class="form-stack" data-action="submit->catalogue#submit"><span><select class="popup-select" data-controller="popup-select" name="region" aria-label="Region"><option value="local">Local development</option><option value="remote">A remote development environment with a deliberately long regional name</option></select></span><span><select class="popup-select" data-controller="popup-select" aria-label="Unavailable environment" disabled><option>Unavailable environment</option></select></span>' +
           buttonGroupHtml({ orientation: "horizontal", semantics: "layout", itemsHtml:
             buttonHtml({ type: "reset", variant: "secondary", content: { kind: "caption", caption: "Reset selection" } }) +
             buttonHtml({ type: "submit", variant: "primary", content: { kind: "caption", caption: "Submit selection" } })
@@ -1049,11 +1049,11 @@ export const entries: CatalogueEntry[] = [
             titleCaption: "A focused task",
             titleParts: {
               before: "Edit record in",
-              controlHtml: '<select class="popup-select" aria-label="Record environment"><option>Development</option><option>Staging</option></select>',
+              controlHtml: '<select class="popup-select" data-controller="popup-select" aria-label="Record environment"><option>Development</option><option>Staging</option></select>',
               after: ", then save.",
             },
             bodyHtml:
-              '<label>Record name<input class="text-field" autofocus placeholder="Enter a name"></label><p>Resize, tab through controls, and press Escape.</p><span><select class="popup-select" aria-label="Dialog environment"><option>Development</option><option>Staging</option></select></span>' +
+              '<label>Record name<input class="text-field" autofocus placeholder="Enter a name"></label><p>Resize, tab through controls, and press Escape.</p><span><select class="popup-select" data-controller="popup-select" aria-label="Dialog environment"><option>Development</option><option>Staging</option></select></span>' +
               "<p>Long content inside the modal.</p>".repeat(15),
           }),
       },
@@ -1166,7 +1166,7 @@ export const entries: CatalogueEntry[] = [
     title: "Managed list",
     when: "Non-selectable records with metadata and actions. Use Content row when the row itself is actionable.",
     contract:
-      "CSS anatomy: managed-list, __filter, __items, __item, __content, __label / __label-text, __description, __meta, __actions, __empty. Local filter uses data-search-text or row text. Server search sets data-managed-list-server-filter=true and uses Turbo. __label-text truncates.",
+      "CSS anatomy: managed-list (with data-controller=managed-list), __filter, __items, __item, __content, __label / __label-text, __description, __meta, __actions, __empty. Local filter uses data-search-text or row text. Server search sets data-managed-list-server-filter=true and uses Turbo. __label-text truncates.",
     sources: [
       "managed-list/managed-list-controller.ts",
       "managed-list/managed-list.css",
@@ -1175,7 +1175,7 @@ export const entries: CatalogueEntry[] = [
       {
         title: "Filter · long label · empty result",
         render: () =>
-          '<div class="managed-list"><div class="managed-list__filter"><input class="text-field" type="search" aria-label="Filter records" placeholder="Filter records…"></div><div class="managed-list__items"><div class="managed-list__item"><div class="managed-list__content"><div class="managed-list__label"><span class="managed-list__label-text">A deliberately long record label for checking narrow layouts</span></div><div class="managed-list__description">Development environment</div></div><span class="managed-list__meta">Ready</span></div><div class="managed-list__item"><div class="managed-list__content">Staging</div></div></div><div class="managed-list__empty" hidden>No matching records</div></div>',
+          '<div class="managed-list" data-controller="managed-list"><div class="managed-list__filter"><input class="text-field" type="search" aria-label="Filter records" placeholder="Filter records…"></div><div class="managed-list__items"><div class="managed-list__item"><div class="managed-list__content"><div class="managed-list__label"><span class="managed-list__label-text">A deliberately long record label for checking narrow layouts</span></div><div class="managed-list__description">Development environment</div></div><span class="managed-list__meta">Ready</span></div><div class="managed-list__item"><div class="managed-list__content">Staging</div></div></div><div class="managed-list__empty" hidden>No matching records</div></div>',
       },
     ],
   },

@@ -22,38 +22,6 @@ import { PopupController, PopupSelectController } from "./popup/popup-controller
 import { TransientFeedbackController } from "./transient-feedback/transient-feedback-controller.ts";
 import { ToggleController } from "./toggle/toggle-controller.ts";
 
-const automaticBehaviors = [
-  ["body", "scrollbars", "pointermove->scrollbars#hover pointerleave->scrollbars#leave wheel->scrollbars#wheel:!passive"],
-  ["body", "content-rows"],
-  ["body", "warning-banners"],
-  [".activity-button, .progress-button", "perimeter-button"],
-  [".copy-button", "copy-button", "click->copy-button#copy"],
-  [".destructive-confirmation", "destructive-confirmation"],
-  [".dialog", "dialog"],
-  [".help-tip", "help-tip"],
-  [".managed-list", "managed-list"],
-  [".popup-select", "popup-select"],
-] as const;
-
-function attachAutomaticBehaviors(root: ParentNode): void {
-  for (const [selector, identifier, action] of automaticBehaviors) {
-    const elements = [
-      ...(root instanceof Element && root.matches(selector) ? [root] : []),
-      ...root.querySelectorAll<HTMLElement>(selector),
-    ];
-    for (const element of elements) {
-      const controllers = new Set((element.getAttribute("data-controller") ?? "").split(/\s+/).filter(Boolean));
-      controllers.add(identifier);
-      element.setAttribute("data-controller", [...controllers].join(" "));
-      if (action) {
-        const actions = new Set((element.getAttribute("data-action") ?? "").split(/\s+/).filter(Boolean));
-        actions.add(action);
-        element.setAttribute("data-action", [...actions].join(" "));
-      }
-    }
-  }
-}
-
 export function registerDesignSystemControllers(application: Pick<Application, "register">): void {
   application.register("scrollbars", ScrollbarController);
   application.register("tab-strip", TabStripController);
@@ -73,8 +41,4 @@ export function registerDesignSystemControllers(application: Pick<Application, "
   application.register("popup-select", PopupSelectController);
   application.register("toggle", ToggleController);
   application.register("transient-feedback", TransientFeedbackController);
-  attachAutomaticBehaviors(document);
-  new MutationObserver((records) => {
-    for (const record of records) for (const node of record.addedNodes) if (node instanceof Element) attachAutomaticBehaviors(node);
-  }).observe(document.documentElement, { childList: true, subtree: true });
 }

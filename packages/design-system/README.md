@@ -82,9 +82,11 @@ URLs it imports, including its font. Renderer modules never start Stimulus.
 Individual `*/client` exports are available for feature-owned browser state
 (e.g. `setActivityButtonState`, `showButtonConfirmation`, `resetButtonConfirmation`, `showTransientFeedback`, `setToggleValue`).
 
-The registration entrypoint installs behavior for server-inserted HTML, including
-Turbo replacements. Native CSS interfaces (select, managed list, copy region)
-are enhanced automatically. `popupHtml` emits its own controller binding.
+The registration entrypoint only registers controllers. Every component's markup
+carries its own `data-controller` and `data-action`, so Turbo morphs, which reset
+attributes to the server's, keep it working. Renderers emit their bindings and take
+extra `controllers`/`actions` instead of those attributes; native CSS interfaces
+write theirs by hand (`data-controller="popup-select"`, `data-controller="managed-list"`).
 The public popup interface always owns the anchor, invoking Button, disclosure
 state and viewport collision handling. `trigger.attributesHtml` and
 `menuAttributesHtml` are integration slots, not positioning APIs. The shared

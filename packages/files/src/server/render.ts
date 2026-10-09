@@ -187,7 +187,7 @@ function fileConflictDialog(): string {
   return dialogHtml({
     element: {
 
-      attributesHtml: 'data-controller="dialog" data-file-editor-target="conflict"',
+      attributesHtml: 'data-file-editor-target="conflict"',
     },
     iconHtml: Icons.Files,
     titleCaption: "File changed on disk",

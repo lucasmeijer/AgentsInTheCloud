@@ -4,11 +4,6 @@ import { getWorkspaceTitle, listWorkspaces, setWorkspaceTitle } from "@agents-in
 import { resolveNewWorkspaceAgentModel } from "@agents-in-the-cloud/agent/server/model-state";
 import { cheapestAvailableProviderModel, claudeCodeHeaders, createPiModelRuntime, type ModelRef } from "@agents-in-the-cloud/llm/server";
 import { listWorkspaceAgents, setWorkspaceAgentTitle, untitledAgentTitle, type WorkspaceAgentInfo } from "./agent-store.ts";
-
-/**
- * A slug needs no reasoning, and asking for one shrinks the answer room a thinking
- * budget would need: Anthropic rejects the resulting sub-1024 token budget outright.
- */
 import { agentTitleRequestOptions, normalizeSlug, promptFor, textFromResponse } from "@agents-in-the-cloud/agent/server/slug-suggestion";
 
 export function createAutomaticWorkspaceNamingGate() {
@@ -78,9 +73,20 @@ function logAgentTitleSuggestionError(agent: { workspaceId: string; agentId?: st
   console.error("could not suggest Agent title", { workspaceId: agent.workspaceId, agentId: agent.agentId, model: model ? `${model.provider}/${model.id}` : undefined, message, ...details });
 }
 
-function suggestAgentTitle(agent: { workspaceId: string; agentId?: string }, userMessages: string[], options: { events?: AgentsInTheCloudEventBus; agentModel?: ModelRef }): void {
+interface AgentTitleSuggestionOptions {
+  events?: AgentsInTheCloudEventBus;
+  agentModel?: ModelRef;
+  onFailure?: (message: string) => void;
+}
+
+function suggestAgentTitle(agent: { workspaceId: string; agentId?: string }, userMessages: string[], options: AgentTitleSuggestionOptions): void {
   const promptText = userMessages.map((message) => message.trim()).filter(Boolean).join("\n\n");
   if (!promptText) return;
+  const fail = (model: ModelRef | undefined, message: string, details?: AgentTitleSuggestionErrorDetails): false => {
+    logAgentTitleSuggestionError(agent, model, message, details);
+    options.onFailure?.(message);
+    return false;
+  };
 
   const suggest = async (): Promise<boolean> => {
     let titleModelRef = options.agentModel;
@@ -92,38 +98,27 @@ function suggestAgentTitle(agent: { workspaceId: string; agentId?: string }, use
         if (currentAgent.title !== untitledAgentTitle) return true;
       } else if (await getWorkspaceTitle(agent.workspaceId) !== null) return true;
       if (!titleModelRef && !agent.agentId) titleModelRef = await resolveNewWorkspaceAgentModel();
-      if (!titleModelRef) {
-        logAgentTitleSuggestionError(agent, undefined, "agent model is not selected");
-        return false;
-      }
+      if (!titleModelRef) return fail(undefined, "agent model is not selected");
       const runtime = await createPiModelRuntime();
       const model = await cheapestAvailableProviderModel(runtime, titleModelRef.provider);
-      if (!model) {
-        logAgentTitleSuggestionError(agent, titleModelRef, "provider has no models available");
-        return false;
-      }
+      if (!model) return fail(titleModelRef, "provider has no models available");
       titleModelRef = { provider: model.provider, id: model.id };
-      if (!(await runtime.checkAuth(model.provider))) {
-        logAgentTitleSuggestionError(agent, titleModelRef, "model authentication is not configured");
-        return false;
-      }
+      if (!(await runtime.checkAuth(model.provider))) return fail(titleModelRef, "model authentication is not configured");
       const response = await runtime.completeSimple(model, {
         messages: [{ role: "user", content: promptFor(promptText), timestamp: Date.now() }],
-      }, { ...agentTitleRequestOptions, headers: claudeCodeHeaders(model) });
+      }, { ...agentTitleRequestOptions(model), headers: claudeCodeHeaders(model), sessionId: crypto.randomUUID() });
       if (response.stopReason === "error") {
-        logAgentTitleSuggestionError(agent, titleModelRef, response.errorMessage ?? "model returned an error", {
+        return fail(titleModelRef, response.errorMessage ?? "model returned an error", {
           stopReason: response.stopReason,
           diagnostics: response.diagnostics,
         });
-        return false;
       }
       const responseText = textFromResponse(response);
       const title = normalizeSlug(responseText);
       if (!title) {
-        if (responseText.toLowerCase() !== "error") {
-          logAgentTitleSuggestionError(agent, titleModelRef, "model returned an unusable Agent title", { responseText, stopReason: response.stopReason });
-        }
-        return false;
+        // "error" means the prompt names no task, which is expected rather than a failure.
+        if (responseText.toLowerCase() === "error") return false;
+        return fail(titleModelRef, "model returned an unusable Agent title", { responseText, stopReason: response.stopReason });
       }
       if (!agent.agentId) {
         await serializeTitleOperation(agent.workspaceId, async () => {
@@ -144,8 +139,7 @@ function suggestAgentTitle(agent: { workspaceId: string; agentId?: string }, use
       }
       return true;
     } catch (error) {
-      logAgentTitleSuggestionError(agent, titleModelRef, errorMessage(error), { error });
-      return false;
+      return fail(titleModelRef, errorMessage(error), { error });
     }
   };
   if (agent.agentId) {
@@ -159,6 +153,6 @@ export function maybeNameAgentFromPrompt(agent: WorkspaceAgentInfo, userMessages
   suggestAgentTitle(agent, userMessages, options);
 }
 
-export function maybeNameWorkspaceFromPrompt(workspaceId: string, prompt: string, options: { events?: AgentsInTheCloudEventBus; agentModel?: ModelRef } = {}): void {
+export function maybeNameWorkspaceFromPrompt(workspaceId: string, prompt: string, options: AgentTitleSuggestionOptions = {}): void {
   suggestAgentTitle({ workspaceId }, [prompt], options);
 }

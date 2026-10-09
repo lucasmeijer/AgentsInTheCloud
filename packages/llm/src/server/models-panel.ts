@@ -186,7 +186,7 @@ async function renderEnabledModelsList(runtime: Runtime, host: ModelsHost): Prom
       <div class="managed-list__actions"><form method="post" action="/models/enabled-models/disable?${hostQuery(host)}" data-turbo="true"><input type="hidden" name="model" value="${escapeHtml(modelKey(model))}">${buttonHtml({ type: "submit", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.Close, label: `Disable ${model.label}` } })}</form></div>
     </div>`;
   }).join("");
-  return `<div id="${ids.enabledModels(host)}" class="managed-list enabled-models"><div class="managed-list__items">${rows}</div>${rows ? "" : '<div class="managed-list__empty">No enabled models yet. Find a model below to enable it.</div>'}</div>`;
+  return `<div id="${ids.enabledModels(host)}" class="managed-list enabled-models" data-controller="managed-list"><div class="managed-list__items">${rows}</div>${rows ? "" : '<div class="managed-list__empty">No enabled models yet. Find a model below to enable it.</div>'}</div>`;
 }
 
 function catalogueRow(model: CatalogueEntry, host: ModelsHost): string {
@@ -217,7 +217,7 @@ async function renderEnabledModelsSection(runtime: Runtime, accounts: Account[],
       <p class="models-panel__hint">Choose which models appear in the composer.</p>
     </header>
     ${await renderEnabledModelsList(runtime, host)}
-    <div class="managed-list" data-managed-list-server-filter="true"><form class="managed-list__filter" method="get" action="/models/catalogue" data-controller="server-filter" data-action="input->server-filter#submit" data-turbo-frame="${ids.catalogue(host)}">
+    <div class="managed-list" data-controller="managed-list" data-managed-list-server-filter="true"><form class="managed-list__filter" method="get" action="/models/catalogue" data-controller="server-filter" data-action="input->server-filter#submit" data-turbo-frame="${ids.catalogue(host)}">
       <input type="hidden" name="host" value="${host}">
       <input class="text-field" type="search" name="q" placeholder="Find a model to enable…" aria-label="Find a model to enable" autocomplete="off"${focus ? " autofocus" : ""}><button type="submit" hidden>Search</button>
     </form>${renderCatalogue(await catalogue(runtime, accounts), host, "")}</div>
@@ -518,7 +518,7 @@ function oauthDeviceCodeBody(flow: PendingOAuthFlow, complete = false): string {
     label: `Copy ${flow.userCode ?? ""} into clipboard`,
     caption: `Copy ${flow.userCode ?? ""}`,
     copyText: flow.userCode ?? "",
-    attributesHtml: 'data-action="oauth-flow#showDeviceAuth"',
+    action: "oauth-flow#showDeviceAuth",
   });
   const confirmationName = flow.provider === "openai-codex" ? "OpenAI-Codex" : flow.label;
   const status = complete

@@ -92,7 +92,8 @@ export function renderPwaReminder(): string {
     activeLabel: "Install AgentsInTheCloud as an app",
     initialContent: { kind: "html", html: Icons.Exclamation },
     activeContent: { kind: "html", html: Icons.Exclamation },
-    attributesHtml: 'data-pwa-reminder-target="button" data-action="click->pwa-reminder#open"',
+    attributesHtml: 'data-pwa-reminder-target="button"',
+    actions: "click->pwa-reminder#open",
   });
   const footer = `<form method="dialog">${buttonGroupHtml({
     orientation: "horizontal",

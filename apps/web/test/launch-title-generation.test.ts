@@ -30,8 +30,24 @@ describe("launch title generation", () => {
       expect(registry.get(workspace.id)?.phase.kind).toBe("runningPhase");
       expect(name).toHaveBeenCalledTimes(1);
       expect(name).toHaveBeenCalledWith(workspace.id, "Build a calendar", {
-        events: undefined, agentModel: { provider: model.split("::")[0], id: model.split("::")[1] },
+        events: undefined, agentModel: { provider: model.split("::")[0], id: model.split("::")[1] }, onFailure: expect.any(Function),
       });
+    } finally {
+      prepare.mockRestore();
+      name.mockRestore();
+    }
+  });
+
+  test("a failed naming request becomes a workspace warning that naming clears", async () => {
+    const prepare = spyOn(agent.nativeAgentLaunch, "prepare").mockImplementation(async (parameters) => ({ agent: { initialPrompt: String(parameters?.initialPrompt ?? ""), model: String(parameters?.model ?? "") } }));
+    const name = spyOn(agent, "maybeNameWorkspaceFromPrompt").mockImplementation((_workspaceId, _prompt, options) => options?.onFailure?.("model authentication is not configured"));
+    try {
+      const { app, registry } = createTestApp();
+      const { workspace } = await (await app.fetch(postJson("/workspaces", { agent: { initialPrompt: "Build a calendar", model: "provider::model" } }))).json();
+      await Bun.sleep(0);
+      expect(registry.get(workspace.id)?.issues).toEqual([{ kind: "naming", message: "Couldn't name this workspace (model authentication is not configured). You can name it with /name in the AgentsInTheCloud composer." }]);
+      registry.setTitle(workspace.id, "calendar");
+      expect(registry.get(workspace.id)?.issues).toBeUndefined();
     } finally {
       prepare.mockRestore();
       name.mockRestore();

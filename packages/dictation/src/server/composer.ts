@@ -14,7 +14,8 @@ export function renderDictationComposerControl(): string {
     state: "initial",
     initialContent: { kind: "html", html: `${microphoneIcon}<canvas data-dictation-composer-target="waveform" aria-hidden="true"></canvas>` },
     progressContent: { kind: "html", html: '<i class="activity-spinner" aria-hidden="true"></i>' },
-    attributesHtml: 'data-popular-button aria-pressed="false" data-state="idle" data-dictation-composer-target="button" data-action="dictation-composer#toggle"',
+    attributesHtml: 'data-popular-button aria-pressed="false" data-state="idle" data-dictation-composer-target="button"',
+    actions: "dictation-composer#toggle",
   });
   return `${button}<span class="dictation-status" data-dictation-composer-target="status" aria-live="polite">Dictate</span>`;
 }

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { getAgentsInTheCloudRuntimeContext } from "@agents-in-the-cloud/core";
-import { latestNativeSessionFile, loadNativeTranscriptFiles, loadNativeTranscriptImage, nativeImageTypes, nativeJsonlRows, nativeSessionFiles, nativeTimestamp } from "@agents-in-the-cloud/cli-agent/server";
+import { loadNativeTranscriptFiles, loadNativeTranscriptImage, nativeImageTypes, nativeJsonlRows, nativeSessionFiles, nativeTimestamp } from "@agents-in-the-cloud/cli-agent/server";
 import type { TranscriptRecord } from "@agents-in-the-cloud/agent/server/transcript";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
@@ -103,7 +103,16 @@ function sessionDirectory(workspaceId: string, sessionId: string): string {
   return join(getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir, "workspaces", workspaceId, "home-local", ".local", "share", "agents-in-the-cloud-agents", sessionId, "codex", "sessions");
 }
 export async function codexHistoryFiles(workspaceId: string, sessionId: string): Promise<string[]> {
-  return nativeSessionFiles(sessionDirectory(workspaceId, sessionId));
+  const directory = sessionDirectory(workspaceId, sessionId);
+  const metadata = Bun.file(join(directory, "..", "native-session.json"));
+  // Older saved tabs kept rollouts inside their private CODEX_HOME.
+  if (!await metadata.exists()) return nativeSessionFiles(directory);
+  const schema = Type.Object({ id: Type.String(), transcript: Type.String(), private: Type.Optional(Type.Boolean()) });
+  const session = Value.Parse(schema, await metadata.json());
+  if (isAbsolute(session.transcript) || session.transcript.split("/").includes("..")) throw new Error("Invalid Codex transcript path");
+  const root = session.private ? directory : join(getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir, "home", ".codex", "sessions");
+  const file = join(root, session.transcript);
+  return await Bun.file(file).exists() ? [file] : [];
 }
 export async function loadCodexTranscript(workspaceId: string, sessionId: string): Promise<TranscriptRecord[] | undefined> {
   return loadNativeTranscriptFiles(await codexHistoryFiles(workspaceId, sessionId), (jsonl, file) => codexTranscriptRecords(jsonl, basename(file, ".jsonl")));
@@ -124,7 +133,7 @@ export async function loadCodexTranscriptImage(workspaceId: string, sessionId: s
 
 /** Read the native ID from the tab-private rollout, never use workspace-wide --last. */
 export async function codexResumeId(workspaceId: string, sessionId: string): Promise<string | undefined> {
-  const file = await latestNativeSessionFile(sessionDirectory(workspaceId, sessionId));
+  const file = (await codexHistoryFiles(workspaceId, sessionId)).at(-1);
   if (!file) return undefined;
   const schema = Type.Object({ type: Type.Literal("session_meta"), payload: Type.Object({ id: Type.String() }) });
   const id = Array.from(nativeJsonlRows(await readFile(file, "utf8"), schema))[0]?.payload.id;

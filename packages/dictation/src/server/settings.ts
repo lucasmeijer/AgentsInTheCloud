@@ -12,7 +12,7 @@ async function renderDictationSettings(): Promise<string> {
   return `<section class="settings-sec settings-sec-inline settings-sec-dictation" id="${sectionId}">
     <h2>Dictation</h2>
     <form method="post" action="${settingsPath}" data-turbo="true" data-controller="settings-autosave" data-action="change->settings-autosave#save submit->settings-autosave#submit">
-      <select class="settings-select popup-select" name="model" aria-label="Dictation model">${options}</select>
+      <select class="settings-select popup-select" data-controller="popup-select" name="model" aria-label="Dictation model">${options}</select>
     </form>
   </section>`;
 }

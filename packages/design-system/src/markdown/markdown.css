@@ -15,6 +15,9 @@
 .markdown li { margin-bottom: 3px; }
 .markdown code { font-family: var(--font-mono); }
 .markdown hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line-strong); }
+/* Give short fences breathing room, then grow to their longest line within the pane. */
+.markdown pre, .agent-code-block { width: fit-content; min-width: min(400px, 100%); max-width: 100%; box-sizing: border-box; }
+.agent-code-block pre { width: auto; }
 .markdown pre { background: color-mix(in srgb, var(--bg) 45%, #000 14%); border: 1px solid var(--line); color: var(--text-bright); border-radius: var(--radius-control); padding: 12px; overflow-x: auto; margin: 6px 0 12px; }
 .markdown pre code { display: block; background: transparent; border: 0; border-radius: 0; padding: 0; color: inherit; font-size: var(--text-code); line-height: var(--leading-standard); }
 /* Enhanced fences also appear outside .markdown in the fullscreen viewer. */
@@ -35,7 +38,7 @@
 .markdown-diff { border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; background: var(--panel); }
 .markdown-diff-file + .markdown-diff-file { border-top: 1px solid var(--line); }
 .markdown-diff-filename { padding: 8px 42px 8px 12px; font: var(--text-code) var(--font-mono); color: var(--text-muted); background: var(--panel); overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }
-.markdown-diff pre.markdown-diff-snippet { border: 0; border-radius: 0; padding: 10px 0; margin: 0; background: var(--panel); }
+.markdown-diff pre.markdown-diff-snippet { width: auto; border: 0; border-radius: 0; padding: 10px 0; margin: 0; background: var(--panel); }
 .markdown-diff pre.markdown-diff-snippet code { width: 100%; }
 .markdown-diff-line { display: inline-block; width: 100%; box-sizing: border-box; padding: 0 12px; min-height: 1lh; }
 .markdown-diff-line--addition { background: color-mix(in srgb, var(--success) 13%, transparent); }

@@ -46,7 +46,7 @@ export function renderGitHubConnection(surface: SettingsSurface = "settings", er
   const id = domId(surface, "provider", "github");
   const disconnectAction = surface === "onboarding" ? "/settings/github/disconnect?surface=onboarding" : "/settings/github/disconnect";
   if (surface === "onboarding" && !connected) return `<div class="github-connection" id="${id}">${githubConnectionForm(surface, error)}</div>`;
-  return `<div class="github-connection" id="${id}"><div class="managed-list"><div class="managed-list__item">
+  return `<div class="github-connection" id="${id}"><div class="managed-list" data-controller="managed-list"><div class="managed-list__item">
     ${providerBadgeHtml("github", "GitHub", "settings-provider-icon managed-list__visual")}
     <div class="managed-list__content"><div class="managed-list__label"><span class="managed-list__label-text">GitHub</span></div>${connected ? "" : githubConnectionForm(surface, error)}</div>
     ${connected ? `<div class="managed-list__actions"><form method="post" action="${disconnectAction}" data-turbo="true">${githubDisconnectConfirmation}</form></div>` : ""}

@@ -21,7 +21,10 @@ function terminalStatus(terminal: { ended: boolean; exitCode?: number }): string
 /** One adapter supplies CLI policy; this module owns the complete terminal-agent lifecycle. */
 export function createCliAgentModule(adapter: CliAgentAdapter): WorkspaceModule {
   let events: AgentsInTheCloudEventBus;
-  const agents = createCliAgents(adapter, (workspaceId, agentId, title) => events.emit("workspace_agent_title_changed", { workspaceId, agentId, title }));
+  const agents = createCliAgents(adapter, async (workspaceId, agentId, title, workspaceNamed) => {
+    await events.emit("workspace_agent_title_changed", { workspaceId, agentId, title });
+    if (workspaceNamed) await events.emit("workspace_title_changed", { workspaceId, title });
+  });
   function failureStatus(error: string) { return `Could not start ${escapeHtml(adapter.label)}: ${escapeHtml(error)}`; }
   return {
     id: `${adapter.id}-agent`,
@@ -108,7 +111,7 @@ export function createCliAgentModule(adapter: CliAgentAdapter): WorkspaceModule 
 
 export { createCliModelSettings, type CliModelSettings } from "./model-settings.ts";
 export { checkedWorkspaceShell, writeCliSessionFiles } from "./agents.ts";
-export { cliLaunchScript, cliPromptText, emptyAgentInput, writeFileScript } from "./launch-script.ts";
+export { managedCliLaunchScript, cliLaunchScript, cliPromptText, emptyAgentInput, writeFileScript } from "./launch-script.ts";
 export { turnSignalArgv, turnSignalShell, type TurnBoundary } from "./turn-signal.ts";
 export { syntaxSlot, transcriptSlot } from "./transcript-palette.ts";
 export { latestNativeSessionFile, loadNativeTranscriptFiles, loadNativeTranscriptImage, nativeImageResponse, nativeImageTypes, nativeJsonlRows, nativeSessionFiles, nativeTimestamp } from "./native-transcript.ts";

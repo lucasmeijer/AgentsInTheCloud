@@ -8,7 +8,7 @@ import { AgentsInTheCloudCoreError, createKeyedOperationQueue, shellQuote } from
 import { buildObservableSessionCommand } from "@agents-in-the-cloud/observable-terminal/server";
 import { imageMimeByExtension } from "@agents-in-the-cloud/shared/file-metadata";
 import { errorMessage, type AgentWorkspaceParameters, type WorkspaceAgentInput } from "@agents-in-the-cloud/shared";
-import { createWorkspaceMetadataState, execWorkspaceShell, workspaceRoot } from "@agents-in-the-cloud/workspace";
+import { createWorkspaceMetadataState, execWorkspaceShell, getWorkspaceTitle, setWorkspaceTitle, workspaceRoot } from "@agents-in-the-cloud/workspace";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import type { CliAgentAdapter, CliAgentSession } from "./adapter.ts";
@@ -42,7 +42,7 @@ export async function writeCliSessionFiles(workspaceId: string, session: CliAgen
   await checkedWorkspaceShell(workspaceId, `set -eu\numask 077\n${commands.join("\n")}`, entries.map(([, content]) => content).join(""));
 }
 
-export function createCliAgents(adapter: CliAgentAdapter, onTitleChanged: (workspaceId: string, id: string, title: string) => Promise<void>) {
+export function createCliAgents(adapter: CliAgentAdapter, onTitleChanged: (workspaceId: string, id: string, title: string, workspaceNamed: boolean) => Promise<void>) {
   let state: ReturnType<typeof createStore> | undefined;
   function createStore() {
     return createWorkspaceMetadataState(`${adapter.id}-agents.json`, (value) => {
@@ -166,17 +166,22 @@ exec curl --noproxy '*' --fail --silent --show-error --max-time 10 -X POST -H ${
   }
 
   async function applyTitle(workspaceId: string, id: string, title: string, onlyIfUntitled: boolean): Promise<void> {
-    const changed = await serialize(workspaceId, async () => {
+    const result = await serialize(workspaceId, async () => {
       const agent = list(workspaceId).find((item) => item.id === id);
-      if (!agent && onlyIfUntitled) return false;
+      if (!agent && onlyIfUntitled) return undefined;
       const current = agent ?? get(workspaceId, id);
-      if (onlyIfUntitled && (current.title !== adapter.label || current.historySlug)) return false;
+      if (onlyIfUntitled && (current.title !== adapter.label || current.historySlug)) return undefined;
+      const previousTitle = current.title;
       current.title = title;
       current.historySlug = title;
       store().write(workspaceId, { agents: list(workspaceId) });
-      return true;
+      // Like Builtin Agents, an unnamed Workspace (or one still named after this Agent) follows the Agent's name.
+      const workspaceTitle = await getWorkspaceTitle(workspaceId);
+      const workspaceNamed = workspaceTitle === null || workspaceTitle === previousTitle;
+      if (workspaceNamed) await setWorkspaceTitle(workspaceId, title);
+      return { workspaceNamed };
     });
-    if (changed) await onTitleChanged(workspaceId, id, title);
+    if (result) await onTitleChanged(workspaceId, id, title, result.workspaceNamed);
   }
 
   // The launch prompt names the tab; the same slug later names the exported history.

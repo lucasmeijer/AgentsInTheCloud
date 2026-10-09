@@ -75,3 +75,35 @@ test("loads only the tab-local Codex rollout and serves embedded user images", a
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("shared native rollouts are selected by the private SessionStart record, not another tab's history", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codex-shared-transcript-"));
+  const previous = process.env.ATELIER_DATA_DIR;
+  process.env.ATELIER_DATA_DIR = root;
+  try {
+    const privateDirectory = join(root, "workspaces/workspace/home-local/.local/share/agents-in-the-cloud-agents/tab/codex");
+    const sharedDirectory = join(root, "home/.codex/sessions/2026/01/01");
+    await mkdir(privateDirectory, { recursive: true });
+    await mkdir(sharedDirectory, { recursive: true });
+    await writeFile(join(privateDirectory, "native-session.json"), JSON.stringify({ id: "mine", transcript: "2026/01/01/rollout-mine.jsonl" }));
+    expect(await loadCodexTranscript("workspace", "tab")).toBeUndefined();
+    await writeFile(join(sharedDirectory, "rollout-other.jsonl"), row("response_item", { type: "message", role: "user", content: [{ type: "input_text", text: "Other tab" }] }));
+    await writeFile(join(sharedDirectory, "rollout-mine.jsonl"), [
+      row("session_meta", { id: "mine" }),
+      row("response_item", { type: "message", role: "user", content: [{ type: "input_text", text: "My tab" }] }),
+    ].join("\n"));
+    expect(await codexResumeId("workspace", "tab")).toBe("mine");
+    expect(await loadCodexTranscript("workspace", "tab")).toMatchObject([{ text: "My tab" }]);
+    expect(await loadCodexTranscript("workspace", "other-tab")).toBeUndefined();
+    await mkdir(join(privateDirectory, "sessions"), { recursive: true });
+    await writeFile(join(privateDirectory, "sessions/rollout-mine.jsonl"), row("response_item", { type: "message", role: "user", content: [{ type: "input_text", text: "Legacy tab continued" }] }));
+    await writeFile(join(privateDirectory, "native-session.json"), JSON.stringify({ id: "mine", transcript: "rollout-mine.jsonl", private: true }));
+    expect(await loadCodexTranscript("workspace", "tab")).toMatchObject([{ text: "Legacy tab continued" }]);
+    await writeFile(join(privateDirectory, "native-session.json"), JSON.stringify({ id: "mine", transcript: "../../secret.jsonl" }));
+    await expect(loadCodexTranscript("workspace", "tab")).rejects.toThrow("Invalid Codex transcript path");
+  } finally {
+    if (previous === undefined) delete process.env.ATELIER_DATA_DIR;
+    else process.env.ATELIER_DATA_DIR = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});

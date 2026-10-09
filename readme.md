@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://lucasmeijer.com/agents-in-the-cloud/">
+  <a href="https://agentsinthecloud.com/">
     <img src="docs/readme/logo.png" alt="AgentsInTheCloud — made for humans" width="340">
   </a>
 </p>
@@ -10,12 +10,12 @@
 - Free, [MIT licensed](LICENSE)
 
 <p align="center">
-  <a href="https://lucasmeijer.com/agents-in-the-cloud/">Website</a> · <a href="#installation">Install AgentsInTheCloud</a> · <a href="#frequently-asked-questions">FAQ</a>
+  <a href="https://agentsinthecloud.com/">Website</a> · <a href="#installation">Install AgentsInTheCloud</a> · <a href="#frequently-asked-questions">FAQ</a>
 </p>
 
 ## See AgentsInTheCloud in action
 
-Click a video preview to watch on Tella, or [watch the embedded videos on the website](https://lucasmeijer.com/agents-in-the-cloud/).
+Click a video preview to watch on Tella, or [watch the embedded videos on the website](https://agentsinthecloud.com/).
 
 ### Elevator pitch
 
@@ -63,7 +63,7 @@ Click a video preview to watch on Tella, or [watch the embedded videos on the we
 2. **Install AgentsInTheCloud.** Run:
 
    ```sh
-   curl -fsSL https://lucasmeijer.com/get-agents-in-the-cloud | bash
+   curl -fsSL https://agentsinthecloud.com/install.sh | bash
    ```
 
 ## Frequently asked questions

@@ -12,7 +12,7 @@ export function themeRegionHtml(theme: AgentsInTheCloudTheme = readThemeSetting(
 export async function renderThemeSettings(): Promise<string> {
   const current = readThemeSetting();
   const options = agentsInTheCloudThemes.map(({ id, label }) => `<option value="${id}"${id === current ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
-  return `<section class="settings-sec settings-sec-inline settings-sec-theme" id="settings-sec-theme"><h2>Theme</h2><form method="post" action="/settings/theme" data-turbo="true" data-controller="settings-autosave" data-action="change->settings-autosave#save submit->settings-autosave#submit"><select class="settings-select popup-select" name="theme" aria-label="Theme">${options}</select></form></section>`;
+  return `<section class="settings-sec settings-sec-inline settings-sec-theme" id="settings-sec-theme"><h2>Theme</h2><form method="post" action="/settings/theme" data-turbo="true" data-controller="settings-autosave" data-action="change->settings-autosave#save submit->settings-autosave#submit"><select class="settings-select popup-select" data-controller="popup-select" name="theme" aria-label="Theme">${options}</select></form></section>`;
 }
 
 export async function handleThemeSettingsRequest(request: Request, url: URL, themeChanged: () => void): Promise<Response | undefined> {

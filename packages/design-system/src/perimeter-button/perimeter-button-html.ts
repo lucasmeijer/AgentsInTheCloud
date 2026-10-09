@@ -1,6 +1,6 @@
 import { escapeHtml } from "@agents-in-the-cloud/shared";
 import type { ButtonVariant } from "../button/button-content.ts";
-import { attributesHtml, classNames, htmlContent, type HtmlContent } from "../html.ts";
+import { attributesHtml, classNames, htmlContent, stimulusAttributes, stimulusHtml, type HtmlContent } from "../html.ts";
 
 interface PerimeterButtonState<State extends string> {
   name: State;
@@ -17,6 +17,9 @@ interface PerimeterButtonOptions<State extends string> {
   states: readonly [PerimeterButtonState<State>, PerimeterButtonState<State>];
   variant: ButtonVariant;
   iconOnly?: boolean;
+  /** Extra Stimulus controllers and actions, rendered alongside the perimeter-button controller. */
+  controllers?: string;
+  actions?: string;
   attributesHtml?: string;
   ownedAttributesHtml?: string;
   type?: "button" | "submit";
@@ -36,5 +39,5 @@ export function perimeterButtonHtml<State extends string>(options: PerimeterButt
   const perimeter = `<svg class="${component}__perimeter" aria-hidden="true"><rect pathLength="100"/></svg>`;
   const contents = options.states.map(({ name, content }) => `<span class="${component}__content" data-${options.kind}-content="${escapeHtml(name)}" aria-hidden="${name !== options.state}">${htmlContent(content)}</span>`).join("");
 
-  return `<button${id} class="${className}" type="${options.type ?? "button"}" data-${options.kind}-state="${escapeHtml(options.state)}"${disabled}${busy}${label}${options.ownedAttributesHtml ? ` ${options.ownedAttributesHtml}` : ""}${attributesHtml(options.attributesHtml)}>${perimeter}${contents}</button>`;
+  return `<button${id} class="${className}" type="${options.type ?? "button"}" data-${options.kind}-state="${escapeHtml(options.state)}"${stimulusHtml(["perimeter-button", options.controllers], [options.actions])}${disabled}${busy}${label}${options.ownedAttributesHtml ? ` ${options.ownedAttributesHtml}` : ""}${attributesHtml(options.attributesHtml, stimulusAttributes)}>${perimeter}${contents}</button>`;
 }

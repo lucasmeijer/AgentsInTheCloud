@@ -131,7 +131,7 @@ function toolAbortHtml(ctx: AgentRenderContext, key: string, tool: ToolView): st
     content: { kind: "icon-only", iconHtml: Icons.Stop, label: "Stop this tool only; the agent will continue" },
     attributesHtml: `commandfor="${escapeHtml(id)}" command="show-modal"`,
   }) + dialogHtml({
-    element: { id, attributesHtml: 'data-turbo-permanent data-controller="dialog" data-action="turbo:submit-end->dialog#submitted"' },
+    element: { id, actions: "turbo:submit-end->dialog#submitted", attributesHtml: "data-turbo-permanent" },
     iconHtml: Icons.Stop, titleCaption: "Stop this tool?", closeLabel: "Keep running",
     bodyHtml: `<p>The agent will continue. Add a note to tell it why you stopped this tool.</p>
       <form method="post" data-controller="agent-tool-abort" data-action="keydown->agent-tool-abort#keydown" action="${escapeHtml(agentPath(ctx, `/tools/${encodeURIComponent(tool.callId)}/abort`))}">

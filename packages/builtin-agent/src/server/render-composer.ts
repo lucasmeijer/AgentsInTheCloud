@@ -148,7 +148,7 @@ export function renderPromptActions(ctx: AgentRenderContext | undefined, busy: b
     state,
     initialContent: { kind: "html", html: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15V5m-4 4 4-4 4 4"/></svg>' },
     activeContent: { kind: "html", html: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="6" width="8" height="8" rx="1.5" fill="currentColor" stroke="none"/></svg>' },
-    attributesHtml: `data-controller="perimeter-button" data-popular-button ${actionAttrs}${paneAttrs}`,
+    attributesHtml: `data-popular-button ${actionAttrs}${paneAttrs}`,
   });
 }
 

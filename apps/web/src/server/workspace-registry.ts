@@ -10,7 +10,7 @@ export type WorkspacePhase =
   | { kind: "runningPhase"; busy: boolean; error?: never; deletion?: never }
   | { kind: "deletingPhase"; busy: boolean; deletion: WorkspaceDeletionState; error?: never };
 export type WorkspaceDeletionState = Static<typeof workspaceDeletionStateSchema>;
-export type WorkspaceIssueKind = "readiness" | "image";
+export type WorkspaceIssueKind = "readiness" | "image" | "naming";
 export interface WorkspaceIssue { kind: WorkspaceIssueKind; message: string }
 export interface WorkspaceEntry {
   id: string;
@@ -264,7 +264,15 @@ export function createWorkspaceRegistry(options: WorkspaceRegistryOptions = {}):
       callbacks.rowChanged?.(entry, { issuesChanged: true });
     },
     setImageOutdated(id, outdated) { const entry = requireEntry(id); entry.imageOutdated = outdated; callbacks.rowChanged?.(entry, { issuesChanged: true }); },
-    setTitle(id, title) { const entry = requireEntry(id); if (entry.title === title) return; entry.title = title; callbacks.rowChanged?.(entry, {}); },
+    setTitle(id, title) {
+      const entry = requireEntry(id); if (entry.title === title) return;
+      entry.title = title;
+      // A failed naming attempt stops mattering once the workspace has a name.
+      const issues = title ? entry.issues?.filter((issue) => issue.kind !== "naming") : entry.issues;
+      const issuesChanged = issues?.length !== entry.issues?.length;
+      entry.issues = issues?.length ? issues : undefined;
+      callbacks.rowChanged?.(entry, { issuesChanged });
+    },
     setParked(id, parked) {
       const entry = requireEntry(id); if (entry.parked === parked) return;
       entry.parked = parked; callbacks.parkedChanged?.(entry); callbacks.rowChanged?.(entry, {});

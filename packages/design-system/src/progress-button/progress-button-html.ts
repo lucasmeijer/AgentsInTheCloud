@@ -8,8 +8,11 @@ interface ProgressButtonBase {
   initialContent: ProgressButtonContent;
   progressContent: ProgressButtonContent;
   variant: ButtonVariant;
-  /** Caller-owned attributes. Do not supply progress state, aria-busy, title, or aria-label attributes here. Attribute values containing external input must be escaped. */
+  /** Caller-owned attributes. Do not supply progress state, aria-busy, title, aria-label, data-controller, or data-action attributes here. Attribute values containing external input must be escaped. */
   attributesHtml?: string;
+  /** Stimulus controllers and actions; the button renders them alongside its own controller. */
+  controllers?: string;
+  actions?: string;
   type?: "button" | "submit";
   disabled?: boolean;
   id?: string;
@@ -51,6 +54,8 @@ export function progressButtonHtml(options: ProgressButtonOptions): string {
     ],
     variant: options.variant,
     iconOnly: options.iconOnly,
+    controllers: options.controllers,
+    actions: options.actions,
     attributesHtml: options.attributesHtml,
     ownedAttributesHtml: ownedAttributes,
     type: options.type,

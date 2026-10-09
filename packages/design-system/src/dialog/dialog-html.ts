@@ -1,13 +1,16 @@
 import { escapeHtml } from "@agents-in-the-cloud/shared";
 import { buttonHtml } from "../button/button-html.ts";
 import { Icons } from "../icons/icons-html.ts";
-import { attributesHtml } from "../html.ts";
+import { attributesHtml, stimulusAttributes, stimulusHtml } from "../html.ts";
 import { panelHtml } from "../panel/panel-html.ts";
 
 export interface DialogOptions {
   element: {
     id?: string;
-    /** Caller-owned attributes; aria-label is owned by titleCaption. Attribute values containing external input must be escaped. */
+    /** Extra Stimulus controllers and actions, rendered alongside the dialog controller. */
+    controllers?: string;
+    actions?: string;
+    /** Caller-owned attributes; aria-label is owned by titleCaption, and data-controller and data-action by controllers and actions. Attribute values containing external input must be escaped. */
     attributesHtml?: string;
   };
   /** Trusted, already-escaped decorative icon. */
@@ -49,5 +52,5 @@ export function dialogHtml(options: DialogOptions): string {
     bodyOverflow: "scroll",
     footerHtml: options.footerHtml,
   });
-  return `<dialog${id} class="${escapeHtml("dialog")}" aria-label="${escapeHtml(options.titleCaption)}"${attributesHtml(element.attributesHtml)}>${panel}</dialog>`;
+  return `<dialog${id} class="${escapeHtml("dialog")}" aria-label="${escapeHtml(options.titleCaption)}"${stimulusHtml(["dialog", element.controllers], [element.actions])}${attributesHtml(element.attributesHtml, stimulusAttributes)}>${panel}</dialog>`;
 }

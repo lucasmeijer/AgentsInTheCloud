@@ -15,9 +15,10 @@ beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "pi-launch-"));
   defaultSession = { id: sessionId, directory: `${home}/session`, turnSignalCommand: `${home}/turn-signal.sh` };
   baseArgs = expectedBaseArgs(defaultSession);
+  await writeFile(`${home}/.pi-cli-update-check`, String(Math.floor(Date.now() / 1000)));
 });
 afterEach(async () => { await rm(home, { recursive: true, force: true }); });
-const binary = () => `${home}/.local/bin/pi`;
+const binary = () => `${home}/.pi/agent/bin/pi`;
 async function executable(path: string, script: string) {
   await mkdir(join(path, ".."), { recursive: true });
   await writeFile(path, `#!/bin/bash\n${script}`);
@@ -34,7 +35,7 @@ function run(script: string) {
 const empty = { text: "", images: [], attachmentNotes: [] };
 const sessionId = "1f2e3d4c-0000-4000-8000-000000000001";
 function expectedBaseArgs(session: CliAgentSession): string[] {
-  return ["--approve", "--offline", "--use-theme", "agents-in-the-cloud", "--tui-mode", "regular", "--session-dir", `/home/agents-in-the-cloud/.local/share/pi/sessions/${session.id}`, "--extension", piAgentsInTheCloudExtensionPath(session)];
+  return ["--approve", "--offline", "--tui-mode", "regular", "--session-dir", `/home/agents-in-the-cloud/.local/share/pi/sessions/${session.id}`, "--extension", piAgentsInTheCloudExtensionPath(session)];
 }
 
 test("passes initial prompt, images, file notes, provider and Pi thinking level literally", async () => {
@@ -63,22 +64,26 @@ test("empty launch stays interactive without submitting a prompt", async () => {
 });
 
 test("concurrent launches install latest once in shared home and both run", async () => {
-  await executable(`${home}/tools/npm`, `printf '%s\\n' "$*" >> ${shellQuote(`${home}/installs`)}
+  await executable(`${home}/tools/npm`, 'echo npm-must-not-be-called >&2; exit 1');
+  await executable(`${home}/tools/node`, 'exit 0');
+  await executable(`${home}/tools/curl`, `printf '%s\\n' "$*" >> ${shellQuote(`${home}/installs`)}
+cat > "$4" <<'INSTALLER'
 sleep .1
-mkdir -p "$3/node_modules/.bin"
-printf '#!/bin/sh\\nprintf "PI_STARTED\\\\n"\\n' > "$3/node_modules/.bin/pi"
-chmod +x "$3/node_modules/.bin/pi"`);
+mkdir -p "$(dirname "$HOME/.pi/agent/bin/pi")"
+printf '#!/bin/sh\\nprintf "PI_STARTED\\\\n"\\n' > "$HOME/.pi/agent/bin/pi"
+chmod +x "$HOME/.pi/agent/bin/pi"
+INSTALLER`);
   const results = await Promise.all([run(launch(empty, [])), run(launch(empty, []))]);
   for (const [code, output] of results) { expect(code).toBe(0); expect(output).toContain("PI_STARTED"); }
   const installs = (await readFile(`${home}/installs`, "utf8")).trim().split("\n");
   expect(installs).toHaveLength(1);
-  expect(installs[0]).toContain("@earendil-works/pi-coding-agent@latest");
-  expect(await Bun.file(`${home}/.pi-cli/node_modules/.bin/pi`).exists()).toBe(true);
+  expect(installs[0]).toContain("https://pi.dev/install.sh");
+  expect(await Bun.file(`${home}/.pi/agent/bin/pi`).exists()).toBe(true);
   expect(await Bun.file(binary()).exists()).toBe(true);
 });
 
 test("installation and startup failures keep their exit codes and diagnostics", async () => {
-  await executable(`${home}/tools/npm`, "echo registry-unavailable >&2; exit 42");
+  await executable(`${home}/tools/curl`, "echo registry-unavailable >&2; exit 42");
   const [code, output, error] = await run(launch(empty, []));
   expect(code).toBe(42);
   expect(error).toContain("registry-unavailable");
@@ -98,17 +103,6 @@ test("loads the session's AgentsInTheCloud extension", async () => {
   expect(output.split("\0")).toContain(piAgentsInTheCloudExtensionPath(session));
   expect(output.split("\0")).toContain(`/home/agents-in-the-cloud/.local/share/pi/sessions/${sessionId}`);
 });
-
-test("installs an AgentsInTheCloud theme drawn from the terminal palette", async () => {
-  await executable(binary(), 'printf "%s\\0" "$@"');
-  const [code] = await run(launch(empty, []));
-  expect(code).toBe(0);
-  const theme = JSON.parse(await readFile(`${home}/.pi/agent/themes/agents-in-the-cloud.json`, "utf8"));
-  expect(theme.name).toBe("agents-in-the-cloud");
-  expect(Object.keys(theme.colors).length).toBeGreaterThan(0);
-  for (const color of Object.values(theme.colors)) expect(Number.isInteger(color) && Number(color) < 16).toBe(true);
-});
-
 
 test("native resume restores the exact conversation with no submitted prompt", async () => {
   await executable(binary(), 'printf "%s\\0" "$@"');

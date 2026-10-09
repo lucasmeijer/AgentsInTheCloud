@@ -2,7 +2,6 @@ import { agentTitleRequestOptions } from "@agents-in-the-cloud/agent/server/slug
 import { describe, expect, test } from "bun:test";
 import { createAgentsInTheCloudEventBus } from "@agents-in-the-cloud/core";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { cheapestProviderModel } from "@agents-in-the-cloud/llm/server";
 import type { WorkspaceAgentInfo } from "../../src/server/agent-store.ts";
 import { createAutomaticWorkspaceNamingGate, createAgentTitleSetter } from "../../src/server/agent-title-suggestion.ts";
 
@@ -85,22 +84,32 @@ describe("Agent titles", () => {
 });
 
 describe("title request options", () => {
-  test("leave Anthropic's cheapest model enough answer room without a thinking budget", async () => {
+  async function titleRequest(modelId: string) {
     const runtime = await ModelRuntime.create({ modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
-    const model = cheapestProviderModel(runtime, "anthropic")!;
-    let request: { max_tokens: number; thinking?: { type: string; budget_tokens?: number } } | undefined;
+    const model = runtime.getModel("anthropic", modelId)!;
+    let request: { max_tokens: number; thinking?: { type: string; budget_tokens?: number }; messages: { role: string; output_config?: { effort: string } }[] } | undefined;
     const captureRequest: typeof fetch = Object.assign(async (_url: URL | RequestInfo, init?: RequestInit) => {
       request = JSON.parse(String(init?.body));
       return new Response("{}", { status: 400 });
     }, { preconnect: fetch.preconnect });
-
     await runtime.completeSimple(model, { messages: [{ role: "user", content: "Name this session", timestamp: Date.now() }] }, {
-      ...agentTitleRequestOptions, apiKey: "test-key", fetch: captureRequest,
+      ...agentTitleRequestOptions(model), apiKey: "test-key", fetch: captureRequest,
     });
+    return request!;
+  }
 
-    // Anthropic rejects a thinking budget below 1024 tokens, which silently blocked every name.
-    expect(request!.thinking?.budget_tokens).toBeUndefined();
-    expect(request!.max_tokens).toBeGreaterThanOrEqual(16);
+  test("turn thinking off when the model allows it", async () => {
+    const request = await titleRequest("claude-haiku-4-5");
+    expect(request.thinking).toEqual({ type: "disabled" });
+    expect(request.max_tokens).toBe(64);
+  });
+
+  // Haiku 5.5 cannot turn thinking off; at its default effort it spent the whole answer budget thinking.
+  test("use the lowest effort and leave answer room on models that always think", async () => {
+    const request = await titleRequest("claude-haiku-5-5");
+    expect(request.messages.at(-1)?.output_config).toEqual({ effort: "low" });
+    expect(request.thinking?.budget_tokens).toBeUndefined();
+    expect(request.max_tokens).toBe(512);
   });
 });
 

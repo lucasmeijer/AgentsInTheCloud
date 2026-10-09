@@ -136,7 +136,7 @@ export async function renderTemplateSettingsFrame(id: string, location: Template
 
 export async function renderTemplateSettings(id: string, location: TemplateSettingsLocation, references: TemplateSettingsReference[]): Promise<string> {
   const frame = await renderTemplateSettingsFrame(id, location, references);
-  const guard = dialogHtml({ element: { id: "template_settings_discard", attributesHtml: 'data-template-settings-target="discard" data-action="cancel->template-settings#stay"' }, iconHtml: Icons.Settings, titleCaption: "Discard unsaved changes?", bodyHtml: paragraph("Your changes haven’t been saved."), omitCancelButton: true, footerHtml: `${captionButton("Stay", 'data-action="template-settings#stay"')}${captionButton("Discard changes", 'data-action="template-settings#discard"', "primary")}` });
+  const guard = dialogHtml({ element: { id: "template_settings_discard", actions: "cancel->template-settings#stay", attributesHtml: 'data-template-settings-target="discard"' }, iconHtml: Icons.Settings, titleCaption: "Discard unsaved changes?", bodyHtml: paragraph("Your changes haven’t been saved."), omitCancelButton: true, footerHtml: `${captionButton("Stay", 'data-action="template-settings#stay"')}${captionButton("Discard changes", 'data-action="template-settings#discard"', "primary")}` });
   return `<div id="${templateSettingsHostId}" class="template-settings-host" data-controller="template-settings" data-action="turbo:frame-missing->template-settings#frameMissing keydown->template-settings#keydown keydown@window->template-settings#developerKey keyup@window->template-settings#developerKey blur@window->template-settings#developerKey">
     ${frame}${guard}
   </div>`;

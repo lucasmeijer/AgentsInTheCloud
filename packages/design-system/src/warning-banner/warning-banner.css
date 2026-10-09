@@ -1,6 +1,7 @@
 .warning-banner { padding: 12px; border: 1px solid var(--warning); border-radius: 8px; background: var(--warning-soft); color: var(--text); overflow-wrap: anywhere; }
 .warning-banner__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .warning-banner__header > strong { flex: 1; min-width: 0; }
+.warning-banner__header > p { flex: 1; min-width: 0; margin: 0; font-size: var(--text-body); }
 .warning-banner__header > form { flex: 0 1 auto; margin: 0; max-width: 100%; }
 .warning-banner__body { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
 .warning-banner__body > p { flex: 1 1 240px; min-width: 0; margin: 0; font-size: var(--text-body); }

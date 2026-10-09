@@ -26,6 +26,7 @@
     "./linear-navigation/client": "./src/linear-navigation/linear-navigation-controller.ts",
     "./page-slide/client": "./src/page-slide/page-slide-client.ts",
     "./panel": "./src/panel/panel-html.ts",
+    "./page-body": "./src/page-body/page-body-html.ts",
     "./progress-button": "./src/progress-button/progress-button-html.ts",
     "./popup": "./src/popup/popup-html.ts",
     "./popup/position": "./src/popup/popup-position.ts",

@@ -3,7 +3,8 @@ import { buttonHtml } from "../button/button-html.ts";
 import { Icons } from "../icons/icons-html.ts";
 
 export interface WarningBannerOptions {
-  title: string;
+  /** Without a title, the message shares the dismiss row to save space. */
+  title?: string;
   message?: string;
   actionsHtml?: string;
   role?: "status" | "alert";
@@ -25,5 +26,8 @@ export function warningBannerHtml(options: WarningBannerOptions): string {
       ? `<form method="post" action="${escapeHtml(options.dismiss.action)}" data-turbo="true"><input type="hidden" name="state" value="${escapeHtml(options.dismiss.state)}">${button}</form>`
       : button;
   }
-  return `<aside class="warning-banner" role="${options.role ?? "status"}"><div class="warning-banner__header"><strong>${escapeHtml(options.title)}</strong>${dismiss}</div>${options.message || options.actionsHtml ? `<div class="warning-banner__body">${options.message ? `<p>${escapeHtml(options.message)}</p>` : ""}${options.actionsHtml ? `<div class="warning-banner__actions">${options.actionsHtml}</div>` : ""}</div>` : ""}</aside>`;
+  const message = options.message ? `<p>${escapeHtml(options.message)}</p>` : "";
+  const header = options.title === undefined ? message : `<strong>${escapeHtml(options.title)}</strong>`;
+  const bodyMessage = options.title === undefined ? "" : message;
+  return `<aside class="warning-banner" role="${options.role ?? "status"}"><div class="warning-banner__header">${header}${dismiss}</div>${bodyMessage || options.actionsHtml ? `<div class="warning-banner__body">${bodyMessage}${options.actionsHtml ? `<div class="warning-banner__actions">${options.actionsHtml}</div>` : ""}</div>` : ""}</aside>`;
 }

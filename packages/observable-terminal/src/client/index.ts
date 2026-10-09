@@ -235,7 +235,7 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
   const fontSize = options.fontSize ?? (options.mode === "fixed-readonly" ? 11 : 13);
   const fontFamily = options.fontFamily ?? "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
 
-  const { createTerminal, KeyModifiers } = await import("@gespenst/core");
+  const { createTerminal, KeyModifiers, resolveTerminalTheme } = await import("@gespenst/core");
   if (isDisposed()) return;
   const term = await createTerminal({
     container: mount,
@@ -305,6 +305,11 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
     };
     let themePending = false;
     let themeDirty = false;
+    // Mode 2031 (enabled by tmux) asks for a report whenever the terminal switches between
+    // light and dark. tmux then re-queries the colors and notifies panes, so TUIs like Pi
+    // can rebuild a theme from the terminal's colors.
+    let colorSchemeUpdates = false;
+    let appearance = resolveTerminalTheme(theme).appearance;
     const updateTheme = async (): Promise<void> => {
       if (disposed) return;
       themeDirty = true;
@@ -315,7 +320,12 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
         // term.theme: it remains stale until the worker acknowledges a change.
         while (themeDirty && !disposed) {
           themeDirty = false;
-          await term.setTheme(theme);
+          const next = theme;
+          await term.setTheme(next);
+          const nextAppearance = resolveTerminalTheme(next).appearance;
+          if (nextAppearance === appearance) continue;
+          appearance = nextAppearance;
+          if (colorSchemeUpdates) sendInput(`\x1b[?997;${appearance === "light" ? 2 : 1}n`);
         }
       } catch (error) {
         reportFailure("update terminal theme", error);
@@ -356,7 +366,9 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
     }
     const writeOutput = (data: string | Uint8Array): void => {
       if (disposed) return;
-      if (cursorHidden) cursorWasVisible = lastCursorVisibility(data) ?? cursorWasVisible;
+      const text = data instanceof Uint8Array ? latin1.decode(data) : data;
+      if (cursorHidden) cursorWasVisible = lastPrivateMode(text, 25) ?? cursorWasVisible;
+      colorSchemeUpdates = lastPrivateMode(text, 2031) ?? colorSchemeUpdates;
       if (!awaitingFirstOutput) {
         term.write(data);
         hideCursor();
@@ -622,13 +634,12 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
 }
 
 const latin1 = new TextDecoder("latin1");
-/** The final DECTCEM (show/hide cursor) state an output chunk sets, if any. */
-function lastCursorVisibility(data: string | Uint8Array): boolean | undefined {
-  const text = data instanceof Uint8Array ? latin1.decode(data) : data;
-  const shown = text.lastIndexOf("\x1b[?25h");
-  const hidden = text.lastIndexOf("\x1b[?25l");
-  if (shown === hidden) return undefined;
-  return shown > hidden;
+/** The final state an output chunk sets a DEC private mode to, such as DECTCEM (25), if any. */
+function lastPrivateMode(text: string, mode: number): boolean | undefined {
+  const set = text.lastIndexOf(`\x1b[?${mode}h`);
+  const reset = text.lastIndexOf(`\x1b[?${mode}l`);
+  if (set === reset) return undefined;
+  return set > reset;
 }
 
 export { createTerminalKeyBarController } from "./key-bar.ts";

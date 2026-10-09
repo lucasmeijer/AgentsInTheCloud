@@ -7,6 +7,8 @@ interface CopyButtonOptions {
   caption?: string;
   copyText?: string;
   disabled?: boolean;
+  /** Stimulus actions run before the copy action. */
+  action?: string;
   /** Caller-owned attributes. Attribute values containing external input must be escaped. */
   attributesHtml?: string;
 }
@@ -23,5 +25,5 @@ export function copyButtonHtml(options: CopyButtonOptions): string {
       options.copyText === undefined ? undefined : `data-copy-text="${escapeHtml(options.copyText)}"`,
       options.attributesHtml,
     ].filter(Boolean).join(" "),
-  }, "copy-button");
+  }, { action: options.action });
 }

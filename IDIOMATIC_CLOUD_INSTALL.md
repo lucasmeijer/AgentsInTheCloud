@@ -6,13 +6,13 @@ The user needs to rent/have a VPS on hetzner or digital ocean or anywhere else.
 
 These instructions are written in a linux distribution agnostic way on purpose.
 
-This instalation option assumes AgentsInTheCloud has this entire computer to itself.
+This installation option assumes AgentsInTheCloud has this entire computer to itself.
 
-AgentsInTheCloud offers no autentication or security mechanism.
+AgentsInTheCloud offers no authentication or security mechanism.
 
 It's the coding agent and human's job to ensure only the people that are allowed to access the computer can access that computer.
 
-The recommended way to do this is to instal tailscale on it, and add it to your tailscale network. Give the node a good identifyable name like 'agents-in-the-cloud'. Have the agent start Tailscale login with that hostname. If Tailscale prints an authentication URL, the agent must stop and ask the human driving the install to open that URL and approve the node in the tailnet. After the human confirms, the agent should verify that `tailscale status` shows the node is authenticated and that the node is reachable through Tailscale/MagicDNS. If the human provides a Tailscale auth key instead, the agent may use that for non-interactive authentication.
+The recommended way to do this is to install tailscale on it, and add it to your tailscale network. Give the node a good identifiable name like 'agents-in-the-cloud'. Have the agent start Tailscale login with that hostname. If Tailscale prints an authentication URL, the agent must stop and ask the human driving the install to open that URL and approve the node in the tailnet. After the human confirms, the agent should verify that `tailscale status` shows the node is authenticated and that the node is reachable through Tailscale/MagicDNS. If the human provides a Tailscale auth key instead, the agent may use that for non-interactive authentication.
 
 Do not proceed with starting agents-in-the-cloud until tailscale is properly working. Again, you might have to ask the user to intervene, you do not have to
 accomplish everything in this document in a single turn.

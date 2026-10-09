@@ -24,7 +24,8 @@ async function scenario(script: string): Promise<void> {
       let preparationDelay;
       let inspectionResult;
       let result = { stdout: "", stderr: "", exitCode: 0, durationMs: 0 };
-      mock.module("@agents-in-the-cloud/workspace", () => ({ ...workspace, execWorkspaceShell: async (...args) => { calls.push(args); return args[1].includes("tmux list-panes") && inspectionResult ? inspectionResult : result; } }));
+      const workspaceTitles = new Map();
+      mock.module("@agents-in-the-cloud/workspace", () => ({ ...workspace, getWorkspaceTitle: async (id) => workspaceTitles.get(id) ?? null, setWorkspaceTitle: async (id, title) => { workspaceTitles.set(id, title); return null; }, execWorkspaceShell: async (...args) => { calls.push(args); return args[1].includes("tmux list-panes") && inspectionResult ? inspectionResult : result; } }));
       const slugSuggestion = await import("@agents-in-the-cloud/agent/server/slug-suggestion");
       const slugRequests = [];
       let suggestedSlug;
@@ -87,11 +88,15 @@ test("a launch prompt names the tab with a suggested slug", () => scenario(`
   const input = { text: "Inspect this image", images: [], attachmentNotes: [] };
   await agentType.launch.prepareWorkspace("named", { agent: { input, model: "any-provider::model" } });
   const [tab] = await list("named");
-  while (!titleEvents.length) await Bun.sleep(1);
+  while (titleEvents.length < 2) await Bun.sleep(1);
   expect(slugRequests).toEqual([[input.text, { provider: "any-provider", id: "model" }]]);
   expect(await list("named")).toEqual([{ id: tab.id, title: suggestedSlug }]);
   expect((await saved("named")).agents[0].historySlug).toBe(suggestedSlug);
-  expect(titleEvents).toEqual([{ name: "workspace_agent_title_changed", payload: { workspaceId: "named", agentId: tab.id, title: suggestedSlug } }]);
+  expect(titleEvents).toEqual([
+    { name: "workspace_agent_title_changed", payload: { workspaceId: "named", agentId: tab.id, title: suggestedSlug } },
+    { name: "workspace_title_changed", payload: { workspaceId: "named", title: suggestedSlug } },
+  ]);
+  expect(workspaceTitles.get("named")).toBe(suggestedSlug);
 `));
 
 test("CLI composer /name renames the tab without sending text to the terminal", () => scenario(`
@@ -105,9 +110,23 @@ test("CLI composer /name renames the tab without sending text to the terminal", 
   expect(await list("rename")).toEqual([{ id, title: "manual-title" }]);
   expect((await saved("rename")).agents[0].historySlug).toBe("manual-title");
   expect((await saved("rename")).agents[0].input.text).toBe("");
-  expect(titleEvents).toEqual([{ name: "workspace_agent_title_changed", payload: { workspaceId: "rename", agentId: id, title: "manual-title" } }]);
+  expect(titleEvents).toEqual([
+    { name: "workspace_agent_title_changed", payload: { workspaceId: "rename", agentId: id, title: "manual-title" } },
+    { name: "workspace_title_changed", payload: { workspaceId: "rename", title: "manual-title" } },
+  ]);
   expect((await route(form("/name"), url)).status).toBe(422);
   expect(await list("rename")).toEqual([{ id, title: "manual-title" }]);
+`));
+
+test("CLI /name leaves a Workspace with its own name alone", () => scenario(`
+  workspaceTitles.set("own-name", "chosen-by-hand");
+  const id = await agentType.create({ workspaceId: "own-name" });
+  const url = new URL("http://localhost/workspaces/own-name/example-agents/" + id + "/composer");
+  const { agentAttachmentDraftId } = await import("@agents-in-the-cloud/prompt/server");
+  const response = await module.routes[0].handle(new Request(url, { method: "POST", body: new URLSearchParams({ text: "/name tab-title", attachmentDraft: agentAttachmentDraftId("own-name", "example:" + id) }) }), url);
+  expect(response.status).toBe(204);
+  expect(workspaceTitles.get("own-name")).toBe("chosen-by-hand");
+  expect(titleEvents.map((event) => event.name)).toEqual(["workspace_agent_title_changed"]);
 `));
 
 test("a late automatic title cannot replace a manual CLI /name", () => scenario(`
@@ -124,7 +143,7 @@ test("a late automatic title cannot replace a manual CLI /name", () => scenario(
   await Bun.sleep(20);
   expect(await list("race")).toEqual([{ id, title: "manual-title" }]);
   expect((await saved("race")).agents[0].historySlug).toBe("manual-title");
-  expect(titleEvents).toHaveLength(1);
+  expect(titleEvents.map((event) => event.name)).toEqual(["workspace_agent_title_changed", "workspace_title_changed"]);
 `));
 
 test("CLI composer /name uses the saved prompt when no title is supplied", () => scenario(`

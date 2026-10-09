@@ -1,6 +1,16 @@
 import { resolveNewWorkspaceAgentModel } from "./model-state.ts";
 import { cheapestAvailableProviderModel, claudeCodeHeaders, createPiModelRuntime, type ModelRef } from "@agents-in-the-cloud/llm/server";
-export const agentTitleRequestOptions = { maxTokens: 64 } as const;
+import { clampThinkingLevel, type Api, type Model, type ThinkingLevel } from "@earendil-works/pi-ai";
+
+/**
+ * A slug needs no reasoning, so thinking is off wherever the model allows it. Models
+ * that always think (such as Claude Haiku 5.5) get their lowest level plus room for that
+ * thinking; otherwise they spend the whole answer budget thinking and return no text.
+ */
+export function agentTitleRequestOptions(model: Model<Api>): { maxTokens: number; reasoning?: ThinkingLevel } {
+  const reasoning = clampThinkingLevel(model, "off");
+  return reasoning === "off" ? { maxTokens: 64 } : { maxTokens: 512, reasoning };
+}
 
 export function promptFor(userPrompt: string): string {
   return `Name this Agent based on its task using 2–7 meaningful lowercase words joined by hyphens. Return ONLY the slug: no explanation, reasoning, quotes, or punctuation. If the prompt does not identify a task, return exactly error.
@@ -41,7 +51,7 @@ export async function suggestAgentSlug(userPrompt: string, selectedModel?: Model
   if (!model || !(await runtime.checkAuth(model.provider))) return undefined;
   const response = await runtime.completeSimple(model, {
     messages: [{ role: "user", content: promptFor(userPrompt), timestamp: Date.now() }],
-  }, { ...agentTitleRequestOptions, headers: claudeCodeHeaders(model) });
+  }, { ...agentTitleRequestOptions(model), headers: claudeCodeHeaders(model), sessionId: crypto.randomUUID() });
   if (response.stopReason === "error") return undefined;
   return normalizeSlug(textFromResponse(response));
 }

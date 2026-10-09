@@ -16,7 +16,7 @@ export function renderCommandDialog(runtime: CodexRuntime, result: Exclude<Codex
   const button = (caption: string, disabled = false) => buttonHtml({ type: "submit", variant: "secondary", disabled, content: { kind: "caption", caption } });
   const row = (label: string, description: string, actions = "") => `<div class="managed-list__item"><div class="managed-list__content"><div class="managed-list__label">${escapeHtml(label)}</div><div class="managed-list__description" title="${escapeHtml(description)}">${escapeHtml(description)}</div></div>${actions ? `<div class="managed-list__actions">${actions}</div>` : ""}</div>`;
   const summary = (label: string, description: string): DisclosureSummary => ({ kind: "multiline", label: { kind: "text", text: label }, description });
-  const list = (rows: string[], empty: string) => rows.length ? `<div class="managed-list"><div class="managed-list__items">${rows.join("")}</div></div>` : `<p>${escapeHtml(empty)}</p>`;
+  const list = (rows: string[], empty: string) => rows.length ? `<div class="managed-list" data-controller="managed-list"><div class="managed-list__items">${rows.join("")}</div></div>` : `<p>${escapeHtml(empty)}</p>`;
   const errors = (entries: readonly { path: string; message: string }[]) => entries.map(error => `<p role="alert">${escapeHtml(error.path)}: ${escapeHtml(error.message)}</p>`).join("");
   let title: string;
   let body: string;
