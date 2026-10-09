@@ -289,11 +289,8 @@ export function createWorkspaceTemplateRoutes(deps: {
   }
 
   async function createSshKeyFromForm(scope: ConfigurationScope, request: Request): Promise<Response> {
-    const input = requestAcceptsJson(request) ? await readJsonObject(request) : undefined;
-    const formData = input ? undefined : await request.formData();
-    const privateKey = input ? requiredJsonString(input, "privateKey") : String(formData!.get("privateKey") ?? "");
-    const name = input ? optionalJsonString(input, "name") ?? "" : String(formData!.get("name") ?? "");
-    const key = await createWorkspaceTemplateSshKey(scope, privateKey, undefined, undefined, name);
+    const formData = await request.formData();
+    const key = await createWorkspaceTemplateSshKey(scope, String(formData.get("privateKey") ?? ""), undefined, undefined, String(formData.get("name") ?? ""));
     return configurationSettingsResponse(request, scope, "ssh", key.id, { key });
   }
 
@@ -405,7 +402,7 @@ export function createWorkspaceTemplateRoutes(deps: {
     try {
       return await handleRoute(request, url);
     } catch (error) {
-      if (!requestAcceptsJson(request) && request.method === "POST" && (url.pathname.startsWith("/workspace-templates/") || url.pathname.startsWith(`${globalWorkspaceSettingsPath}/`)) && error instanceof AgentsInTheCloudCoreError && ["invalid_arguments", "invalid_ssh_private_key", "workspace_template_secret_exists", "workspace_template_secret_routing_changed", "workspace_template_environment_variable_exists", "workspace_template_exists", "workspace_template_secret_not_found", "workspace_template_environment_variable_not_found", "workspace_template_ssh_key_not_found"].includes(error.code)) {
+      if (!requestAcceptsJson(request) && request.method === "POST" && (url.pathname.startsWith("/workspace-templates/") || url.pathname.startsWith(`${globalWorkspaceSettingsPath}/`)) && error instanceof AgentsInTheCloudCoreError && ["invalid_arguments", "invalid_ssh_private_key", "workspace_template_secret_exists", "workspace_template_environment_variable_exists", "workspace_template_exists", "workspace_template_secret_not_found", "workspace_template_environment_variable_not_found", "workspace_template_ssh_key_not_found"].includes(error.code)) {
         const errorId = url.pathname.startsWith(`${globalWorkspaceSettingsPath}/`) && !editedTemplateId(globalWorkspaceConfiguration, url) ? globalWorkspaceSettingsErrorId : templateSettingsErrorId;
         return turboStreamResponse(update(errorId, templateSettingsErrorHtml(error.code === "invalid_ssh_private_key" ? "This key couldn’t be read. Paste an unencrypted OpenSSH private key and try again." : error.message)), { status: 422 });
       }

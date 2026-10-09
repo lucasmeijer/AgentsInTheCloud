@@ -86,7 +86,7 @@ describe("Workspace templates", () => {
     const created = await createWorkspaceTemplateSecret(workspaceTemplate.id, { envName: "API_TOKEN", hostPattern: "api.example.com", placeholder: "sk-test-placeholder", secretValue: "real-secret" }, file, keyFile);
     expect(created.workspaceTemplateId).toBe(workspaceTemplate.id);
     expect(created).not.toHaveProperty("projectId");
-    await updateWorkspaceTemplateSecret(workspaceTemplate.id, created.id, { envName: "API_TOKEN", hostPattern: "*.example.com", secretValue: "real-secret" }, file, keyFile);
+    await updateWorkspaceTemplateSecret(workspaceTemplate.id, created.id, { envName: "API_TOKEN", hostPattern: "*.example.com" }, file, keyFile);
 
     const rawStore = await readFile(file, "utf8");
     expect(rawStore).toContain("API_TOKEN");
@@ -96,7 +96,7 @@ describe("Workspace templates", () => {
     expect(rawStore).not.toContain("workspaceTemplateId");
     expect(await revealWorkspaceTemplateSecrets(workspaceTemplate.id, file, keyFile)).toMatchObject([{ id: created.id, envName: "API_TOKEN", hostPattern: "*.example.com", placeholder: "sk-test-placeholder", secretValue: "real-secret" }]);
 
-    await updateWorkspaceTemplateSecret(workspaceTemplate.id, created.id, { envName: "API_TOKEN", hostPattern: "*.example.com", placeholder: "", secretValue: "real-secret" }, file, keyFile);
+    await updateWorkspaceTemplateSecret(workspaceTemplate.id, created.id, { envName: "API_TOKEN", hostPattern: "*.example.com", placeholder: "" }, file, keyFile);
     expect((await revealWorkspaceTemplateSecrets(workspaceTemplate.id, file, keyFile))[0]).not.toHaveProperty("placeholder");
   });
 

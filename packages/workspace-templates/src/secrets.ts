@@ -67,10 +67,6 @@ export async function updateWorkspaceTemplateSecret(scope: ConfigurationScope, s
   return await updateWorkspaceTemplateStore(file, async (store) => {
     const configuration = findConfigurationRecord(store, scope);
     const secret = findWorkspaceTemplateSecret(configuration, secretId);
-    // Changing where an existing value can be sent requires possession of that value.
-    const nextPathPermission = values.allowInPath ?? workspaceTemplateSecretAllowsPath(secret);
-    const routingChanged = envName !== secret.envName || hostPattern !== secret.hostPattern || nextPathPermission !== workspaceTemplateSecretAllowsPath(secret) || (values.placeholder !== undefined && normalizePlaceholder(values.placeholder) !== secret.placeholder);
-    if (secret.encryptedSecret && routingChanged && !values.secretValue) throw new AgentsInTheCloudCoreError("workspace_template_secret_routing_changed", "Re-enter the secret value when changing its name, placeholder, host or path policy");
     assertEnvNameAvailable(configuration, envName, secretId);
     secret.envName = envName;
     secret.hostPattern = hostPattern;
