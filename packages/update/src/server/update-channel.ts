@@ -1,7 +1,7 @@
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 
-export const updateChannelSchema = Type.Union([Type.Literal("stable"), Type.Literal("latest")]);
+export const updateChannelSchema = Type.Union([Type.Literal("stable"), Type.Literal("latest"), Type.Literal("custom")]);
 
 export type UpdateChannel = Static<typeof updateChannelSchema>;
 

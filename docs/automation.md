@@ -143,16 +143,16 @@ Template environment changes still apply to new containers. Existing secret plac
 
 The release-source work on `feature/private-fork-upgrade-channels` is incomplete. App updates and System-owned preparation support the configuration below, but the host installer does not yet consume the selected System repository. Do not use the current installer to update a configured fork: it still selects the upstream System image. Fork publication and upstream-sync CI are also pending.
 
-System-managed installations store release selection in `/data/app/update.json`. With no `releaseSource`, existing upstream Stable/Latest behaviour remains unchanged. A configured source never falls back to upstream. Invalid settings fail before pulling an image.
+System-managed installations store release selection in `/data/app/update.json`. Stable and Latest explicitly select upstream images; Custom selects the saved Docker repositories and pins. Switching to an upstream channel retains the custom source for later use. Existing files with a `releaseSource` show Custom and keep their previous Stable/Latest tag selection. Custom never silently falls back to upstream. Invalid settings disable updates without preventing the app from starting.
 
 `security`-scoped admin operations:
 
-- `GET/POST /settings/release-source`: read or replace both GHCR repositories and optional pins.
-- `POST /settings/update-channel`: select `{"channel":"stable"}` or `{"channel":"latest"}` for unpinned components.
+- `GET/POST /settings/release-source`: read or replace both GHCR or Docker Hub repositories and optional pins. Saving selects Custom.
+- `POST /settings/update-channel`: select `{"channel":"stable"}`, `{"channel":"latest"}`, or `{"channel":"custom"}`.
 - `GET/POST/DELETE /settings/release-registry`: inspect credential availability, store package read credentials, or remove them. POST takes `{"username":"github-user","token":"package-read-token"}`; no read operation returns credentials.
 - `GET /update/status`: inspect app update state.
 - `POST /update/check-now`, `/update/start`, `/update/restart`: check, prepare, then restart the app. Send `{}` for these mutations.
-- `POST /update/rollback`: restart the previous locally retained app image. Its workspace dependencies must still be present. This does not roll back stored app data or System.
+- `POST /update/rollback`: restart the previous locally retained app image. Its workspace dependencies must still be present. Mutable dependency aliases are not yet restored on rollback; avoid mutable workspace dependency tags. This does not roll back stored app data or System.
 
 A release-source body contains:
 
@@ -164,11 +164,13 @@ A release-source body contains:
 }
 ```
 
-`appVersion` and `systemVersion` accept a tag or `sha256:` digest. Omit a version to follow the selected channel. Source changes discard a prepared app update. System resolves the app and its declared dependency metadata before pulling immutable references; it retains the previous app image before replacement for recovery.
+`appVersion` and `systemVersion` accept a tag or `sha256:` digest. Omit a custom version to use the last selected Stable/Latest tag (Latest on a new installation). Public Docker Hub sources use an explicit `docker.io/owner/name` repository; private authentication currently supports GHCR only. Source changes discard a prepared app update. A successful save remains successful even when the subsequent registry check fails; `/update/status` reports that failure. System resolves the app and its declared dependency metadata before pulling immutable references; it retains the previous app image before replacement for recovery.
 
 Private GHCR credentials live in System's `/data/supervisor/docker-auth/config.json` (mode `0600`, directory `0700`), outside the app/workspace bind mounts. Registry token requests cannot redirect. Recognised signed blob-storage redirects receive no registry bearer token. Host Docker authentication for future System replacement still needs installer integration.
 
 Verification: `bun run check`, focused server tests, and `bun scripts/verify-admin-bindings-system.ts --app LOCAL_APP --system LOCAL_SYSTEM --release-updates`. The disposable integration checks TLS admin access, credential isolation, and two-version app replacement/rollback. Real private GHCR publication and authenticated private image downloads have not been tested.
+
+Local fork verification images are currently `linux/amd64` only. App publishing supports `--platform linux/amd64,linux/arm64`; the System publisher also requires both architectures. Current upstream Latest app and System manifests include both. ARM execution and fork ARM images remain unverified.
 
 ## Present a workspace
 

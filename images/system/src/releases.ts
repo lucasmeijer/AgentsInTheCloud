@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { readReleaseSettings, releaseReference, defaultReleaseSource } from "../../../packages/shared/src/release-source.ts";
+import { readReleaseSettings, releaseReference, activeReleaseSource, selectedReleaseChannel, defaultReleaseSource } from "../../../packages/shared/src/release-source.ts";
 import { resolveImage, type HttpFetcher, type PlannedImage } from "../../../packages/update/src/server/registry.ts";
 import { createReleaseRegistry } from "./release-registry.ts";
 
@@ -45,17 +45,17 @@ export function createReleaseRequests(options: {
         if (request.method === "DELETE") { await options.registry.clear(); return Response.json({ configured: false }); }
       }
       const settings = await readReleaseSettings(options.settingsPath);
-      if (url.pathname === "/release/source" && request.method === "GET") return Response.json({ source: settings.releaseSource ?? defaultReleaseSource, channel: settings.releaseChannel ?? "latest", configured: settings.releaseSource !== undefined, appReference: releaseReference(settings, "app"), systemReference: releaseReference(settings, "system") });
+      if (url.pathname === "/release/source" && request.method === "GET") return Response.json({ source: settings.releaseSource ?? defaultReleaseSource, channel: selectedReleaseChannel(settings), configured: settings.releaseSource !== undefined, appReference: releaseReference(settings, "app"), systemReference: releaseReference(settings, "system") });
       if (url.pathname === "/release/check" && request.method === "GET") {
         const component = url.searchParams.get("component") ?? "app";
         if (component !== "app" && component !== "system") return Response.json({ error: "Unsupported release component" }, { status: 400 });
         const plan = await resolveImage(releaseReference(settings, component), await options.registry.fetcher(options.fetcher));
-        return Response.json({ reference: plan.reference, digest: plan.reference.split("@")[1] });
+        return Response.json({ reference: plan.reference, digest: plan.reference.split("@")[1], revision: plan.revision, indexDigest: plan.indexDigest });
       }
       if (url.pathname === "/release/prepare" && request.method === "POST") {
         if (options.busy()) return Response.json({ error: "An update is in progress" }, { status: 409 });
         const value: unknown = await request.json();
-        const source = settings.releaseSource ?? defaultReleaseSource;
+        const source = activeReleaseSource(settings);
         if (!Value.Check(Type.Object({ reference: Type.String() }, { additionalProperties: false }), value) || !value.reference.startsWith(`${source.appRepository}@`) || !/^sha256:[a-f0-9]{64}$/.test(value.reference.slice(source.appRepository.length + 1))) return Response.json({ error: "Expected pinned image from the configured repository" }, { status: 400 });
         return Response.json(await options.prepare(value.reference));
       }

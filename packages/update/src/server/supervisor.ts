@@ -13,12 +13,12 @@ export async function requestSupervisorUpdate(image: string, fetcher: HttpFetche
   if (response.status !== 202) throw new Error((await response.text()).trim() || `Supervisor refused update: ${response.status}`);
 }
 
-export async function checkSupervisorRelease(fetcher: HttpFetcher = fetch): Promise<{ digest: string }> {
+export async function checkSupervisorRelease(fetcher: HttpFetcher = fetch): Promise<{ digest: string; revision?: string; indexDigest?: string }> {
   const response = await fetcher(`${supervisorOrigin}/release/check`);
   if (!response.ok) throw new Error("Cannot check the configured release source. Check System registry access.");
   const value: unknown = await response.json();
-  if (!Value.Check(Type.Object({ digest: Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }) }), value)) throw new Error("Invalid System release response");
-  return { digest: value.digest };
+  if (!Value.Check(Type.Object({ digest: Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }), revision: Type.Optional(Type.String()), indexDigest: Type.Optional(Type.String({ pattern: "^sha256:[a-f0-9]{64}$" })) }), value)) throw new Error("Invalid System release response");
+  return { digest: value.digest, revision: value.revision, indexDigest: value.indexDigest };
 }
 
 export async function prepareSupervisorRelease(reference: string, fetcher: HttpFetcher = fetch): Promise<{ imageId: string; reference: string }> {

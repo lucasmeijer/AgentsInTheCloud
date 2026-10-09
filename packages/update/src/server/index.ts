@@ -59,6 +59,7 @@ export class UpdateManager {
   private progressMessage: string | undefined;
   private restarting = false;
   private switchingChannel = false;
+  private configurationError: string | undefined;
   private channelGeneration = 0;
 
   constructor(private readonly deps: UpdateManagerDeps = {}) {}
@@ -66,8 +67,13 @@ export class UpdateManager {
   async initialize(context: WorkspaceServerModuleContext): Promise<void> {
     this.context = context;
     this.runtime = await (this.deps.detectRuntime ?? detectSelfUpdateRuntime)();
-    this.updateChannel = await this.deps.readChannel?.() ?? "latest";
-    this.releaseSource = await this.deps.readSource?.() ?? { ...defaultReleaseSource };
+    try {
+      this.releaseSource = await this.deps.readSource?.() ?? { ...defaultReleaseSource };
+      this.updateChannel = await this.deps.readChannel?.() ?? (this.deps.readSource ? "custom" : "latest");
+    } catch (error) {
+      this.configurationError = errorMessage(error);
+      this.setState("failed", { error: this.configurationError });
+    }
     this.updateSidebar();
     if (!this.runtime) return;
     await this.checkNow().catch((error) => console.error("Update check failed", error));
@@ -89,6 +95,7 @@ export class UpdateManager {
     this.context?.globalSidebarContributions.set(updateSidebarContributionId, sidebarHtml || undefined, [
       { target: "settings-sec-update", html: renderUpdateSettings(this, checked), action: "replace" },
       { target: "settings-sec-update-channel", html: renderUpdateChannelSettings(this), action: "replace" },
+      { target: "settings-sec-release-source", html: renderReleaseSourceSettings(this), action: "replace" },
     ]);
   }
 
@@ -100,7 +107,7 @@ export class UpdateManager {
   }
 
   async checkNow(options: { announceCurrent?: boolean } = {}): Promise<void> {
-    if (!this.runtime || this.switchingChannel || this.pullPromise || this.prepared || this.restarting) return;
+    if (this.configurationError || !this.runtime || this.switchingChannel || this.pullPromise || this.prepared || this.restarting) return;
     const generation = this.channelGeneration;
     const channel = this.updateChannel;
     if (this.state === "idle" || this.state === "failed") this.setState("checking");
@@ -117,7 +124,7 @@ export class UpdateManager {
     this.target = target;
     const current = target.revision ? this.runtime.currentRevision ?? this.runtime.currentDigest : this.runtime.currentDigest;
     const remote = target.revision ?? target.digest;
-    const available = Boolean(remote && current && remote !== current);
+    const available = Boolean(remote && current && remote !== current && this.runtime.currentDigest !== target.digest && this.runtime.currentDigest !== target.indexDigest);
     if (!available) this.setState("idle", {}, options.announceCurrent ?? false);
     else this.setState("available");
   }
@@ -156,7 +163,8 @@ export class UpdateManager {
   }
 
   private async pullNewestTarget(): Promise<void> {
-    const reference = `${this.releaseSource.appRepository}@${this.target!.digest}`;
+    const source = this.updateChannel === "custom" ? this.releaseSource : defaultReleaseSource;
+    const reference = `${source.appRepository}@${this.target!.digest}`;
     this.prepared = undefined;
     this.setState("pulling");
     this.prepared = await (this.deps.prepareUpdate ?? prepareUpdate)(reference, (progress) => {
@@ -190,12 +198,15 @@ export class UpdateManager {
     try {
       await this.deps.writeSource?.(source);
       this.releaseSource = { ...source };
+      this.updateChannel = "custom";
+      this.configurationError = undefined;
       this.channelGeneration++;
       this.target = undefined;
       this.prepared = undefined;
       this.setState("idle");
     } finally { this.switchingChannel = false; }
-    await this.checkNow();
+    try { await this.checkNow(); }
+    catch (error) { console.error("Release source saved; discovery failed", error); }
   }
 
   clearError(): void {
@@ -215,13 +226,14 @@ function renderReleaseSourceSettings(updateManager: UpdateManager, message = "")
   const snapshot = updateManager.snapshot();
   const source = snapshot.releaseSource;
   if (!snapshot.selfUpdatable) return '<section class="settings-sec" id="settings-sec-release-source"><h2>Release source</h2><p class="settings-sub">Release sources and private registry access require a System-managed installation.</p></section>';
+  if (snapshot.updateChannel !== "custom") return '<section class="settings-sec" id="settings-sec-release-source"><h2>Custom source</h2><p class="settings-sub">Stable and Latest use upstream images. Select Custom to choose Docker repositories and versions.</p></section>';
   const fields = ([
     ["appRepository", "App repository"], ["systemRepository", "System repository"],
     ["appVersion", "App version or digest (optional)"], ["systemVersion", "System version or digest (optional)"],
   ] as const).map(([name, label]) => `<label>${label}<input class="text-field" name="${name}" value="${escapeHtml(source[name] ?? "")}" ${name.endsWith("Repository") ? "required" : ""}></label>`).join("");
-  const save = buttonHtml({ type: "submit", variant: "secondary", content: { kind: "caption", caption: "Save release source" } });
+  const save = buttonHtml({ type: "submit", variant: "secondary", content: { kind: "caption", caption: "Use custom source" } });
   const credentials = buttonHtml({ type: "submit", variant: "secondary", content: { kind: "caption", caption: "Save registry access" } });
-  return `<section class="settings-sec release-source-settings" id="settings-sec-release-source"><h2>Release source</h2><p class="settings-sub">Updates use these GHCR repositories only. Leave versions blank to follow the selected channel. System updates use the host installer.</p><form method="post" action="/settings/release-source" data-turbo="true">${fields}${save}</form><h3>Private GHCR access</h3><p class="settings-sub">Stored privately in System, never sent to workspaces. Use a token with package read access.</p><form method="post" action="/settings/release-registry" data-turbo="true" autocomplete="off"><label>GitHub username<input class="text-field" name="username" required></label><label>Package read token<input class="text-field" type="password" name="token" required autocomplete="new-password"></label>${credentials}</form>${message ? `<p role="status">${escapeHtml(message)}</p>` : ""}</section>`;
+  return `<section class="settings-sec release-source-settings" id="settings-sec-release-source"><h2>Custom source</h2><p class="settings-sub">Saving selects Custom. Use a GHCR or Docker Hub repository, including an upstream image. Leave versions blank to use Latest (or the last selected channel). Stable and Latest select upstream images. System installer integration is not ready yet.</p><form method="post" action="/settings/release-source" data-turbo="true">${fields}${save}</form><h3>Private GHCR access</h3><p class="settings-sub">Stored privately in System, never sent to workspaces. Use a token with package read access.</p><form method="post" action="/settings/release-registry" data-turbo="true" autocomplete="off"><label>GitHub username<input class="text-field" name="username" required></label><label>Package read token<input class="text-field" type="password" name="token" required autocomplete="new-password"></label>${credentials}</form>${message ? `<p role="status">${escapeHtml(message)}</p>` : ""}</section>`;
 }
 
 function renderCheckButton(state: "initial" | "in-progress"): string {
@@ -330,6 +342,7 @@ function renderUpdateChannelSettings(updateManager: UpdateManager): string {
     options: [
       { value: "stable", label: "Stable", disabled },
       { value: "latest", label: "Latest", disabled },
+      { value: "custom", label: "Custom", disabled },
     ],
   });
   return `<section class="settings-sec settings-choice-row" id="settings-sec-update-channel"><h2>Update channel</h2>${channel}</section>`;
@@ -386,7 +399,7 @@ export function createUpdateRouteHandler(updateManager: UpdateManager): (request
             const value = form.get(name); return value ? [[name, value]] : [];
           }));
         }
-        if (!Value.Check(releaseSourceSchema, source)) return Response.json({ error: "Invalid GHCR release source" }, { status: 400 });
+        if (!Value.Check(releaseSourceSchema, source)) return Response.json({ error: "Invalid Docker release source" }, { status: 400 });
         try { await updateManager.setReleaseSource(source); }
         catch (error) {
           if (error instanceof UpdateConflictError) return Response.json({ error: errorMessage(error) }, { status: 409 });

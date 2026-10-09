@@ -121,3 +121,33 @@ test("registry blob redirects to foreign hosts are rejected", async () => {
   })).rejects.toThrow("Unsafe registry blob redirect");
   expect(foreignRequests).toBe(0);
 });
+
+test("Stable and Latest explicitly select upstream while preserving the custom source", () => {
+  const releaseSource = { appRepository: "docker.io/example/app", systemRepository: "ghcr.io/example/system", appVersion: "v2" };
+  expect(releaseReference({ releaseSource, releaseMode: "custom", releaseChannel: "stable" }, "app")).toBe("docker.io/example/app:v2");
+  expect(releaseReference({ releaseSource, releaseMode: "upstream", releaseChannel: "stable" }, "app")).toBe("ghcr.io/lucasmeijer/agents-in-the-cloud:stable");
+  expect(releaseReference({ releaseSource, releaseMode: "upstream", releaseChannel: "latest" }, "system")).toBe("ghcr.io/lucasmeijer/agents-in-the-cloud-system:latest");
+  expect(releaseSourceFromReferences({}, "docker.io/example/app:v1").appRepository).toBe("docker.io/example/app");
+});
+
+test("Custom without a saved source fails closed", async () => {
+  const path = join(await directory(), "update.json");
+  await writeFile(path, JSON.stringify({ releaseMode: "custom" }));
+  await expect(readReleaseSettings(path)).rejects.toThrow("Custom channel requires a release source");
+});
+
+test.each(["amd64", "arm64"])("Docker Hub custom sources resolve %s and strip auth on CloudFront redirects", async architecture => {
+  const result = await resolveImage("docker.io/example/app:latest", async (input, init) => {
+    const url = new URL(String(input));
+    if (url.hostname === "production.cloudfront.docker.com") {
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      return Response.json({ os: "linux", architecture, config: { Labels: { "org.opencontainers.image.revision": "custom-revision" } } });
+    }
+    if (url.pathname === "/token") return Response.json({ token: "test-bearer" });
+    if (!new Headers(init?.headers).has("authorization")) return new Response(null, { status: 401, headers: { "www-authenticate": 'Bearer realm="https://auth.docker.io/token"' } });
+    if (url.pathname.includes("/manifests/")) return Response.json({ config: { digest }, layers: [] }, { headers: { "docker-content-digest": digest } });
+    return new Response(null, { status: 307, headers: { location: "https://production.cloudfront.docker.com/config" } });
+  }, { os: "linux", architecture });
+  expect(result.reference).toBe(`docker.io/example/app@${digest}`);
+  expect(result.revision).toBe("custom-revision");
+});
