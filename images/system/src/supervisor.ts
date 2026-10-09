@@ -50,11 +50,14 @@ await Promise.all(
 await mkdir("/run/agents-in-the-cloud-system", { recursive: true });
 await writeFile("/run/agents-in-the-cloud-system/access-v1", "");
 // Retain the serialized accessMode field and external access API spelling.
-type State = { accessMode?: "localhost" | "tailscale"; localPort?: number; currentImage?: string; previousImage?: string; runningContainers?: string[]; uninstall?: UninstallState };
+type State = { accessMode?: "localhost" | "tailscale"; localPort?: number; currentImage?: string; previousImage?: string; pendingImage?: string; tailscaleHostname?: string; runningContainers?: string[]; uninstall?: UninstallState };
 const persisted: State = (await Bun.file(`${stateDir}/state.json`).exists())
   ? JSON.parse(await readFile(`${stateDir}/state.json`, "utf8"))
   : {};
 persisted.accessMode ??= Value.Parse(Type.Union([Type.Literal("localhost"), Type.Literal("tailscale")]), values["access-mode"]);
+persisted.tailscaleHostname = Value.Parse(Type.String({ pattern: "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$" }), persisted.tailscaleHostname ?? "agents-in-the-cloud-system");
+const tailscaleHostname = persisted.tailscaleHostname;
+if (persisted.pendingImage) Value.Assert(Type.String({ pattern: "^sha256:[a-f0-9]{64}$" }), persisted.pendingImage);
 const tailscaleSelected = () => persisted.accessMode === "tailscale";
 async function persist() {
   await writeFile(`${stateDir}/state.next`, JSON.stringify(persisted));
@@ -269,7 +272,7 @@ function configureRoutes(target: number): Promise<void> {
   return routing;
 }
 type Replacement = { image: string; pull: boolean } | { channel: true };
-let replacement: Replacement = { image: candidate, pull: !persisted.currentImage };
+let replacement: Replacement = { image: persisted.pendingImage ?? candidate, pull: !persisted.currentImage && !persisted.pendingImage };
 async function replace(request: Replacement) {
   if (busy || stopping || uninstalling)
     throw new Error(
@@ -284,13 +287,14 @@ async function replace(request: Replacement) {
   try {
     await configureRoutes(3001);
     stage("Preparing AgentsInTheCloud");
+    const preparedRelease = "channel" in request || (request.pull && /^(ghcr\.io|docker\.io)\//.test(request.image));
     const reference = "channel" in request
       ? (await prepareSelectedRelease(releaseReference(await readReleaseSettings("/data/app/update.json"), "app"))).imageId
-      : request.image;
+      : preparedRelease ? (await prepareSelectedRelease(request.image)).imageId : request.image;
     candidate = reference;
     const exact = await prepareImage(reference, {
-      pullApp: !("channel" in request) && request.pull,
-      pullDependencies: !("channel" in request) && request.pull,
+      pullApp: !preparedRelease && !("channel" in request) && request.pull,
+      pullDependencies: !preparedRelease && !("channel" in request) && request.pull,
     });
     candidate = exact;
     if (stopping) return;
@@ -353,6 +357,7 @@ async function replace(request: Replacement) {
     stage("Checking AgentsInTheCloud is healthy", 3);
     await waitFor(appIsHealthy, timeout, "AgentsInTheCloud health");
     persisted.currentImage = exact;
+    if (persisted.pendingImage === exact) delete persisted.pendingImage;
     await persist();
     stage("Opening AgentsInTheCloud", 4);
     await openApp();
@@ -807,13 +812,14 @@ async function initialize() {
           // not connect an account. System owns this command and its deadline.
           const attempt = new AbortController();
           login = attempt;
-          void command(["tailscale", "up", "--timeout=10m"], log, 610_000, attempt.signal)
+          void command(["tailscale", "up", "--timeout=10m", "--hostname", tailscaleHostname], log, 610_000, attempt.signal)
             .catch((error) => {
               if (!tailscaleSelected() || attempt.signal.aborted) return;
               connectionFailure = `Could not connect AgentsInTheCloud: ${String(error)}`;
               log(connectionFailure);
             }).finally(() => { if (tailscaleSelected() && !attempt.signal.aborted) connectionAttempt = "finished"; });
         }
+        if (connectionState === "Running" && status.Self?.HostName !== persisted.tailscaleHostname) await command(["tailscale", "set", "--hostname", persisted.tailscaleHostname!], undefined, 5000);
         const host =
           status.BackendState === "Running"
             ? status.Self.DNSName.replace(/\.$/, "")

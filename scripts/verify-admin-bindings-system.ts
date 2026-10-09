@@ -9,7 +9,7 @@ import { Value } from "typebox/value";
 import { parseArgs } from "node:util";
 import { createAdminStore, adminScopes } from "../apps/web/src/server/admin/store.ts";
 
-const { values } = parseArgs({ options: { app: { type: "string", default: "agents-in-the-cloud-admin:local" }, system: { type: "string", default: "agents-in-the-cloud-system:admin-local" }, workspace: { type: "string" }, "release-updates": { type: "boolean", default: false } } });
+const { values } = parseArgs({ options: { app: { type: "string", default: "agents-in-the-cloud-admin:local" }, system: { type: "string", default: "agents-in-the-cloud-system:admin-local" }, workspace: { type: "string" }, "release-updates": { type: "boolean", default: false }, "installer-system": { type: "string" } } });
 const name = `aitc-admin-integration-${crypto.randomUUID().slice(0, 8)}`;
 const volume = name;
 const fixtureApp = `${name}:app`;
@@ -107,14 +107,46 @@ try {
     await exec("bun", "-e", `const r=await fetch("http://127.0.0.1:3001/update",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({image:${JSON.stringify(secondId)}})});if(r.status!==202)throw new Error("Update rejected");`);
     await until(async () => {
       const state = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))'));
-      return state.healthy && state.currentImage === secondId && state.previousImage === initial;
+      return state.healthy && !state.busy && state.currentImage === secondId && state.previousImage === initial;
     }, "second app version is healthy with recorded rollback image");
     assert.equal((await api("/update/rollback", "POST", "{}")).status, 202);
     await until(async () => {
       const state = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))'));
-      return state.healthy && state.currentImage === initial && state.previousImage === secondId;
+      return state.healthy && !state.busy && state.currentImage === initial && state.previousImage === secondId;
     }, "rollback restores the first app image");
     console.log("PASS: release source validation, private registry credential isolation, two-version pinned app replacement and rollback");
+  }
+  if (values["installer-system"]) {
+    assert.equal((await api("/settings/release-registry", "POST", JSON.stringify({ username: "fixture-user", token: "fixture-token" }))).status, 200);
+    const originalSystem = await run(["docker", "inspect", "--format", "{{.Image}}", name]);
+    const originalApp = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))')).currentImage;
+    const installerApp = `${name}:installer-app`;
+    await run(["docker", "exec", "-i", name, "docker", "build", "-t", installerApp, "-"], `FROM ${fixtureApp}\nLABEL org.opencontainers.image.revision="installer-second"\n`);
+    const installerAppId = await exec("docker", "image", "inspect", "--format", "{{.Id}}", installerApp);
+    await exec("bun", "-e", 'await Bun.write("/data/app/update.json",JSON.stringify({releaseMode:"custom",releaseSource:{appRepository:"ghcr.io/example/fixture-app",systemRepository:"ghcr.io/example/fixture-system"}}));');
+    const script = (await Bun.file(new URL("./install.sh", import.meta.url)).text())
+      .replace("system_name=agents-in-the-cloud-system", `system_name=${name}`)
+      .replace('{ [ -t 0 ]; } 2>/dev/null <"$prompt_input"', "true")
+      .replace('IFS= read -r -t 120 "$1" <"$prompt_input"', 'if [ "$1" = answer ]; then answer=yes; else exit 2; fi')
+      .replace("run_root mkdir -p /etc/modules-load.d", "mkdir -p /etc/modules-load.d")
+      .replace("run_root tee /etc/modules-load.d", "tee /etc/modules-load.d")
+      .replaceAll("/etc/modules-load.d", `${directory}/modules`);
+    const path = join(directory, "install.sh"); await Bun.write(path, script);
+    await run(["bash", path, "--action", "update", "--system-image", values["installer-system"], "--app-image", installerApp, "--tailscale-hostname", "integration-cloud"]);
+    assert.equal(await run(["docker", "inspect", "--format", "{{.Config.Hostname}}", name]), "integration-cloud");
+    const updated = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))'));
+    assert.equal(updated.currentImage, installerAppId); assert.equal(updated.healthy, true);
+    assert.equal((await api("/settings/release-registry")).body.configured, true);
+    assert.equal(await exec("stat", "-c", "%a", "/data/supervisor/docker-auth/config.json"), "600");
+    const selected = JSON.parse(await exec("bun", "-e", 'console.log(await Bun.file("/data/app/update.json").text())'));
+    assert.equal(selected.releaseSource.appRepository, "ghcr.io/example/fixture-app");
+    assert.equal(selected.releaseSource.systemRepository, "ghcr.io/example/fixture-system");
+    assert.equal(await run(["docker", "inspect", "--format", mappingTemplate, name]), mapping);
+    await run(["bash", path, "--action", "rollback"]);
+    assert.equal(await run(["docker", "inspect", "--format", "{{.Image}}", name]), originalSystem);
+    const restored = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))'));
+    assert.equal(restored.currentImage, originalApp); assert.equal(restored.healthy, true);
+    console.log("PASS: real host installer pins and replaces System/app, preserves fork source/admin ports/hostname, and restores the retained pair without registry pulls");
   }
   const cli = JSON.parse(await exec("docker", "exec", "--user", "1000:1000", "agents-in-the-cloud", "bun", "/app/apps/web/scripts/admin-bindings.ts", "show"));
   assert.equal(cli.tokens.length, 1);

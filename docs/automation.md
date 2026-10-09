@@ -141,7 +141,7 @@ Template environment changes still apply to new containers. Existing secret plac
 
 ## Fork release sources (development branch)
 
-The release-source work on `feature/private-fork-upgrade-channels` is incomplete. App updates and System-owned preparation support the configuration below, but the host installer does not yet consume the selected System repository. Do not use the current installer to update a configured fork: it still selects the upstream System image. Fork publication and upstream-sync CI are also pending.
+App updates and the host installer consume the persisted release selection below. Fork publication and upstream-sync CI remain pending. Installer install/update requires a System image carrying `agents-in-the-cloud.installer-config=1`, built from this branch; an incompatible image is rejected before the existing System is stopped. A retained older System image can still be restored with installer rollback.
 
 System-managed installations store release selection in `/data/app/update.json`. Stable and Latest explicitly select upstream images; Custom selects the saved Docker repositories and pins. Switching to an upstream channel retains the custom source for later use. Existing files with a `releaseSource` show Custom and keep their previous Stable/Latest tag selection. Custom never silently falls back to upstream. Invalid settings disable updates without preventing the app from starting.
 
@@ -166,9 +166,36 @@ A release-source body contains:
 
 `appVersion` and `systemVersion` accept a tag or `sha256:` digest. Omit a custom version to use the last selected Stable/Latest tag (Latest on a new installation). Public Docker Hub sources use an explicit `docker.io/owner/name` repository; private authentication currently supports GHCR only. Source changes discard a prepared app update. A successful save remains successful even when the subsequent registry check fails; `/update/status` reports that failure. System resolves the app and its declared dependency metadata before pulling immutable references; it retains the previous app image before replacement for recovery.
 
-Private GHCR credentials live in System's `/data/supervisor/docker-auth/config.json` (mode `0600`, directory `0700`), outside the app/workspace bind mounts. Registry token requests cannot redirect. Recognised signed blob-storage redirects receive no registry bearer token. Host Docker authentication for future System replacement still needs installer integration.
+Private GHCR credentials live in System's `/data/supervisor/docker-auth/config.json` (mode `0600`, directory `0700`), outside the app/workspace bind mounts. Registry token requests cannot redirect. Recognised signed blob-storage redirects receive no registry bearer token. The installer reuses saved GHCR auth for host pulls through a temporary Docker configuration with restrictive permissions, removed on exit. It never sends those credentials to workspace containers.
 
-Verification: `bun run check`, focused server tests, and `bun scripts/verify-admin-bindings-system.ts --app LOCAL_APP --system LOCAL_SYSTEM --release-updates`. The disposable integration checks TLS admin access, credential isolation, and two-version app replacement/rollback. Real private GHCR publication and authenticated private image downloads have not been tested.
+### Installer setup, update and rollback
+
+Fresh setup prompts for a **release image repository** and a **Tailscale hostname**, including when localhost access is selected. The repository is an app Docker repository, not a Git URL. System defaults to the matching repository with `-system` appended. For example, `ghcr.io/example/agents-in-the-cloud` selects `ghcr.io/example/agents-in-the-cloud-system`. Use `--system-image` when the two repositories have different names. The hostname is a short machine name: 1–63 lowercase letters, digits or hyphens, without a tailnet domain.
+
+```sh
+bash scripts/install.sh --action install
+# Or supply the setup answers:
+bash scripts/install.sh --action install \
+  --source-repository ghcr.io/example/agents-in-the-cloud \
+  --tailscale-hostname cloud-home
+```
+
+These selections are persisted in `/data/app/update.json` and `/data/supervisor/state.json`. Tailscale receives the hostname on login; an already connected node is updated with `tailscale set --hostname`. Setup does not connect to a tailnet without the existing sign-in flow.
+
+For private GHCR setup, add `--registry-config /secure/docker-config.json`. The file must contain an inline `auths["ghcr.io"].auth` entry (base64 of `username:package-read-token`) and no credential helper configuration. Keep the original file private (`0600`); base64 is not encryption. The installer copies only the GHCR auth entry into System. Subsequent updates reuse that saved entry, or an explicitly supplied replacement file. Existing host Docker authentication remains available when no System/explicit registry configuration is present.
+
+```sh
+bash scripts/install.sh --action update
+bash scripts/install.sh --action rollback
+```
+
+Update reads the saved source even when the app is unavailable. It downloads and pins System, validates its installer capability, and pulls/inspects the selected app and its declared workspace dependencies before stopping the existing System. An existing stopped System is started only to prepare images. A preparation failure does not replace the container. The prepared immutable app ID is handed to the new System for startup and retained until health succeeds.
+
+Explicit `--app-image` and `--system-image` overrides also work on existing installations. GHCR/Docker Hub overrides update the saved Custom source and tag/digest pin; local image references are deliberate one-off overrides and must already be available to the corresponding Docker daemon. A local app override must exist in System's inner daemon, not merely in the host daemon.
+
+`/data/supervisor/installer.json` retains the previous host System ID and app ID. Rollback uses those local images without registry pulls; it fails if the pair is not retained. It preserves the current hostname, settings, data and admin publications. It does not roll back stored data or restore mutable dependency aliases; release images should declare content-addressed workspace dependencies. No automatic upstream fallback or automatic rollback is performed.
+
+Verification: `bun run check`, focused server tests, and `bun scripts/verify-admin-bindings-system.ts --app LOCAL_APP --system LOCAL_SYSTEM --release-updates`. Add `--installer-system LOCAL_NEW_SYSTEM` to exercise real host installer replacement and rollback against a disposable older System. The integration checks TLS admin access, credential isolation, and two-version app/System replacement/rollback, including hostname, source and publication persistence. Real private GHCR publication and authenticated private image downloads have not been tested.
 
 Local fork verification images are currently `linux/amd64` only. App publishing supports `--platform linux/amd64,linux/arm64`; the System publisher also requires both architectures. Current upstream Latest app and System manifests include both. ARM execution and fork ARM images remain unverified.
 
