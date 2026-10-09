@@ -33,6 +33,52 @@ The check uses the request URL's hostname and port, not forwarded-host/public-or
 
 This is CSRF protection, not authentication. Keep management unreachable from untrusted containers and untrusted HTML on separate origins or opaque-origin sandboxes. Token-authenticated agent MCP and turn-boundary endpoints retain their separate policy.
 
+## Optional authenticated admin bindings
+
+Admin bindings provide a separate, JSON-only management API for host-local or LAN automation without Tailscale. They are disabled by default. Every request, including `GET /openapi.json`, requires `Authorization: Bearer <token>`. No browser `Origin` header is required on these listeners. The existing UI ingress and its Origin policy are unchanged.
+
+Bootstrap locally with `bun apps/web/scripts/admin-bindings.ts`:
+
+```sh
+# Set a private umask before creating input files or capturing an issued token.
+umask 077
+# bindings.json: {"bindings":[{"host":"127.0.0.1","port":3443}]}
+bun apps/web/scripts/admin-bindings.ts configure --file /secure/bindings.json
+# token-input.json: {"name":"automation","scopes":["configuration","secrets","workspaces","host:read","security"]}
+bun apps/web/scripts/admin-bindings.ts issue --file /secure/token-input.json > /secure/issued-token.json
+```
+
+The CLI uses the normal application data directory; `--data-dir PATH` overrides it for offline/local administration. Configuration lives in `admin-bindings.json`, with private permissions and only token hashes. The bearer secret is returned once. Token metadata can be listed with `show`; `revoke TOKEN_ID` takes effect on subsequent requests without restarting. Optional `expiresAt` sets token expiry.
+
+Bindings take effect on **app startup**. Change them and restart the app, not individual workspaces. An empty `bindings` array disables all admin listeners on the next startup. Local CLI configuration remains available for lockout recovery.
+
+Non-loopback bindings require TLS. Certificate/key paths must be absolute and readable by the app:
+
+```json
+{"bindings":[{"host":"0.0.0.0","port":3443,"tls":{"cert":"/data/app/admin-tls/cert.pem","key":"/data/app/admin-tls/key.pem"}}]}
+```
+
+For System installations, configure the app's persisted `/data/app` directory using the CLI **inside the app container as UID/GID 1000:1000** (for example, `docker exec --user 1000:1000 agents-in-the-cloud bun /app/apps/web/scripts/admin-bindings.ts ...`), and put TLS material there with matching ownership and private key permissions. Docker port publication is separate: install/update with `--admin-publish 192.168.1.10:3443:3443` for LAN access, or `--admin-publish 127.0.0.1:3443:3443` for host-only access. In both cases the container listener should use `0.0.0.0` with TLS. The option accepts explicit IPv4 `HOST_IP:HOST_PORT:ADMIN_PORT`, is repeatable, and existing publications are retained on updates unless replacements are supplied. No LAN ports are published by default. Never publish the UI or supervisor ports as admin ports. Applying installation updates interrupts running workspaces; do not update a live installation just to experiment with bindings.
+
+Send `Content-Type: application/json` for mutations, including `{}` for operations without fields. Responses are JSON, and `/openapi.json` on the admin listener documents only its allowlisted operations and bearer authentication. UI routes, previews, arbitrary commands, agent prompting and terminal WebSockets are not exposed. SSH public-key responses are wrapped as `{ "publicKey": "..." }`.
+
+Scopes:
+
+| Scope | Operations |
+| --- | --- |
+| `configuration` | Template creation/update/deletion, environment variables, preload images |
+| `secrets` | Template secret creation/update/deletion |
+| `workspaces` | List/inspect/create/rename/park/unpark/delete, provisioning recovery, warning dismissal |
+| `workspaces:force-delete` | Additional permission for explicit forced deletion; also requires `workspaces` |
+| `host:read` | Host availability, bounded diagnostic samples and System status; no terminals or raw supervisor logs |
+| `security` | Privileged mode, credential seeding, Dockerfiles, SSH keys/trust, System access mode, admin binding/token management |
+
+Template discovery/configuration reads are shared by `configuration`, `secrets`, `security` and `workspaces` tokens. These reads include template environment values, but never plaintext secret or private-key values. `security` is administrative power: it can issue tokens with any scope and enable privileged containers. Scope separation does not sandbox repository setup or privileged Dockerfiles.
+
+Additional management endpoints are `GET/PUT /admin/bindings`, `GET/POST /admin/tokens`, `DELETE /admin/tokens/{tokenId}`, `GET /host/status`, and `GET/POST /settings/access`. Binding updates return `restartRequired: true`; token issuance returns `{ token, secret }` once. Revocation requires a JSON `{}` body. Access changes require System; unsupported standalone instances return `503`. Diagnostic collection uses existing read-only, bounded probes, although diagnostic output can contain operational details and must be treated as sensitive.
+
+`admin-audit.jsonl` records token ID, peer, operation template, method and status, without payloads, raw URLs, credentials or diagnostic output. Audit-file retention is operator-managed. Mutations accept at most 1 MiB of JSON. Template environment variables still apply to new containers; existing secret placeholders resolve to rotated credentials on subsequent proxied requests.
+
 ## Present a workspace
 
 Workspace, Agent, and Work-view destinations are browser-navigable surfaces:

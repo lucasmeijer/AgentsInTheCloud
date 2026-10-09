@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 const installer = await Bun.file(new URL("./install.sh", import.meta.url)).text();
 
-function run(options: { systemState?: "restarting" | "exited"; nonRoot?: boolean; denySudo?: boolean; mac?: boolean; wsl?: boolean; installed?: boolean; old?: boolean; legacyAtelier?: boolean; legacyVolumeOnly?: boolean; legacyPreSystem?: boolean; legacyDownloadFails?: boolean; legacyDelegateFails?: boolean; pullFails?: boolean; appFails?: boolean; retryUpdateRequest?: boolean; rejectUpdateRequest?: boolean; pendingHealth?: boolean; missingFilesystem?: boolean; loadable?: boolean; uninstallAnswer?: string; uninstallFails?: boolean; uninstallRequestFails?: boolean; inventoryFails?: boolean; volumeOnly?: boolean; volumeRemovalFails?: boolean; initiallyStopped?: boolean } = {}, args: string[] = []) {
+function run(options: { systemState?: "restarting" | "exited"; adminMappings?: string; nonRoot?: boolean; denySudo?: boolean; mac?: boolean; wsl?: boolean; installed?: boolean; old?: boolean; legacyAtelier?: boolean; legacyVolumeOnly?: boolean; legacyPreSystem?: boolean; legacyDownloadFails?: boolean; legacyDelegateFails?: boolean; pullFails?: boolean; appFails?: boolean; retryUpdateRequest?: boolean; rejectUpdateRequest?: boolean; pendingHealth?: boolean; missingFilesystem?: boolean; loadable?: boolean; uninstallAnswer?: string; uninstallFails?: boolean; uninstallRequestFails?: boolean; inventoryFails?: boolean; volumeOnly?: boolean; volumeRemovalFails?: boolean; initiallyStopped?: boolean } = {}, args: string[] = []) {
   const logPath = `/tmp/agents-in-the-cloud-install-test-${crypto.randomUUID()}.log`;
   const mock = `
 mktemp() { if [[ "$*" == *atelier-legacy-uninstall* ]]; then echo "${logPath}.legacy"; else echo "${logPath}"; fi; }
@@ -76,7 +76,7 @@ docker() {
         return
       fi ;;
     'logs --tail') echo 'supervisor startup failed: io.weight unavailable';;
-    'inspect --format') if [[ "$*" == *State.Status* ]]; then echo ${options.systemState ?? 'running'}; elif [[ "$*" == *3080/tcp* ]]; then echo 55123; else echo ${options.initiallyStopped ? "false" : "true"}; fi ;;
+    'inspect --format') if [[ "$*" == *'range $port'* ]]; then printf '%s\\n' ${JSON.stringify(options.adminMappings ?? '')}; elif [[ "$*" == *State.Status* ]]; then echo ${options.systemState ?? 'running'}; elif [[ "$*" == *3080/tcp* ]]; then echo 55123; else echo ${options.initiallyStopped ? "false" : "true"}; fi ;;
   esac
 }
 `;
@@ -479,4 +479,27 @@ test("legacy installation storage remaining after container removal still delega
   expect(result.output).toContain("LEGACY BASH");
   expect(result.output).toContain("DELETE ATELIER");
   expect(result.output).not.toContain("Nothing to uninstall");
+});
+
+test("admin publication is explicit and does not replace local ingress", () => {
+  const result = run({}, ["--action", "install", "--admin-publish", "192.168.1.10:3443:3443"]);
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("--publish 127.0.0.1:3080:3080 --publish 192.168.1.10:3443:3443");
+});
+test("loopback admin publication and multiple ports are supported", () => {
+  const result = run({}, ["--action", "install", "--admin-publish", "127.0.0.1:3443:3443", "--admin-publish", "192.168.1.10:3444:3444"]);
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("--publish 127.0.0.1:3443:3443 --publish 192.168.1.10:3444:3444");
+});
+test("invalid admin publication cannot expose internal UI, supervisor or previews", () => {
+  for (const mapping of ["3443", "localhost:3443:3443", "192.168.1.10:3443:3000", "192.168.1.10:3443:3001", "192.168.1.10:3443:3080", "192.168.1.10:3443:41001", "999.1.1.1:3443:3443"]) {
+    const result = run({}, ["--action", "install", "--admin-publish", mapping]);
+    expect(result.status).not.toBe(0);
+    expect(result.output).not.toContain("DOCKER run");
+  }
+});
+test("updates retain previously published admin ports", () => {
+  const result = run({ installed: true, adminMappings: "192.168.1.10:3443:3443/tcp" }, ["--action", "update"]);
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("--publish 192.168.1.10:3443:3443");
 });

@@ -268,8 +268,11 @@ export function createWorkspaceTemplateRoutes(deps: {
   }
 
   async function createWorkspaceTemplateSshKeyFromForm(workspaceTemplateId: string, request: Request): Promise<Response> {
-    const formData = await request.formData();
-    const key = await createWorkspaceTemplateSshKey(workspaceTemplateId, String(formData.get("privateKey") ?? ""), undefined, undefined, String(formData.get("name") ?? ""));
+    const input = requestAcceptsJson(request) ? await readJsonObject(request) : undefined;
+    const formData = input ? undefined : await request.formData();
+    const privateKey = input ? requiredJsonString(input, "privateKey") : String(formData!.get("privateKey") ?? "");
+    const name = input ? optionalJsonString(input, "name") ?? "" : String(formData!.get("name") ?? "");
+    const key = await createWorkspaceTemplateSshKey(workspaceTemplateId, privateKey, undefined, undefined, name);
     return workspaceTemplateSettingsResponse(request, { key });
   }
 

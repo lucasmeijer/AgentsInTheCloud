@@ -6,6 +6,7 @@ app_image=ghcr.io/lucasmeijer/agents-in-the-cloud:latest
 action=""
 uninstall_requested=0
 access_mode=""
+admin_publish=()
 system_name=agents-in-the-cloud-system
 
 # Keep subprocess output available without turning the welcome into a log tail.
@@ -119,6 +120,7 @@ Update also installs the newest AgentsInTheCloud app on the installation's selec
   --system-image REF   System image (default: ghcr.io/lucasmeijer/agents-in-the-cloud-system:latest)
   --app-image REF      First-install app image (default: ghcr.io/lucasmeijer/agents-in-the-cloud:latest)
   --access-mode MODE  localhost or tailscale (default selected for this machine)
+  --admin-publish IP:HOST_PORT:ADMIN_PORT  Publish an admin listener (repeatable; TLS/token setup separate)
   --action ACTION     install, update, connect, or open
                       connect enables Tailscale without replacing an existing installation
   --uninstall         Permanently delete installation data (also supports Atelier System)
@@ -140,6 +142,9 @@ while [ "$#" -gt 0 ]; do
         --access-mode) access_mode="$2" ;;
       esac
       shift 2 ;;
+    --admin-publish)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || fail "$1 requires IP:HOST_PORT:ADMIN_PORT"
+      admin_publish+=("$2"); shift 2 ;;
     --uninstall) uninstall_requested=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) fail "unknown option: $1" ;;
@@ -151,6 +156,19 @@ if [ "$uninstall_requested" -eq 1 ]; then
 fi
 case "$action" in ""|install|update|connect|open|uninstall) ;; *) fail "unknown action: $action" ;; esac
 case "$access_mode" in ""|localhost|tailscale) ;; *) fail "unknown access mode: $access_mode" ;; esac
+validate_admin_publish() {
+  local mapping="$1" ip host_port container_port octet
+  local -a octets
+  [[ "$mapping" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}:[0-9]{1,5}$ ]] || fail "--admin-publish requires an explicit IPv4 IP:HOST_PORT:ADMIN_PORT"
+  IFS=: read -r ip host_port container_port <<<"$mapping"
+  IFS=. read -r -a octets <<<"$ip"
+  for octet in "${octets[@]}"; do [ "$((10#$octet))" -le 255 ] || fail "Invalid admin publication IP"; done
+  host_port=$((10#$host_port)); container_port=$((10#$container_port))
+  [ "$host_port" -ge 1024 ] && [ "$host_port" -le 65535 ] && [ "$container_port" -ge 1024 ] && [ "$container_port" -le 65535 ] || fail "Admin ports must be between 1024 and 65535"
+  case "$container_port" in 2999|3000|3001|3080|24800) fail "Cannot publish an internal management or gateway port as an admin listener" ;; esac
+  [ "$container_port" -lt 41000 ] || [ "$container_port" -gt 41999 ] || fail "Cannot publish a workspace preview port as an admin listener"
+}
+for mapping in "${admin_publish[@]}"; do validate_admin_publish "$mapping"; done
 # stdin may carry the script itself (curl | bash). With sudo's use_pty option,
 # /dev/tty is sudo's relay PTY and receives no input when sudo itself was piped.
 # SUDO_TTY names the caller's terminal, which remains available for prompts.
@@ -573,6 +591,18 @@ case "$action" in
       prompt answer "  Choose [1]: "
       case "${answer:-1}" in 1) ;; 2) access_mode="$alternate_mode" ;; *) fail "choose 1 or 2" ;; esac
     fi
+    # Docker port publication is fixed at container creation. Preserve admin mappings on update.
+    if [ "$installed" -eq 1 ] && [ "${#admin_publish[@]}" -eq 0 ]; then
+      saved_admin_publish="$(docker inspect --format '{{range $port, $bindings := .NetworkSettings.Ports}}{{if ne $port "3080/tcp"}}{{range $bindings}}{{.HostIp}}:{{.HostPort}}:{{$port}}{{println}}{{end}}{{end}}{{end}}' "$system_name")"
+      while IFS= read -r mapping; do
+        [[ "$mapping" == */tcp ]] || continue
+        mapping="${mapping%/tcp}"
+        validate_admin_publish "$mapping"
+        admin_publish+=("$mapping")
+      done <<<"$saved_admin_publish"
+    fi
+    admin_port_args=()
+    for mapping in "${admin_publish[@]}"; do admin_port_args+=(--publish "$mapping"); done
     run_quiet "Downloading AgentsInTheCloud services" docker pull "$system_image"
     if [ "$installed" -eq 1 ]; then
       run_quiet "Stopping AgentsInTheCloud services" docker stop --time 120 "$system_name"
@@ -580,7 +610,7 @@ case "$action" in
     fi
     stop_on_failure=1
     run_quiet "Starting AgentsInTheCloud services" docker run -d --name "$system_name" --hostname agents-in-the-cloud-system --privileged --cgroupns=host --restart unless-stopped \
-      --stop-timeout 120 --tmpfs /run --mount source=agents-in-the-cloud-system,target=/data --publish 127.0.0.1:3080:3080 \
+      --stop-timeout 120 --tmpfs /run --mount source=agents-in-the-cloud-system,target=/data --publish 127.0.0.1:3080:3080 "${admin_port_args[@]}" \
       "$system_image" --app-image "$app_image" --access-mode "${access_mode:-tailscale}"
     ;;
   connect)
