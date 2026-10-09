@@ -1,0 +1,39 @@
+/* Feedback triage page: layout only. Components and tokens come from the design system. */
+body { margin: 0; background: var(--bg); color: var(--text); font: var(--text-body)/var(--leading-standard) var(--font-sans); }
+.triage { max-width: 860px; margin: 0 auto; padding: 20px 16px 64px; display: flex; flex-direction: column; gap: 16px; }
+
+.reporter { display: flex; align-items: center; gap: 8px; color: var(--text-muted); }
+.reporter .avatar { width: 24px; height: 24px; border-radius: 50%; }
+.reporter .name { color: var(--text-bright); font-weight: var(--weight-semibold); }
+.reporter .source { color: var(--text-muted); }
+.reporter .copy-md { margin-inline-start: auto; }
+
+.goal { margin: 0; padding: 4px 0 4px 16px; border-inline-start: 3px solid var(--accent); }
+.goal-text { margin: 0; font-size: 20px; line-height: 1.35; color: var(--text-bright); letter-spacing: -.01em; }
+.proposal { margin: 8px 0 0; color: var(--text-muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 2px 10px; border-radius: var(--radius-round); background: var(--panel); border: 1px solid var(--line); font-size: 12px; color: var(--text); }
+
+.recommendation { padding: 12px 14px; border-radius: var(--radius-control); background: var(--panel); border: 1px solid var(--line); }
+.rec-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.rec-action { font-size: var(--text-title); font-weight: var(--weight-semibold); color: var(--text-bright); }
+.confidence { font-size: 12px; padding: 1px 8px; border-radius: var(--radius-round); }
+.confidence--high { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.confidence--medium { color: var(--warning, var(--accent)); background: color-mix(in srgb, var(--warning, var(--accent)) 14%, transparent); }
+.confidence--low { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.rec-why { margin-top: 6px; }
+.unverified { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); }
+
+.rows { display: flex; flex-direction: column; gap: 2px; }
+.rows .disclosure-content { padding-block: 8px 16px; display: flex; flex-direction: column; gap: 12px; }
+.rows .count { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.section-title { margin: 12px 0 0; font-size: 12px; font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+
+.prompts { display: flex; flex-wrap: wrap; gap: 8px; }
+.branch-link { margin: 0; font-size: 12px; }
+.triage a { color: var(--accent); text-decoration: none; }
+.triage a:hover { text-decoration: underline; }
+.triage .markdown img, .triage .markdown video { max-width: 100%; border-radius: var(--radius-control); border: 1px solid var(--line); }
+.triage .markdown-diff { width: 100%; }
+.table-scroll { overflow-x: auto; }

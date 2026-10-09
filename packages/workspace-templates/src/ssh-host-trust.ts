@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { invalidArguments, runCommand, shellQuote, writeFileAtomic } from "@agents-in-the-cloud/core";
 import { gitHubKnownHosts } from "./github-host-keys.ts";
-import { findWorkspaceTemplateRecord, workspaceTemplatesFile, readWorkspaceTemplateStore, updateWorkspaceTemplateStore } from "./workspace-template.ts";
+import { findConfigurationRecord, workspaceScopes, workspaceTemplatesFile, readWorkspaceTemplateStore, updateWorkspaceTemplateStore, type ConfigurationScope } from "./workspace-template.ts";
 
-export async function getWorkspaceTemplateSshKnownHosts(workspaceTemplateId: string, file = workspaceTemplatesFile()): Promise<string> {
-  return findWorkspaceTemplateRecord(await readWorkspaceTemplateStore(file), workspaceTemplateId).sshKnownHosts ?? "";
+export async function getWorkspaceTemplateSshKnownHosts(scope: ConfigurationScope, file = workspaceTemplatesFile()): Promise<string> {
+  return findConfigurationRecord(await readWorkspaceTemplateStore(file), scope).sshKnownHosts ?? "";
 }
 
 /** Additional trust is supplied explicitly, never learned from an unverified network scan. */
-export async function setWorkspaceTemplateSshKnownHosts(workspaceTemplateId: string, input: string, file = workspaceTemplatesFile()): Promise<string> {
+export async function setWorkspaceTemplateSshKnownHosts(scope: ConfigurationScope, input: string, file = workspaceTemplatesFile()): Promise<string> {
   const lines = input.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
   const directory = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-host-keys-"));
   try {
@@ -24,9 +24,9 @@ export async function setWorkspaceTemplateSshKnownHosts(workspaceTemplateId: str
     }
     const knownHosts = lines.length ? `${lines.join("\n")}\n` : "";
     return await updateWorkspaceTemplateStore(file, (store) => {
-      const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
-      if (knownHosts) workspaceTemplate.sshKnownHosts = knownHosts;
-      else delete workspaceTemplate.sshKnownHosts;
+      const configuration = findConfigurationRecord(store, scope);
+      if (knownHosts) configuration.sshKnownHosts = knownHosts;
+      else delete configuration.sshKnownHosts;
       return knownHosts;
     });
   } finally {
@@ -37,8 +37,8 @@ export async function setWorkspaceTemplateSshKnownHosts(workspaceTemplateId: str
 export async function prepareWorkspaceSshTrust(directory: string, workspaceTemplateId?: string): Promise<string> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, "known_hosts");
-  const workspaceTemplateHosts = workspaceTemplateId ? await getWorkspaceTemplateSshKnownHosts(workspaceTemplateId) : "";
-  await writeFileAtomic(path, `${gitHubKnownHosts}${workspaceTemplateHosts}`, { mode: 0o644 });
+  const configuredHosts = await Promise.all(workspaceScopes(workspaceTemplateId).map((scope) => getWorkspaceTemplateSshKnownHosts(scope)));
+  await writeFileAtomic(path, `${gitHubKnownHosts}${configuredHosts.join("")}`, { mode: 0o644 });
   return path;
 }
 

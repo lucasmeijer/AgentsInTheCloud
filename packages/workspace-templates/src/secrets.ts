@@ -3,7 +3,7 @@ import { workspaceTemplateSecretAllowsPath, secretPathInjectionDefaultHosts } fr
 import { randomUUID } from "node:crypto";
 import { AgentsInTheCloudCoreError } from "@agents-in-the-cloud/core";
 import { decryptWorkspaceTemplateValue, encryptWorkspaceTemplateValue } from "./secret-crypto.ts";
-import { findWorkspaceTemplateRecord, workspaceTemplateSecretSummary, workspaceTemplateSecretSummaries, workspaceTemplatesFile, readWorkspaceTemplateStore, updateWorkspaceTemplateStore, type WorkspaceTemplateRecord, type WorkspaceTemplateSecretSummary, type StoredWorkspaceTemplateSecret } from "./workspace-template.ts";
+import { configurationScopeKey, findConfigurationRecord, workspaceScopes, workspaceTemplateSecretSummary, workspaceTemplatesFile, readWorkspaceTemplateStore, updateWorkspaceTemplateStore, type ConfigurationRecord, type ConfigurationScope, type WorkspaceTemplateSecretSummary, type StoredWorkspaceTemplateSecret } from "./workspace-template.ts";
 
 export interface WorkspaceTemplateSecretPlaintext extends WorkspaceTemplateSecretSummary {
   secretValue: string;
@@ -34,49 +34,44 @@ function normalizePlaceholder(value: string | undefined): string | undefined {
   return value?.trim() || undefined;
 }
 
-function findWorkspaceTemplateSecret(workspaceTemplate: WorkspaceTemplateRecord, secretId: string): StoredWorkspaceTemplateSecret {
-  const secret = workspaceTemplate.secrets?.find((candidate) => candidate.id === secretId);
+function findWorkspaceTemplateSecret(configuration: ConfigurationRecord, secretId: string): StoredWorkspaceTemplateSecret {
+  const secret = configuration.secrets?.find((candidate) => candidate.id === secretId);
   if (!secret) throw new AgentsInTheCloudCoreError("workspace_template_secret_not_found", `template secret not found: ${secretId}`);
   return secret;
 }
 
-function assertEnvNameAvailable(workspaceTemplate: WorkspaceTemplateRecord, envName: string, exceptSecretId?: string): void {
-  if (workspaceTemplate.secrets?.some((secret) => secret.id !== exceptSecretId && secret.envName === envName)) throw new AgentsInTheCloudCoreError("workspace_template_secret_exists", "template secret already exists");
+function assertEnvNameAvailable(configuration: ConfigurationRecord, envName: string, exceptSecretId?: string): void {
+  if (configuration.secrets?.some((secret) => secret.id !== exceptSecretId && secret.envName === envName)) throw new AgentsInTheCloudCoreError("workspace_template_secret_exists", `A secret named ${envName} already exists here`);
 }
 
-export async function listWorkspaceTemplateSecrets(workspaceTemplateId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSecretSummary[]> {
-  const workspaceTemplate = findWorkspaceTemplateRecord(await readWorkspaceTemplateStore(file), workspaceTemplateId);
-  return workspaceTemplateSecretSummaries(workspaceTemplate);
-}
-
-export async function createWorkspaceTemplateSecret(workspaceTemplateId: string, values: WorkspaceTemplateSecretInput, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretSummary> {
+export async function createWorkspaceTemplateSecret(scope: ConfigurationScope, values: WorkspaceTemplateSecretInput, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretSummary> {
   const envName = normalizeEnvName(values.envName);
   const hostPattern = normalizeHostPattern(values.hostPattern);
   const placeholder = normalizePlaceholder(values.placeholder);
   const secretValue = values.secretValue;
   return await updateWorkspaceTemplateStore(file, async (store) => {
-    const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
-    workspaceTemplate.secrets ??= [];
-    assertEnvNameAvailable(workspaceTemplate, envName);
+    const configuration = findConfigurationRecord(store, scope);
+    configuration.secrets ??= [];
+    assertEnvNameAvailable(configuration, envName);
     const now = new Date().toISOString();
     const id = randomUUID();
-    const stored: StoredWorkspaceTemplateSecret = { id, projectId: workspaceTemplateId, envName, hostPattern, placeholder, allowInPath: workspaceTemplateSecretAllowsPath(values), annotation: values.annotation?.trim() ?? "", encryptedSecret: secretValue ? await encryptWorkspaceTemplateValue(workspaceTemplateId, id, secretValue, keyFile) : undefined, createdAt: now, updatedAt: now };
-    workspaceTemplate.secrets.push(stored);
+    const stored: StoredWorkspaceTemplateSecret = { id, projectId: configurationScopeKey(scope), envName, hostPattern, placeholder, allowInPath: workspaceTemplateSecretAllowsPath(values), annotation: values.annotation?.trim() ?? "", encryptedSecret: secretValue ? await encryptWorkspaceTemplateValue(configurationScopeKey(scope), id, secretValue, keyFile) : undefined, createdAt: now, updatedAt: now };
+    configuration.secrets.push(stored);
     return workspaceTemplateSecretSummary(stored);
   });
 }
 
-export async function updateWorkspaceTemplateSecret(workspaceTemplateId: string, secretId: string, values: WorkspaceTemplateSecretInput, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretSummary> {
+export async function updateWorkspaceTemplateSecret(scope: ConfigurationScope, secretId: string, values: WorkspaceTemplateSecretInput, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretSummary> {
   const envName = normalizeEnvName(values.envName);
   const hostPattern = normalizeHostPattern(values.hostPattern);
   return await updateWorkspaceTemplateStore(file, async (store) => {
-    const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
-    const secret = findWorkspaceTemplateSecret(workspaceTemplate, secretId);
+    const configuration = findConfigurationRecord(store, scope);
+    const secret = findWorkspaceTemplateSecret(configuration, secretId);
     // Changing where an existing value can be sent requires possession of that value.
     const nextPathPermission = values.allowInPath ?? workspaceTemplateSecretAllowsPath(secret);
     const routingChanged = envName !== secret.envName || hostPattern !== secret.hostPattern || nextPathPermission !== workspaceTemplateSecretAllowsPath(secret) || (values.placeholder !== undefined && normalizePlaceholder(values.placeholder) !== secret.placeholder);
     if (secret.encryptedSecret && routingChanged && !values.secretValue) throw new AgentsInTheCloudCoreError("workspace_template_secret_routing_changed", "Re-enter the secret value when changing its name, placeholder, host or path policy");
-    assertEnvNameAvailable(workspaceTemplate, envName, secretId);
+    assertEnvNameAvailable(configuration, envName, secretId);
     secret.envName = envName;
     secret.hostPattern = hostPattern;
     if (values.placeholder !== undefined) {
@@ -86,7 +81,7 @@ export async function updateWorkspaceTemplateSecret(workspaceTemplateId: string,
     }
     if (values.allowInPath !== undefined) secret.allowInPath = values.allowInPath;
     if (values.annotation !== undefined) secret.annotation = values.annotation.trim();
-    if (values.secretValue) secret.encryptedSecret = await encryptWorkspaceTemplateValue(workspaceTemplateId, secretId, values.secretValue, keyFile);
+    if (values.secretValue) secret.encryptedSecret = await encryptWorkspaceTemplateValue(configurationScopeKey(scope), secretId, values.secretValue, keyFile);
     secret.updatedAt = new Date().toISOString();
     return workspaceTemplateSecretSummary(secret);
   });
@@ -100,19 +95,24 @@ export const workspaceTemplateSecretPathPermissionSchema = Type.Boolean({
   description: `Allow secret substitution in URL paths. Defaults to true only when all hosts are exact matches in: ${secretPathInjectionDefaultHosts.join(", ")}. Otherwise false. Omit on updates to keep the saved permission.`,
 });
 
-export async function deleteWorkspaceTemplateSecret(workspaceTemplateId: string, secretId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSecretSummary> {
+export async function deleteWorkspaceTemplateSecret(scope: ConfigurationScope, secretId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSecretSummary> {
   return await updateWorkspaceTemplateStore(file, (store) => {
-    const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
-    const secret = findWorkspaceTemplateSecret(workspaceTemplate, secretId);
-    workspaceTemplate.secrets = workspaceTemplate.secrets!.filter((candidate) => candidate !== secret);
+    const configuration = findConfigurationRecord(store, scope);
+    const secret = findWorkspaceTemplateSecret(configuration, secretId);
+    configuration.secrets = configuration.secrets!.filter((candidate) => candidate !== secret);
     return workspaceTemplateSecretSummary(secret);
   });
 }
 
-export async function revealWorkspaceTemplateSecrets(workspaceTemplateId: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretPlaintext[]> {
-  const workspaceTemplate = findWorkspaceTemplateRecord(await readWorkspaceTemplateStore(file), workspaceTemplateId);
-  return await Promise.all((workspaceTemplate.secrets ?? []).filter((secret) => secret.encryptedSecret).map(async (secret) => {
-    const summary = workspaceTemplateSecretSummary(secret);
-    return { ...summary, secretValue: await decryptWorkspaceTemplateValue(summary.workspaceTemplateId, secret.id, secret.encryptedSecret!, keyFile) };
-  }));
+export async function revealWorkspaceTemplateSecrets(scope: ConfigurationScope, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretPlaintext[]> {
+  const configuration = findConfigurationRecord(await readWorkspaceTemplateStore(file), scope);
+  return await Promise.all((configuration.secrets ?? []).filter((secret) => secret.encryptedSecret).map(async (secret) => (
+    { ...workspaceTemplateSecretSummary(secret), secretValue: await decryptWorkspaceTemplateValue(secret.projectId, secret.id, secret.encryptedSecret!, keyFile) }
+  )));
+}
+
+/** Global secrets and the template's own, which replace global ones with the same name. */
+export async function revealEffectiveSecrets(workspaceTemplateId?: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretPlaintext[]> {
+  const secrets = (await Promise.all(workspaceScopes(workspaceTemplateId).map((scope) => revealWorkspaceTemplateSecrets(scope, file, keyFile)))).flat();
+  return [...new Map(secrets.map((secret) => [secret.envName, secret])).values()];
 }

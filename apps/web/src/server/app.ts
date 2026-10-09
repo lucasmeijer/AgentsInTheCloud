@@ -18,7 +18,7 @@ import { panelHtml } from "@agents-in-the-cloud/design-system/panel";
 import { Icons } from "@agents-in-the-cloud/design-system/icons";
 import { warningBannerHtml } from "@agents-in-the-cloud/design-system/warning-banner";
 import { parseModelRef, renderModelsDialog } from "@agents-in-the-cloud/llm/server";
-import { getWorkspaceTemplateConfiguration, isGitWorkspaceTemplateInit, workspaceTemplateIdFromInit, isSshAuthenticationFailure, listWorkspaceTemplates, sshHostTrustFailure, scanSshHost, trustScannedSshHost, workspaceSshTrustRequests, onWorkspaceSshTrustChanged, decideWorkspaceSshTrust, cancelWorkspaceSshTrust, workspaceInitFromTemplate, type WorkspaceTemplateConfiguration, type WorkspaceTemplateSummary } from "@agents-in-the-cloud/workspace-templates";
+import { getWorkspaceTemplateConfiguration, isGitWorkspaceTemplateInit, workspaceTemplateIdFromInit, workspaceTemplateIdOfInit, isSshAuthenticationFailure, listWorkspaceTemplates, sshHostTrustFailure, scanSshHost, trustScannedSshHost, workspaceSshTrustRequests, onWorkspaceSshTrustChanged, decideWorkspaceSshTrust, cancelWorkspaceSshTrust, workspaceInitFromTemplate, type WorkspaceTemplateConfiguration, type WorkspaceTemplateSummary } from "@agents-in-the-cloud/workspace-templates";
 import { validDraftId } from "@agents-in-the-cloud/prompt/server";
 import {
   domId,
@@ -505,7 +505,7 @@ export function createWebApp(deps: WebAppDeps): WebApp {
   }
 
   function workspaceBootResidentHtml(entry: WorkspaceEntry): string {
-    const workspaceTemplateId = isGitWorkspaceTemplateInit(entry.init) ? workspaceTemplateIdFromInit(entry.init) : undefined;
+    const workspaceTemplateId = workspaceTemplateIdOfInit(entry.init);
     const snapshot = provisioning.snapshot(entry.id);
     const failed = entry.phase.kind === "provisioningPhase" && entry.phase.status === "failed";
     // Waiting means a step failed and needs a recovery decision; done is not a failure.

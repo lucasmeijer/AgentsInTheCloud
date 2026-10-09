@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 const installer = await Bun.file(new URL("./install.sh", import.meta.url)).text();
 
-function run(options: { systemState?: "restarting" | "exited"; adminMappings?: string; nonRoot?: boolean; denySudo?: boolean; mac?: boolean; wsl?: boolean; installed?: boolean; old?: boolean; legacyAtelier?: boolean; legacyVolumeOnly?: boolean; legacyPreSystem?: boolean; legacyDownloadFails?: boolean; legacyDelegateFails?: boolean; pullFails?: boolean; appFails?: boolean; retryUpdateRequest?: boolean; rejectUpdateRequest?: boolean; pendingHealth?: boolean; missingFilesystem?: boolean; loadable?: boolean; uninstallAnswer?: string; uninstallFails?: boolean; uninstallRequestFails?: boolean; inventoryFails?: boolean; volumeOnly?: boolean; volumeRemovalFails?: boolean; initiallyStopped?: boolean } = {}, args: string[] = []) {
+function run(options: { systemState?: "restarting" | "exited"; adminMappings?: string; nonRoot?: boolean; denySudo?: boolean; mac?: boolean; wsl?: boolean; installed?: boolean; old?: boolean; legacyAtelier?: boolean; legacyVolumeOnly?: boolean; legacyPreSystem?: boolean; legacyDownloadFails?: boolean; legacyDelegateFails?: boolean; pullFails?: boolean; pullDenied?: boolean; appFails?: boolean; retryUpdateRequest?: boolean; rejectUpdateRequest?: boolean; pendingHealth?: boolean; missingFilesystem?: boolean; loadable?: boolean; uninstallAnswer?: string; uninstallFails?: boolean; uninstallRequestFails?: boolean; inventoryFails?: boolean; volumeOnly?: boolean; volumeRemovalFails?: boolean; initiallyStopped?: boolean } = {}, args: string[] = []) {
   const logPath = `/tmp/agents-in-the-cloud-install-test-${crypto.randomUUID()}.log`;
   const mock = `
 mktemp() { if [[ "$*" == *atelier-legacy-uninstall* ]]; then echo "${logPath}.legacy"; else echo "${logPath}"; fi; }
@@ -36,7 +36,9 @@ docker() {
         atelier-system) return ${options.legacyAtelier ? 0 : 1} ;;
         atelier) return ${options.legacyPreSystem ? 0 : 1} ;;
       esac ;;
-    'pull '*) return ${options.pullFails ? 1 : 0} ;;
+    'pull '*)
+      if [ "${options.pullDenied ? 1 : 0}" -eq 1 ]; then echo 'Error response from daemon: Head "https://ghcr.io/v2/lucasmeijer/agents-in-the-cloud-system/manifests/latest": denied: denied' >&2; return 1; fi
+      return ${options.pullFails ? 1 : 0} ;;
     'volume ls') if [[ "$*" == *'name=^atelier-system$'* ]]; then if [ "${options.legacyVolumeOnly ? 1 : 0}" -eq 1 ]; then echo atelier-system; fi; return 0; fi; if [ "$volume_present" -eq 1 ] && [ ! -e "${logPath}.volume-removed" ]; then echo agents-in-the-cloud-system; fi; return 0 ;;
     'volume rm')
       if [ "${options.volumeRemovalFails ? 1 : 0}" -eq 1 ]; then return 1; fi
@@ -132,6 +134,20 @@ test("failed pull leaves existing System untouched", () => {
   expect(result.output).not.toContain("DOCKER stop");
   expect(result.output).not.toContain("DOCKER rm");
   expect(result.output).not.toContain("DOCKER run");
+});
+
+test("pull rejected by a stale ghcr.io login explains how to clear it", () => {
+  const result = run({ pullDenied: true });
+  expect(result.status).not.toBe(0);
+  expect(result.output).toContain("GitHub turned down Docker's saved login for ghcr.io");
+  expect(result.output).toContain("Run: docker logout ghcr.io, then run this installer again.");
+  expect(result.output).not.toContain("DOCKER run");
+});
+
+test("other pull failures keep the generic message", () => {
+  const result = run({ pullFails: true });
+  expect(result.output).toContain("Downloading AgentsInTheCloud services failed. See the bootstrap log for details.");
+  expect(result.output).not.toContain("docker logout");
 });
 
 test("connect enables Tailscale on a running localhost installation without replacing or restarting System", () => {

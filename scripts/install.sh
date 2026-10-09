@@ -67,7 +67,8 @@ prompt() {
   printf '%s' "$2"
   IFS= read -r -t 120 "$1" <"$prompt_input" || fail "No response received within 2 minutes, or terminal input closed. Run the installer again when ready."
 }
-run_quiet() {
+# Runs a step with a progress line and returns its exit status.
+run_quiet_status() {
   local label="$1" pid start=$SECONDS code=0
   shift
   "$@" >>"$log_file" 2>&1 &
@@ -85,7 +86,10 @@ run_quiet() {
   done
   active_pid=""
   wait "$pid" || code=$?
-  [ "$code" -eq 0 ] || fail "$label failed. See the bootstrap log for details."
+  return "$code"
+}
+run_quiet() {
+  run_quiet_status "$@" || fail "$1 failed. See the bootstrap log for details."
 }
 cleanup() {
   local code=$?
@@ -205,6 +209,7 @@ case "$host_os" in
 esac
 
 root_required=0
+docker_via_sudo=0
 request_root() {
   if [ "$(id -u)" -ne 0 ] && [ "$root_required" -eq 0 ]; then
     command -v sudo >/dev/null || fail "sudo is required for Linux host setup; install sudo or run as root"
@@ -240,6 +245,7 @@ if [ "$host_os" = Linux ] && [ "$(id -u)" -ne 0 ] && ! docker info >>"$log_file"
   request_root
   docker_binary="$(command -v docker)"
   docker() { sudo "$docker_binary" "$@"; }
+  docker_via_sudo=1
 fi
 run_quiet "Checking Docker" docker info
 
@@ -620,7 +626,17 @@ case "$action" in
     fi
     admin_port_args=()
     for mapping in "${admin_publish[@]}"; do admin_port_args+=(--publish "$mapping"); done
-    run_quiet "Downloading AgentsInTheCloud services" docker pull "$system_image"
+    pull_log_start="$(($(wc -l <"$log_file") + 1))"
+    if ! run_quiet_status "Downloading AgentsInTheCloud services" docker pull "$system_image"; then
+      # GHCR rejects a stale saved login even for public images, instead of falling back to anonymous access.
+      if [[ "$system_image" == ghcr.io/* ]] && [[ "$(tail -n "+$pull_log_start" "$log_file")" == *denied* ]]; then
+        docker_logout="docker logout ghcr.io"
+        # When Docker runs through sudo on Linux, the rejected login belongs to root.
+        if [ "$host_os" = Linux ] && { [ "$docker_via_sudo" -eq 1 ] || [ -n "${SUDO_USER:-}" ]; }; then docker_logout="sudo $docker_logout"; fi
+        fail "GitHub turned down Docker's saved login for ghcr.io, so the download stopped. AgentsInTheCloud images are public and don't need it. Run: $docker_logout, then run this installer again."
+      fi
+      fail "Downloading AgentsInTheCloud services failed. See the bootstrap log for details."
+    fi
     if [ "$installed" -eq 1 ]; then
       run_quiet "Stopping AgentsInTheCloud services" docker stop --time 120 "$system_name"
       run_quiet "Replacing AgentsInTheCloud services" docker rm "$system_name"

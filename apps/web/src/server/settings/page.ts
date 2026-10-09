@@ -18,6 +18,7 @@ import { workspaceModules } from "../workspace-modules.generated.ts";
 import { remove, replace, response, stream, update, wantsStream } from "@agents-in-the-cloud/shared/http";
 import { listSettingsContributions, registerSettingsContribution } from "./registry.ts";
 import { renderThemeSettings } from "./theme.ts";
+import { globalWorkspaceSettingsSectionId, renderGlobalWorkspaceSettings } from "../template-settings.ts";
 
 function forceDeleteWorkspacesEnabled(): boolean {
   return process.env.NODE_ENV !== "production";
@@ -87,6 +88,7 @@ async function renderDeveloperTools(): Promise<string> {
 
 registerSettingsContribution({ id: "access", label: "Connection mode", order: 15, render: renderConnectionModeSettings });
 registerSettingsContribution({ id: "theme", label: "Theme", order: 10, render: renderThemeSettings });
+registerSettingsContribution({ id: globalWorkspaceSettingsSectionId, label: "Global workspace settings", order: 25, render: renderGlobalWorkspaceSettings });
 registerSettingsContribution({ id: "commit-identity", label: "Commit identity", order: 20, render: renderCommitIdentitySettings });
 for (const module of workspaceModules) {
   for (const contribution of module.settingsContributions ?? []) registerSettingsContribution(contribution);
@@ -94,7 +96,7 @@ for (const module of workspaceModules) {
 
 export const appSettingsFrameId = "app_settings_frame";
 
-const disclosureSections = new Set(["models", "host", "developer-tools"]);
+const disclosureSections = new Set(["models", globalWorkspaceSettingsSectionId, "host", "developer-tools"]);
 const sectionFrameId = (id: string) => `app_settings_section_${id}`;
 
 async function renderSettingsSectionFrame(id: string): Promise<string> {
@@ -128,7 +130,7 @@ export async function renderSettingsFrame(request: Request, sectionId?: string):
     ${take("theme", "dictation", "commit-identity", "github", "update-channel", "update", "access")}
     ${connectionModeManaged() ? "" : `<section class="settings-sec settings-sec-url" id="settings-sec-url"><h2>AgentsInTheCloud URL</h2>${agentsInTheCloudUrlHtml(agentsInTheCloudUrl(request), "settings_agents_in_the_cloud_url_qr")}</section>`}
     ${take(...inline.keys())}
-    <div class="app-settings-disclosures">${disclosure("models", "Models")}${disclosure("host", "Host")}${disclosure("developer-tools", "Developer tools")}</div>
+    <div class="app-settings-disclosures">${disclosure("models", "Models")}${disclosure(globalWorkspaceSettingsSectionId, "Global workspace settings that apply to all new workspaces")}${disclosure("host", "Host")}${disclosure("developer-tools", "Developer tools")}</div>
   </div>`;
   const header = `<h1 class="panel__title" tabindex="-1" data-app-settings-heading>${Icons.Settings}<span>Settings</span></h1>${buttonHtml({ type: "button", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.Close, label: "Close settings" }, attributesHtml: 'data-action="app-settings#close"' })}`;
   return `<turbo-frame id="${appSettingsFrameId}" data-app-settings-target="frame">${panelHtml({ element: { tag: "section", attributesHtml: 'aria-label="Settings"' }, headerHtml: header, bodyHtml: `<div class="template-settings-content app-settings-content"${sectionId ? ` data-app-settings-anchor="settings-sec-${escapeHtml(sectionId)}"` : ""} data-app-settings-location="/settings${sectionId ? `?section=${encodeURIComponent(sectionId)}` : ""}">${content}</div>`, bodyLayout: "full-bleed", bodyOverflow: "scroll" })}</turbo-frame>`;

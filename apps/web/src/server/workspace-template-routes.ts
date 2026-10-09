@@ -1,4 +1,4 @@
-import { renderTemplateSettings, renderTemplateSettingsFrame, templateSettingsErrorHtml, templateSettingsFrameId, templateSettingsHostId, templateSettingsUrl, type TemplateSettingsLocation, type TemplateSettingsSection, type TemplateSettingsReference } from "./template-settings.ts";
+import { globalWorkspaceSettingsErrorId, globalWorkspaceSettingsFrameId, globalWorkspaceSettingsPath, globalWorkspaceSettingsUrl, renderGlobalWorkspaceSettingsFrame, renderTemplateSettings, renderTemplateSettingsFrame, templateSettingsErrorHtml, templateSettingsErrorId, templateSettingsFrameId, templateSettingsHostId, templateSettingsUrl, type TemplateSettingsLocation, type TemplateSettingsSection, type TemplateSettingsReference } from "./template-settings.ts";
 import { AgentsInTheCloudCoreError, invalidArguments, readJsonObject, requestAcceptsJson, type JsonObject } from "@agents-in-the-cloud/core";
 import { buttonHtml } from "@agents-in-the-cloud/design-system/button";
 import { dialogHtml } from "@agents-in-the-cloud/design-system/dialog";
@@ -8,14 +8,14 @@ import {
   createWorkspaceTemplateSecret,
   createWorkspaceTemplateSshKey,
   deleteWorkspaceTemplate, deleteWorkspaceTemplateEnvironmentVariable, deleteWorkspaceTemplateSecret, deleteWorkspaceTemplateSshKey, deriveWorkspaceTemplateSshPublicKey,
-  getWorkspaceTemplateConfiguration, getWorkspaceTemplateSshKnownHosts,
+  getConfiguration, getWorkspaceTemplateConfiguration, getWorkspaceTemplateSshKnownHosts, globalWorkspaceConfiguration, isGlobalScope,
   listWorkspaceTemplates, parseWorkspaceTemplateSpec, renameWorkspaceTemplateSshKey,
   workspaceTemplateSecretPathPermissionSchema,
   setWorkspaceTemplateDockerfile, setWorkspaceTemplatePreloadImages, setWorkspaceTemplatePrivileged, setWorkspaceTemplateSeedConfigEnabled,
   setWorkspaceTemplateSshKnownHosts,
   updateWorkspaceTemplate,
   updateWorkspaceTemplateEnvironmentVariable, updateWorkspaceTemplateSecret,
-  type WorkspaceTemplateEnvironmentVariable, type WorkspaceTemplateSecretInput, type WorkspaceTemplateSecretSummary, type WorkspaceTemplateSshKeySummary, type WorkspaceTemplateSummary,
+  type ConfigurationScope, type WorkspaceTemplateEnvironmentVariable, type WorkspaceTemplateSecretInput, type WorkspaceTemplateSecretSummary, type WorkspaceTemplateSshKeySummary, type WorkspaceTemplateSummary,
 } from "@agents-in-the-cloud/workspace-templates";
 import { shouldSearchGitHubRepositories, turboStreamResponse } from "@agents-in-the-cloud/shared";
 import { Type } from "typebox";
@@ -132,23 +132,45 @@ export function createWorkspaceTemplateRoutes(deps: {
     return workspaceTemplateSettingsResponse(request, { workspaceTemplate });
   }
 
-  type WorkspaceTemplateSettingsResult = { knownHosts: string } | { workspaceTemplate: WorkspaceTemplateSummary } | { secret: WorkspaceTemplateSecretSummary; deleted?: true } | { environmentVariable: WorkspaceTemplateEnvironmentVariable; deleted?: true } | { key: WorkspaceTemplateSshKeySummary };
-
   /** Refresh workspace warnings except for the future-only image preload list. */
-  async function workspaceTemplateSettingsResponse(request: Request, result: WorkspaceTemplateSettingsResult): Promise<Response> {
+  async function workspaceTemplateSettingsResponse(request: Request, result: { workspaceTemplate: WorkspaceTemplateSummary }): Promise<Response> {
     const url = new URL(request.url);
     const concern = url.pathname.split("/")[3];
     if (concern !== "preload-images") deps.invalidatePresentation();
     if (requestAcceptsJson(request)) return jsonResponse(result);
     const workspaceTemplateId = decodeURIComponent(url.pathname.split("/")[2]!);
-    const section: TemplateSettingsSection = concern === "seed-config" ? "developer" : concern === "secrets" ? "secrets" : concern === "environment" ? "environment" : concern === "ssh-keys" || concern === "ssh-known-hosts" ? "ssh" : concern === "privileged" || concern === "dockerfile" || concern === "preload-images" ? "container" : "general";
+    const section: TemplateSettingsSection = concern === "seed-config" ? "developer" : concern === "privileged" || concern === "dockerfile" || concern === "preload-images" ? "container" : "general";
+    const record = concern === "privileged" ? "docker" : concern === "preload-images" ? "images" : concern === "dockerfile" ? "dockerfile" : undefined;
+    return await settingsPageResponse(request, workspaceTemplateId, section, record, false);
+  }
+
+  type ConfigurationResult = { secret: WorkspaceTemplateSecretSummary; deleted?: true } | { environmentVariable: WorkspaceTemplateEnvironmentVariable; deleted?: true } | { key: WorkspaceTemplateSshKeySummary } | { knownHosts: string };
+
+  /**
+   * Secrets, SSH keys and Environment variables re-render whichever settings page edited them.
+   * Save/create remains in the record's editor; deletion returns to the list because that editor no longer exists.
+   */
+  async function configurationSettingsResponse(request: Request, scope: ConfigurationScope, name: "secrets" | "ssh" | "environment", record: string, result: ConfigurationResult): Promise<Response> {
+    deps.invalidatePresentation();
+    if (requestAcceptsJson(request)) return jsonResponse(result);
+    const url = new URL(request.url);
     const deleted = url.pathname.endsWith("/delete");
-    const record = concern === "privileged" ? "docker" : concern === "preload-images" ? "images" : concern === "dockerfile" ? "dockerfile" : concern === "ssh-known-hosts" ? "known-hosts" : "secret" in result ? result.secret.id : "environmentVariable" in result ? result.environmentVariable.id : "key" in result ? result.key.id : undefined;
-    // Save/create remains in the editor, using the persisted record ID and fresh credential fields.
-    // Deletion returns to the list because that editor no longer exists.
-    const location: TemplateSettingsLocation = { section, editor: deleted ? undefined : record };
-    if (!wantsStream(request)) return Response.redirect(new URL(templateSettingsUrl(workspaceTemplateId, section, location.editor), request.url).toString(), 303);
-    const frame = await renderTemplateSettingsFrame(workspaceTemplateId, location, deps.referencingWorkspaces(workspaceTemplateId), !deleted, url.pathname);
+    const section: TemplateSettingsSection = isGlobalScope(scope) ? `global-${name}` : name;
+    const editor = deleted ? undefined : record;
+    const workspaceTemplateId = editedTemplateId(scope, url);
+    if (workspaceTemplateId) return await settingsPageResponse(request, workspaceTemplateId, section, editor, deleted);
+    if (!wantsStream(request)) return Response.redirect(new URL(globalWorkspaceSettingsUrl, request.url).toString(), 303);
+    return turboStreamResponse(replace(globalWorkspaceSettingsFrameId, await renderGlobalWorkspaceSettingsFrame({ section, editor }, !deleted, url.pathname)));
+  }
+
+  /** The template whose settings page made the change; global settings edited from Settings have none. */
+  function editedTemplateId(scope: ConfigurationScope, url: URL): string | undefined {
+    return isGlobalScope(scope) ? url.searchParams.get("workspaceTemplate") ?? undefined : scope;
+  }
+
+  async function settingsPageResponse(request: Request, workspaceTemplateId: string, section: TemplateSettingsSection, editor: string | undefined, deleted: boolean): Promise<Response> {
+    if (!wantsStream(request)) return Response.redirect(new URL(templateSettingsUrl(workspaceTemplateId, section, editor), request.url).toString(), 303);
+    const frame = await renderTemplateSettingsFrame(workspaceTemplateId, { section, editor }, deps.referencingWorkspaces(workspaceTemplateId), !deleted, new URL(request.url).pathname);
     return turboStreamResponse(replace(templateSettingsFrameId, frame));
   }
 
@@ -201,20 +223,20 @@ export function createWorkspaceTemplateRoutes(deps: {
     return { name: requiredJsonString(body, "name"), value: jsonString(body, "value") };
   }
 
-  async function createWorkspaceTemplateEnvironmentVariableEndpoint(workspaceTemplateId: string, request: Request): Promise<Response> {
-    const environmentVariable = await createWorkspaceTemplateEnvironmentVariable(workspaceTemplateId, await workspaceTemplateEnvironmentVariableValues(request));
-    return workspaceTemplateSettingsResponse(request, { environmentVariable });
+  async function createEnvironmentVariableEndpoint(scope: ConfigurationScope, request: Request): Promise<Response> {
+    const environmentVariable = await createWorkspaceTemplateEnvironmentVariable(scope, await workspaceTemplateEnvironmentVariableValues(request));
+    return configurationSettingsResponse(request, scope, "environment", environmentVariable.id, { environmentVariable });
   }
 
-  async function updateWorkspaceTemplateEnvironmentVariableEndpoint(workspaceTemplateId: string, variableId: string, request: Request): Promise<Response> {
-    const environmentVariable = await updateWorkspaceTemplateEnvironmentVariable(workspaceTemplateId, variableId, await workspaceTemplateEnvironmentVariableValues(request));
-    return workspaceTemplateSettingsResponse(request, { environmentVariable });
+  async function updateEnvironmentVariableEndpoint(scope: ConfigurationScope, variableId: string, request: Request): Promise<Response> {
+    const environmentVariable = await updateWorkspaceTemplateEnvironmentVariable(scope, variableId, await workspaceTemplateEnvironmentVariableValues(request));
+    return configurationSettingsResponse(request, scope, "environment", environmentVariable.id, { environmentVariable });
   }
 
-  async function deleteWorkspaceTemplateEnvironmentVariableEndpoint(workspaceTemplateId: string, variableId: string, request: Request): Promise<Response> {
+  async function deleteEnvironmentVariableEndpoint(scope: ConfigurationScope, variableId: string, request: Request): Promise<Response> {
     if (requestAcceptsJson(request)) await readJsonObject(request);
-    const environmentVariable = await deleteWorkspaceTemplateEnvironmentVariable(workspaceTemplateId, variableId);
-    return workspaceTemplateSettingsResponse(request, { deleted: true, environmentVariable });
+    const environmentVariable = await deleteWorkspaceTemplateEnvironmentVariable(scope, variableId);
+    return configurationSettingsResponse(request, scope, "environment", environmentVariable.id, { deleted: true, environmentVariable });
   }
 
   async function workspaceTemplateSecretValues(request: Request): Promise<WorkspaceTemplateSecretInput> {
@@ -244,47 +266,79 @@ export function createWorkspaceTemplateRoutes(deps: {
     };
   }
 
-  async function createWorkspaceTemplateSecretEndpoint(workspaceTemplateId: string, request: Request): Promise<Response> {
-    const values = await workspaceTemplateSecretValues(request);
-    const secret = await createWorkspaceTemplateSecret(workspaceTemplateId, values);
-    return workspaceTemplateSettingsResponse(request, { secret });
+  async function createSecretEndpoint(scope: ConfigurationScope, request: Request): Promise<Response> {
+    const secret = await createWorkspaceTemplateSecret(scope, await workspaceTemplateSecretValues(request));
+    return configurationSettingsResponse(request, scope, "secrets", secret.id, { secret });
   }
 
-  async function updateWorkspaceTemplateSecretEndpoint(workspaceTemplateId: string, secretId: string, request: Request): Promise<Response> {
-    const secret = await updateWorkspaceTemplateSecret(workspaceTemplateId, secretId, await workspaceTemplateSecretValues(request));
-    return workspaceTemplateSettingsResponse(request, { secret });
+  async function updateSecretEndpoint(scope: ConfigurationScope, secretId: string, request: Request): Promise<Response> {
+    const secret = await updateWorkspaceTemplateSecret(scope, secretId, await workspaceTemplateSecretValues(request));
+    return configurationSettingsResponse(request, scope, "secrets", secret.id, { secret });
   }
 
-  async function deleteWorkspaceTemplateSecretEndpoint(workspaceTemplateId: string, secretId: string, request: Request): Promise<Response> {
+  async function deleteSecretEndpoint(scope: ConfigurationScope, secretId: string, request: Request): Promise<Response> {
     if (requestAcceptsJson(request)) await readJsonObject(request);
-    const secret = await deleteWorkspaceTemplateSecret(workspaceTemplateId, secretId);
-    return workspaceTemplateSettingsResponse(request, { deleted: true, secret });
+    const secret = await deleteWorkspaceTemplateSecret(scope, secretId);
+    return configurationSettingsResponse(request, scope, "secrets", secret.id, { deleted: true, secret });
   }
 
-  async function updateWorkspaceTemplateSshKnownHostsEndpoint(workspaceTemplateId: string, request: Request): Promise<Response> {
+  async function updateSshKnownHostsEndpoint(scope: ConfigurationScope, request: Request): Promise<Response> {
     const input = requestAcceptsJson(request) ? jsonString(await readJsonObject(request), "knownHosts") : String((await request.formData()).get("knownHosts") ?? "");
-    const knownHosts = await setWorkspaceTemplateSshKnownHosts(workspaceTemplateId, input);
-    return workspaceTemplateSettingsResponse(request, { knownHosts });
+    const knownHosts = await setWorkspaceTemplateSshKnownHosts(scope, input);
+    return configurationSettingsResponse(request, scope, "ssh", "known-hosts", { knownHosts });
   }
 
-  async function createWorkspaceTemplateSshKeyFromForm(workspaceTemplateId: string, request: Request): Promise<Response> {
+  async function createSshKeyFromForm(scope: ConfigurationScope, request: Request): Promise<Response> {
     const input = requestAcceptsJson(request) ? await readJsonObject(request) : undefined;
     const formData = input ? undefined : await request.formData();
     const privateKey = input ? requiredJsonString(input, "privateKey") : String(formData!.get("privateKey") ?? "");
     const name = input ? optionalJsonString(input, "name") ?? "" : String(formData!.get("name") ?? "");
-    const key = await createWorkspaceTemplateSshKey(workspaceTemplateId, privateKey, undefined, undefined, name);
-    return workspaceTemplateSettingsResponse(request, { key });
+    const key = await createWorkspaceTemplateSshKey(scope, privateKey, undefined, undefined, name);
+    return configurationSettingsResponse(request, scope, "ssh", key.id, { key });
   }
 
-  async function renameWorkspaceTemplateSshKeyEndpoint(workspaceTemplateId: string, keyId: string, request: Request): Promise<Response> {
+  async function renameSshKeyEndpoint(scope: ConfigurationScope, keyId: string, request: Request): Promise<Response> {
     const name = requestAcceptsJson(request) ? jsonString(await readJsonObject(request), "name") : String((await request.formData()).get("name") ?? "");
-    const key = await renameWorkspaceTemplateSshKey(workspaceTemplateId, keyId, name);
-    return workspaceTemplateSettingsResponse(request, { key });
+    const key = await renameWorkspaceTemplateSshKey(scope, keyId, name);
+    return configurationSettingsResponse(request, scope, "ssh", key.id, { key });
   }
 
-  async function deleteWorkspaceTemplateSshKeyFromForm(workspaceTemplateId: string, keyId: string, request: Request): Promise<Response> {
-    const key = await deleteWorkspaceTemplateSshKey(workspaceTemplateId, keyId);
-    return workspaceTemplateSettingsResponse(request, { key });
+  async function deleteSshKeyFromForm(scope: ConfigurationScope, keyId: string, request: Request): Promise<Response> {
+    const key = await deleteWorkspaceTemplateSshKey(scope, keyId);
+    return configurationSettingsResponse(request, scope, "ssh", key.id, { key });
+  }
+
+  /** Secrets, SSH keys and Environment variables for a template or for all workspaces share one set of endpoints. */
+  async function handleConfigurationRoute(request: Request, url: URL): Promise<Response | undefined> {
+    const match = url.pathname.match(/^\/(?:workspace-templates\/([^/]+)|global-workspace-settings)\/(secrets|environment|ssh-keys|ssh-known-hosts)(?:\/([^/]+))?(?:\/(delete|public-key))?$/);
+    if (!match) return undefined;
+    const [, workspaceTemplateId, concern, recordId, action] = match;
+    const scope: ConfigurationScope = workspaceTemplateId === undefined ? globalWorkspaceConfiguration : decodeURIComponent(workspaceTemplateId);
+    const record = recordId === undefined ? undefined : decodeURIComponent(recordId);
+    const post = request.method === "POST";
+    switch (concern) {
+      case "secrets":
+        if (post && !record) return await createSecretEndpoint(scope, request);
+        if (post && record && !action) return await updateSecretEndpoint(scope, record, request);
+        if (post && record && action === "delete") return await deleteSecretEndpoint(scope, record, request);
+        return undefined;
+      case "environment":
+        if (post && !record) return await createEnvironmentVariableEndpoint(scope, request);
+        if (post && record && !action) return await updateEnvironmentVariableEndpoint(scope, record, request);
+        if (post && record && action === "delete") return await deleteEnvironmentVariableEndpoint(scope, record, request);
+        return undefined;
+      case "ssh-keys":
+        if (post && !record) return await createSshKeyFromForm(scope, request);
+        if (request.method === "GET" && record && action === "public-key") return textResponse(await deriveWorkspaceTemplateSshPublicKey(scope, record));
+        if (post && record && !action) return await renameSshKeyEndpoint(scope, record, request);
+        if (post && record && action === "delete") return await deleteSshKeyFromForm(scope, record, request);
+        return undefined;
+      case "ssh-known-hosts":
+        if (record) return undefined;
+        if (request.method === "GET" && requestAcceptsJson(request)) return jsonResponse({ knownHosts: await getWorkspaceTemplateSshKnownHosts(scope) });
+        if (post) return await updateSshKnownHostsEndpoint(scope, request);
+    }
+    return undefined;
   }
 
   async function deleteWorkspaceTemplateEndpoint(workspaceTemplateId: string, request: Request): Promise<Response> {
@@ -298,7 +352,7 @@ export function createWorkspaceTemplateRoutes(deps: {
         blocked: true,
         references,
       });
-      return turboStreamResponse(update("template_settings_error", templateSettingsErrorHtml(`Delete ${references.length} workspaces first. This template is still in use.`)), { status: 422 });
+      return turboStreamResponse(update(templateSettingsErrorId, templateSettingsErrorHtml(`Delete ${references.length} workspaces first. This template is still in use.`)), { status: 422 });
     }
     await deleteWorkspaceTemplate(workspaceTemplateId);
     deps.invalidatePresentation();
@@ -331,6 +385,9 @@ export function createWorkspaceTemplateRoutes(deps: {
     if (url.pathname === "/workspace-templates" && request.method === "GET" && requestAcceptsJson(request)) return jsonResponse(await listWorkspaceTemplates());
     if (url.pathname === "/workspace-templates" && request.method === "POST") return await createWorkspaceTemplateEndpoint(request, url);
     if (url.pathname === "/workspace-templates/github-search" && request.method === "GET") return await githubRepositorySearchEndpoint(url);
+    if (url.pathname === globalWorkspaceSettingsPath && request.method === "GET" && requestAcceptsJson(request)) return jsonResponse({ globalWorkspaceSettings: await getConfiguration(globalWorkspaceConfiguration) });
+    const configurationResponse = await handleConfigurationRoute(request, url);
+    if (configurationResponse) return configurationResponse;
 
     let params: string[] | undefined;
     if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/privileged$/)) && request.method === "POST") return await updateWorkspaceTemplatePrivilegeEndpoint(params[0]!, request);
@@ -339,21 +396,6 @@ export function createWorkspaceTemplateRoutes(deps: {
     if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/preload-images$/)) && request.method === "POST") return await updateWorkspaceTemplatePreloadImagesEndpoint(params[0]!, request);
     if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)$/)) && request.method === "GET" && requestAcceptsJson(request)) return await workspaceTemplateDetailEndpoint(params[0]!);
     if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)$/)) && request.method === "POST") return await updateWorkspaceTemplateEndpoint(params[0]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/environment$/)) && request.method === "POST") return await createWorkspaceTemplateEnvironmentVariableEndpoint(params[0]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/environment\/([^/]+)$/)) && request.method === "POST") return await updateWorkspaceTemplateEnvironmentVariableEndpoint(params[0]!, params[1]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/environment\/([^/]+)\/delete$/)) && request.method === "POST") return await deleteWorkspaceTemplateEnvironmentVariableEndpoint(params[0]!, params[1]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/secrets$/)) && request.method === "POST") return await createWorkspaceTemplateSecretEndpoint(params[0]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/secrets\/([^/]+)$/)) && request.method === "POST") return await updateWorkspaceTemplateSecretEndpoint(params[0]!, params[1]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/secrets\/([^/]+)\/delete$/)) && request.method === "POST") return await deleteWorkspaceTemplateSecretEndpoint(params[0]!, params[1]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/ssh-known-hosts$/))) {
-      const workspaceTemplateId = params[0]!;
-      if (request.method === "GET" && requestAcceptsJson(request)) return jsonResponse({ knownHosts: await getWorkspaceTemplateSshKnownHosts(workspaceTemplateId) });
-      if (request.method === "POST") return updateWorkspaceTemplateSshKnownHostsEndpoint(workspaceTemplateId, request);
-    }
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/ssh-keys$/)) && request.method === "POST") return await createWorkspaceTemplateSshKeyFromForm(params[0]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/ssh-keys\/([^/]+)\/public-key$/)) && request.method === "GET") return textResponse(await deriveWorkspaceTemplateSshPublicKey(params[0]!, params[1]!));
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/ssh-keys\/([^/]+)$/)) && request.method === "POST") return await renameWorkspaceTemplateSshKeyEndpoint(params[0]!, params[1]!, request);
-    if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/ssh-keys\/([^/]+)\/delete$/)) && request.method === "POST") return await deleteWorkspaceTemplateSshKeyFromForm(params[0]!, params[1]!, request);
     if ((params = matchRoute(url, /^\/workspace-templates\/([^/]+)\/delete$/)) && request.method === "POST") return await deleteWorkspaceTemplateEndpoint(params[0]!, request);
     if ((params = matchRoute(url, /^\/workspace-template-agent-workspaces\/([^/]+)$/)) && request.method === "POST") return await deps.createAgentWorkspace(await workspaceTemplateById(params[0]!), request);
     return undefined;
@@ -363,8 +405,9 @@ export function createWorkspaceTemplateRoutes(deps: {
     try {
       return await handleRoute(request, url);
     } catch (error) {
-      if (!requestAcceptsJson(request) && request.method === "POST" && url.pathname.startsWith("/workspace-templates/") && error instanceof AgentsInTheCloudCoreError && ["invalid_arguments", "invalid_ssh_private_key", "workspace_template_secret_exists", "workspace_template_secret_routing_changed", "workspace_template_environment_variable_exists", "workspace_template_exists", "workspace_template_secret_not_found", "workspace_template_environment_variable_not_found", "workspace_template_ssh_key_not_found"].includes(error.code)) {
-        return turboStreamResponse(update("template_settings_error", templateSettingsErrorHtml(error.code === "invalid_ssh_private_key" ? "This key couldn’t be read. Paste an unencrypted OpenSSH private key and try again." : error.message)), { status: 422 });
+      if (!requestAcceptsJson(request) && request.method === "POST" && (url.pathname.startsWith("/workspace-templates/") || url.pathname.startsWith(`${globalWorkspaceSettingsPath}/`)) && error instanceof AgentsInTheCloudCoreError && ["invalid_arguments", "invalid_ssh_private_key", "workspace_template_secret_exists", "workspace_template_secret_routing_changed", "workspace_template_environment_variable_exists", "workspace_template_exists", "workspace_template_secret_not_found", "workspace_template_environment_variable_not_found", "workspace_template_ssh_key_not_found"].includes(error.code)) {
+        const errorId = url.pathname.startsWith(`${globalWorkspaceSettingsPath}/`) && !editedTemplateId(globalWorkspaceConfiguration, url) ? globalWorkspaceSettingsErrorId : templateSettingsErrorId;
+        return turboStreamResponse(update(errorId, templateSettingsErrorHtml(error.code === "invalid_ssh_private_key" ? "This key couldn’t be read. Paste an unencrypted OpenSSH private key and try again." : error.message)), { status: 422 });
       }
       throw error;
     }

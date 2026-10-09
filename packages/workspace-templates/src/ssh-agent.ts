@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { agentsInTheCloudDataPath, dockerHostAgentsInTheCloudDataPath, getAgentsInTheCloudRuntimeContext, type AgentsInTheCloudEventBus } from "@agents-in-the-cloud/core";
 import { listWorkspaces } from "@agents-in-the-cloud/workspace";
-import { isGitWorkspaceTemplateInit, workspaceTemplateIdFromInit } from "./workspace-template.ts";
-import { revealWorkspaceTemplateSshKeys } from "./ssh-keys.ts";
+import { workspaceTemplateIdOfInit } from "./workspace-template.ts";
+import { revealEffectiveSshKeys } from "./ssh-keys.ts";
 import { prepareWorkspaceSshTrust, workspaceGitSshCommand } from "./ssh-host-trust.ts";
 import { SharedSshAgent } from "./shared-ssh-agent.ts";
 
@@ -23,7 +23,7 @@ function sshEnvironment(directory: string) {
 
 export async function workspaceSourceSshEnvironment(workspaceId: string, workspaceTemplateId?: string): Promise<Record<string, string>> {
   // One module owns the signing backend for the lifetime of AgentsInTheCloud, not a workspace.
-  shared ??= new SharedSshAgent(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "ssh-signer"), async (id) => id ? revealWorkspaceTemplateSshKeys(id) : []);
+  shared ??= new SharedSshAgent(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "ssh-signer"), async (id) => revealEffectiveSshKeys(id));
   const directory = agentDir(workspaceId);
   await shared.listen(join(directory, "agent.sock"), workspaceTemplateId);
   await prepareWorkspaceSshTrust(directory, workspaceTemplateId);
@@ -45,7 +45,7 @@ export async function stopWorkspaceTemplateSshAgents(): Promise<void> {
 
 export function registerWorkspaceTemplateSshAgentWorkspaceEvents(events: AgentsInTheCloudEventBus): void {
   events.on("workspace_plan_prepare", async ({ workspaceId, init, plan }) => {
-    await workspaceSourceSshEnvironment(workspaceId, isGitWorkspaceTemplateInit(init) ? workspaceTemplateIdFromInit(init) : undefined);
+    await workspaceSourceSshEnvironment(workspaceId, workspaceTemplateIdOfInit(init));
     Object.assign(plan.env, sshEnvironment(containerAgentDir));
     const directory = agentDir(workspaceId);
     const command = `#!/bin/sh
@@ -70,6 +70,6 @@ printf '%s\\n' "$keys" | curl --noproxy '*' --fail --silent --show-error --max-t
 
 export async function restoreWorkspaceTemplateSshAgents(): Promise<void> {
   for (const workspace of (await listWorkspaces()).workspaces) {
-    await workspaceSourceSshEnvironment(workspace.id, isGitWorkspaceTemplateInit(workspace.init) ? workspaceTemplateIdFromInit(workspace.init) : undefined);
+    await workspaceSourceSshEnvironment(workspace.id, workspaceTemplateIdOfInit(workspace.init));
   }
 }

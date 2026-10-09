@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addWorkspaceTemplate, createWorkspaceTemplateSecret, createWorkspaceTemplateSshKey, listWorkspaceTemplates, listWorkspaceTemplateSecrets, revealWorkspaceTemplateSecrets, revealWorkspaceTemplateSshKeys } from "@agents-in-the-cloud/workspace-templates";
+import { addWorkspaceTemplate, createWorkspaceTemplateSecret, createWorkspaceTemplateSshKey, listWorkspaceTemplates, revealWorkspaceTemplateSecrets, revealWorkspaceTemplateSshKeys, getConfiguration } from "@agents-in-the-cloud/workspace-templates";
 import type { WorkspaceDockerPlan } from "../src/types.ts";
 import { applySeedConfigManifest } from "../src/seed-config.ts";
 
@@ -83,7 +83,7 @@ test("catalogue seeding strips encrypted secrets and SSH keys before entering th
   const nestedKey = join(nested, "project-secrets.key");
   expect(await Bun.file(nestedKey).exists()).toBe(false);
   expect((await listWorkspaceTemplates(nestedCatalogue)).workspaceTemplates[0]).toMatchObject({ id: template.id, gitUrl: template.gitUrl, name: template.name });
-  expect(await listWorkspaceTemplateSecrets(template.id, nestedCatalogue)).toMatchObject([{ envName: "API_TOKEN", hostPattern: "api.example.com", configured: false }]);
+  expect((await getConfiguration(template.id, nestedCatalogue)).secrets).toMatchObject([{ envName: "API_TOKEN", hostPattern: "api.example.com", configured: false }]);
   expect(await revealWorkspaceTemplateSecrets(template.id, nestedCatalogue, nestedKey)).toEqual([]);
   expect(await revealWorkspaceTemplateSshKeys(template.id, nestedCatalogue, nestedKey)).toEqual([]);
   expect(await readFile(catalogue, "utf8")).toBe(originalCatalogue);

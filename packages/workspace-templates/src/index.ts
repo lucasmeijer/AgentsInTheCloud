@@ -4,8 +4,14 @@ export {
   deleteWorkspaceTemplate,
   formatWorkspaceTemplateSpec,
   getWorkspaceTemplateConfiguration,
+  getConfiguration,
+  globalWorkspaceConfiguration,
+  isGlobalScope,
+  type ConfigurationScope,
+  type ScopeConfiguration,
   isGitWorkspaceTemplateInit,
   workspaceTemplateIdFromInit,
+  workspaceTemplateIdOfInit,
   listWorkspaceTemplates,
   parseWorkspaceTemplateSpec,
   workspaceInitFromTemplate,
@@ -26,7 +32,7 @@ export {
   createWorkspaceTemplateSshKey,
   deleteWorkspaceTemplateSshKey,
   deriveWorkspaceTemplateSshPublicKey,
-  listWorkspaceTemplateSshKeys,
+  revealEffectiveSshKeys,
   renameWorkspaceTemplateSshKey,
   revealWorkspaceTemplateSshKeys,
 } from "./ssh-keys.ts";
@@ -34,13 +40,14 @@ export {
 export {
   createWorkspaceTemplateEnvironmentVariable,
   deleteWorkspaceTemplateEnvironmentVariable,
+  effectiveEnvironment,
   updateWorkspaceTemplateEnvironmentVariable,
 } from "./environment.ts";
 
 export {
   createWorkspaceTemplateSecret,
   deleteWorkspaceTemplateSecret,
-  listWorkspaceTemplateSecrets,
+  revealEffectiveSecrets,
   revealWorkspaceTemplateSecrets,
   updateWorkspaceTemplateSecret,
   workspaceTemplateSecretPlaceholder,

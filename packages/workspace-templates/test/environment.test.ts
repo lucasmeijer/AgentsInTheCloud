@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createAgentsInTheCloudEventBus } from "@agents-in-the-cloud/core";
-import { addWorkspaceTemplate, createWorkspaceTemplateEnvironmentVariable, workspaceInitFromTemplate, setWorkspaceTemplatePreloadImages } from "@agents-in-the-cloud/workspace-templates";
+import { addWorkspaceTemplate, createWorkspaceTemplateEnvironmentVariable, globalWorkspaceConfiguration, workspaceInitFromTemplate, setWorkspaceTemplatePreloadImages } from "@agents-in-the-cloud/workspace-templates";
 import { registerWorkspaceTemplateWorkspaceInitEvents } from "../src/workspace-source.ts";
 import type { WorkspaceDockerPlan } from "@agents-in-the-cloud/workspace";
 
@@ -37,5 +37,23 @@ describe("Workspace template environment", () => {
     expect(plan.preloadImages).toEqual(["docker.io/library/postgres:17"]);
     await setWorkspaceTemplatePreloadImages(workspaceTemplate.id, ["docker.io/library/redis:8"]);
     expect(plan.preloadImages).toEqual(["docker.io/library/postgres:17"]);
+  });
+
+  test("adds global variables to every workspace, with template variables taking precedence", async () => {
+    const workspaceTemplate = (await addWorkspaceTemplate("https://github.com/org/repo.git")).workspaceTemplate;
+    await createWorkspaceTemplateEnvironmentVariable(globalWorkspaceConfiguration, { name: "TZ", value: "UTC" });
+    await createWorkspaceTemplateEnvironmentVariable(globalWorkspaceConfiguration, { name: "API_URL", value: "https://global.example.com" });
+    await createWorkspaceTemplateEnvironmentVariable(workspaceTemplate.id, { name: "API_URL", value: "https://template.example.com" });
+    const events = createAgentsInTheCloudEventBus();
+    registerWorkspaceTemplateWorkspaceInitEvents(events);
+    const plan = (): WorkspaceDockerPlan => ({ labels: {}, env: {}, mounts: [], preloadImages: [], extraArgs: [], initScripts: [], containerFiles: [], cleanup: [] });
+
+    const fromTemplate = plan();
+    await events.emit("workspace_plan_prepare", { workspaceId: "template-workspace", init: workspaceInitFromTemplate(workspaceTemplate), workHostPath: "/tmp/work", workContainerPath: "/work", plan: fromTemplate });
+    expect(fromTemplate.env).toEqual({ TZ: "UTC", API_URL: "https://template.example.com" });
+
+    const empty = plan();
+    await events.emit("workspace_plan_prepare", { workspaceId: "empty-workspace", init: undefined, workHostPath: "/tmp/work", workContainerPath: "/work", plan: empty });
+    expect(empty.env).toEqual({ TZ: "UTC", API_URL: "https://global.example.com" });
   });
 });

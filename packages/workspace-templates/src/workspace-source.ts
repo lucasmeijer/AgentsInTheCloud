@@ -20,8 +20,9 @@ import {
 import { runHostObservableCommand, tailTerminalText } from "@agents-in-the-cloud/observable-terminal/server";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
-import { workspaceTemplateIdFromInit, getWorkspaceTemplateConfiguration, listWorkspaceTemplates, isGitWorkspaceTemplateInit } from "./workspace-template.ts";
+import { workspaceTemplateIdFromInit, workspaceTemplateIdOfInit, getWorkspaceTemplateConfiguration, listWorkspaceTemplates, isGitWorkspaceTemplateInit } from "./workspace-template.ts";
 import { workspaceSourceSshEnvironment, stopWorkspaceSshAgent } from "./ssh-agent.ts";
+import { effectiveEnvironment } from "./environment.ts";
 
 export interface PreparedWorkspaceSource {
   workspaceId: string;
@@ -393,8 +394,8 @@ export function registerWorkspaceTemplateWorkspaceInitEvents(events: AgentsInThe
       plan.dockerSupportSettingsUrl = `/workspace-templates/${encodeURIComponent(workspaceTemplateIdFromInit(init))}/settings?section=privileged`;
       plan.preloadImages = [...settings.preloadImages ?? []];
       plan.mounts.push({ type: "bind", ...(await workspaceTemplatePersistentMount(workspaceTemplateIdFromInit(init))) });
-      Object.assign(plan.env, Object.fromEntries(settings.environment.map(({ name, value }) => [name, value])));
     }
+    Object.assign(plan.env, await effectiveEnvironment(workspaceTemplateIdOfInit(init)));
 
     const metadataPath = join(workspaceSourceDir(workspaceId), "metadata.json");
     if (!existsSync(metadataPath)) return;

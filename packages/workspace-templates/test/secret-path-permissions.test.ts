@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addWorkspaceTemplate, createWorkspaceTemplateSecret, listWorkspaceTemplateSecrets, workspaceTemplateSecretAllowsPath, updateWorkspaceTemplateSecret } from "../src/index.ts";
+import { addWorkspaceTemplate, createWorkspaceTemplateSecret, getConfiguration, workspaceTemplateSecretAllowsPath, updateWorkspaceTemplateSecret } from "../src/index.ts";
 
 test("default path permission requires exact known hosts, never broad wildcards or mixed destinations", () => {
   for (const hostPattern of ["api.telegram.org", " API.Telegram.Org ; api.telegram.org "]) {
@@ -25,15 +25,15 @@ test("path overrides persist, omitted updates preserve them, and older files get
     expect(secret.allowInPath).toBe(true);
     await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...values, allowInPath: false }, file);
     await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...values, annotation: "Keep permission" }, file);
-    expect((await listWorkspaceTemplateSecrets(workspaceTemplate.id, file))[0]?.allowInPath).toBe(false);
+    expect((await getConfiguration(workspaceTemplate.id, file)).secrets[0]?.allowInPath).toBe(false);
     const enabled = await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...values, allowInPath: true }, file);
     expect(enabled.allowInPath).toBe(true);
     const store = JSON.parse(await readFile(file, "utf8"));
     delete store.projects[0].secrets[0].allowInPath;
     await writeFile(file, JSON.stringify(store));
-    expect(workspaceTemplateSecretAllowsPath((await listWorkspaceTemplateSecrets(workspaceTemplate.id, file))[0]!)).toBe(true);
+    expect(workspaceTemplateSecretAllowsPath((await getConfiguration(workspaceTemplate.id, file)).secrets[0]!)).toBe(true);
     await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...values, hostPattern: "github.com" }, file);
-    expect(workspaceTemplateSecretAllowsPath((await listWorkspaceTemplateSecrets(workspaceTemplate.id, file))[0]!)).toBe(false);
+    expect(workspaceTemplateSecretAllowsPath((await getConfiguration(workspaceTemplate.id, file)).secrets[0]!)).toBe(false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

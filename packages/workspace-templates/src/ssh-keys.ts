@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentsInTheCloudCoreError, runCommand } from "@agents-in-the-cloud/core";
 import { decryptWorkspaceTemplateValue, encryptWorkspaceTemplateValue } from "./secret-crypto.ts";
-import { findWorkspaceTemplateRecord, workspaceTemplatesFile, readWorkspaceTemplateStore, updateWorkspaceTemplateStore, type WorkspaceTemplateSshKeySummary, type StoredWorkspaceTemplateSshKey, type WorkspaceTemplateRecord } from "./workspace-template.ts";
+import { configurationScopeKey, findConfigurationRecord, workspaceTemplateSshKeySummary, workspaceScopes, workspaceTemplatesFile, readWorkspaceTemplateStore, updateWorkspaceTemplateStore, type ConfigurationRecord, type ConfigurationScope, type WorkspaceTemplateSshKeySummary, type StoredWorkspaceTemplateSshKey } from "./workspace-template.ts";
 
 async function publicKeyFromPrivateKey(privateKey: string): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-ssh-key-"));
@@ -21,68 +21,63 @@ async function publicKeyFromPrivateKey(privateKey: string): Promise<string> {
   }
 }
 
-function summary(key: StoredWorkspaceTemplateSshKey): WorkspaceTemplateSshKeySummary {
-  const { encryptedPrivateKey: _, projectId: workspaceTemplateId, ...result } = key;
-  return { ...result, workspaceTemplateId };
-}
-
-function findSshKey(workspaceTemplate: WorkspaceTemplateRecord, keyId: string): StoredWorkspaceTemplateSshKey {
-  const key = workspaceTemplate.sshKeys?.find((candidate) => candidate.id === keyId);
+function findSshKey(configuration: ConfigurationRecord, keyId: string): StoredWorkspaceTemplateSshKey {
+  const key = configuration.sshKeys?.find((candidate) => candidate.id === keyId);
   if (!key) throw new AgentsInTheCloudCoreError("workspace_template_ssh_key_not_found", "template SSH key not found");
   return key;
 }
 
-export async function listWorkspaceTemplateSshKeys(workspaceTemplateId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSshKeySummary[]> {
-  const workspaceTemplate = findWorkspaceTemplateRecord(await readWorkspaceTemplateStore(file), workspaceTemplateId);
-  return (workspaceTemplate.sshKeys ?? []).map(summary);
-}
-
-export async function createWorkspaceTemplateSshKey(workspaceTemplateId: string, privateKey: string, file = workspaceTemplatesFile(), keyFile?: string, name = ""): Promise<WorkspaceTemplateSshKeySummary> {
+export async function createWorkspaceTemplateSshKey(scope: ConfigurationScope, privateKey: string, file = workspaceTemplatesFile(), keyFile?: string, name = ""): Promise<WorkspaceTemplateSshKeySummary> {
   if (!privateKey.trim()) throw new AgentsInTheCloudCoreError("invalid_arguments", "Private key is required");
   privateKey = privateKey.replace(/\r\n/g, "\n");
   return await updateWorkspaceTemplateStore(file, async (store) => {
-    const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
+    const configuration = findConfigurationRecord(store, scope);
     const id = randomUUID();
     const publicKey = await publicKeyFromPrivateKey(privateKey);
     const key = {
       id,
-      projectId: workspaceTemplateId,
+      projectId: configurationScopeKey(scope),
       name: name.trim(),
       keyType: publicKey.split(" ", 1)[0]!,
       createdAt: new Date().toISOString(),
-      encryptedPrivateKey: await encryptWorkspaceTemplateValue(workspaceTemplateId, id, privateKey, keyFile),
+      encryptedPrivateKey: await encryptWorkspaceTemplateValue(configurationScopeKey(scope), id, privateKey, keyFile),
     };
-    workspaceTemplate.sshKeys ??= [];
-    workspaceTemplate.sshKeys.push(key);
-    return summary(key);
+    configuration.sshKeys ??= [];
+    configuration.sshKeys.push(key);
+    return workspaceTemplateSshKeySummary(key);
   });
 }
 
-export async function deriveWorkspaceTemplateSshPublicKey(workspaceTemplateId: string, keyId: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<string> {
-  const workspaceTemplate = findWorkspaceTemplateRecord(await readWorkspaceTemplateStore(file), workspaceTemplateId);
-  const key = findSshKey(workspaceTemplate, keyId);
-  return await publicKeyFromPrivateKey(await decryptWorkspaceTemplateValue(workspaceTemplateId, key.id, key.encryptedPrivateKey, keyFile));
+export async function deriveWorkspaceTemplateSshPublicKey(scope: ConfigurationScope, keyId: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<string> {
+  const configuration = findConfigurationRecord(await readWorkspaceTemplateStore(file), scope);
+  const key = findSshKey(configuration, keyId);
+  return await publicKeyFromPrivateKey(await decryptWorkspaceTemplateValue(key.projectId, key.id, key.encryptedPrivateKey, keyFile));
 }
 
-export async function renameWorkspaceTemplateSshKey(workspaceTemplateId: string, keyId: string, name: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSshKeySummary> {
+export async function renameWorkspaceTemplateSshKey(scope: ConfigurationScope, keyId: string, name: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSshKeySummary> {
   return await updateWorkspaceTemplateStore(file, (store) => {
-    const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
-    const key = findSshKey(workspaceTemplate, keyId);
+    const configuration = findConfigurationRecord(store, scope);
+    const key = findSshKey(configuration, keyId);
     key.name = name.trim();
-    return summary(key);
+    return workspaceTemplateSshKeySummary(key);
   });
 }
 
-export async function deleteWorkspaceTemplateSshKey(workspaceTemplateId: string, keyId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSshKeySummary> {
+export async function deleteWorkspaceTemplateSshKey(scope: ConfigurationScope, keyId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateSshKeySummary> {
   return await updateWorkspaceTemplateStore(file, (store) => {
-    const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
-    const key = findSshKey(workspaceTemplate, keyId);
-    workspaceTemplate.sshKeys = workspaceTemplate.sshKeys!.filter((candidate) => candidate !== key);
-    return summary(key);
+    const configuration = findConfigurationRecord(store, scope);
+    const key = findSshKey(configuration, keyId);
+    configuration.sshKeys = configuration.sshKeys!.filter((candidate) => candidate !== key);
+    return workspaceTemplateSshKeySummary(key);
   });
 }
 
-export async function revealWorkspaceTemplateSshKeys(workspaceTemplateId: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<string[]> {
-  const workspaceTemplate = findWorkspaceTemplateRecord(await readWorkspaceTemplateStore(file), workspaceTemplateId);
-  return await Promise.all((workspaceTemplate.sshKeys ?? []).map((key) => decryptWorkspaceTemplateValue(workspaceTemplateId, key.id, key.encryptedPrivateKey, keyFile)));
+export async function revealWorkspaceTemplateSshKeys(scope: ConfigurationScope, file = workspaceTemplatesFile(), keyFile?: string): Promise<string[]> {
+  const configuration = findConfigurationRecord(await readWorkspaceTemplateStore(file), scope);
+  return await Promise.all((configuration.sshKeys ?? []).map((key) => decryptWorkspaceTemplateValue(key.projectId, key.id, key.encryptedPrivateKey, keyFile)));
+}
+
+/** Global keys and the template's own; an SSH agent offers all of them. */
+export async function revealEffectiveSshKeys(workspaceTemplateId?: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<string[]> {
+  return (await Promise.all(workspaceScopes(workspaceTemplateId).map((scope) => revealWorkspaceTemplateSshKeys(scope, file, keyFile)))).flat();
 }

@@ -149,6 +149,8 @@ Supported sections are `index`, `general`, `secrets`, `ssh`, `environment`, and 
 
 **Secrets** manages protected credential entries shared with a template's Workspaces. Agents receive placeholders; real values are substituted into requests to allowed hosts. Secret changes apply to existing Workspaces, while Environment Variables only apply to new containers. Secret summaries never return real values.
 
+**Global workspace settings** hold Secrets, SSH keys, trusted SSH servers and Environment variables for every new workspace, including empty ones. They use the same endpoints under `/global-workspace-settings` instead of `/workspace-templates/:workspaceTemplateId`; `GET /global-workspace-settings` with `Accept: application/json` lists them. A template's own Secret or Environment variable with the same name overrides the global one. Present them with `/settings?section=global-workspace-settings`, or inside a template's settings with `section=global-secrets`, `global-ssh` or `global-environment`. Global summaries have no `workspaceTemplateId`.
+
 Use `GET /workspace-templates` with `Accept: application/json` to discover the template ID before constructing the presentation URL. Template environment-variable, secret, and SSH-key summaries identify their template with `workspaceTemplateId`. Existing storage filenames and serialized formats are unchanged; their older `project` spellings remain at storage boundaries.
 
 Other browser-navigable surfaces are:

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<script>
+  // Follow the OS: the design system's default theme is light; "midnight" is its dark theme.
+  if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "midnight";
+</script>
+<style>{{design-system-css}}</style>
+<style>{{template-css}}</style>
+</head>
+<body>
+<main class="triage">
+{{body}}
+</main>
+<script type="application/json" id="report-md">{{markdown-json}}</script>
+<script>
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-copy], button[data-copy-markdown]");
+    if (!button) return;
+    const text = button.hasAttribute("data-copy-markdown") ? JSON.parse(document.getElementById("report-md").textContent) : button.dataset.copy;
+    await navigator.clipboard.writeText(text);
+    const caption = [...button.querySelectorAll("*")].findLast((node) => !node.children.length && node.textContent.trim()) ?? button;
+    const label = caption.textContent;
+    caption.textContent = "Copied!";
+    setTimeout(() => { caption.textContent = label; }, 1500);
+  });
+</script>
+</body>
+</html>

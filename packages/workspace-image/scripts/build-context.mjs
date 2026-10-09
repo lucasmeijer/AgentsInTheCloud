@@ -79,7 +79,9 @@ for (const { path, dir, name, manifest, hashPath } of manifests) {
     const copyInstruction = { rel: `files/${rel}`, to: file.to, mode: file.mode };
     (file.afterRun ? finalCopies : moduleCopyInstructions).push(copyInstruction);
   }
-  modules.push({ name, aptPackages: [...new Set(manifest.aptPackages ?? [])].sort(), copyInstructions: moduleCopyInstructions, runInstructions: manifest.run ?? [] });
+  const aptPackageGroups = (manifest.aptPackageGroups ?? [manifest.aptPackages ?? []])
+    .map((packages) => [...new Set(packages)].sort());
+  modules.push({ name, aptPackageGroups, copyInstructions: moduleCopyInstructions, runInstructions: manifest.run ?? [] });
 }
 
 // The gateway is built separately so Go never enters the runtime image.
@@ -102,8 +104,9 @@ function appendCopies(copies) {
 
 for (const module of modules) {
   dockerfile += `# Module: ${module.name}\n`;
-  if (module.aptPackages.length) {
-    const aptPackages = dockerContinuationList(module.aptPackages);
+  for (const packages of module.aptPackageGroups) {
+    if (!packages.length) continue;
+    const aptPackages = dockerContinuationList(packages);
     dockerfile += `RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\\n    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\\n    apt-get update \\\n && apt-get install -y --no-install-recommends \\\n${aptPackages}\n\n`;
   }
   appendCopies(module.copyInstructions);

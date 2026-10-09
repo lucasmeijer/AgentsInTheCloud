@@ -2,9 +2,8 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { setWorkspaceTemplateSeedConfigEnabled, addWorkspaceTemplate, createWorkspaceTemplateEnvironmentVariable, createWorkspaceTemplateSecret, deleteWorkspaceTemplate, deleteWorkspaceTemplateEnvironmentVariable, getCommitIdentity, getStoredCommitIdentity, createWorkspaceTemplateSshKey, deriveWorkspaceTemplateSshPublicKey, listWorkspaceTemplateSecrets, listWorkspaceTemplateSshKeys, listWorkspaceTemplates, parseWorkspaceTemplateSpec, revealWorkspaceTemplateSecrets, revealWorkspaceTemplateSshKeys, renameWorkspaceTemplateSshKey, setCommitIdentity, updateWorkspaceTemplate, updateWorkspaceTemplateEnvironmentVariable, updateWorkspaceTemplateSecret } from "@agents-in-the-cloud/workspace-templates";
+import { setWorkspaceTemplateSeedConfigEnabled, addWorkspaceTemplate, createWorkspaceTemplateEnvironmentVariable, createWorkspaceTemplateSecret, deleteWorkspaceTemplate, deleteWorkspaceTemplateEnvironmentVariable, getCommitIdentity, getStoredCommitIdentity, createWorkspaceTemplateSshKey, deriveWorkspaceTemplateSshPublicKey, listWorkspaceTemplates, parseWorkspaceTemplateSpec, revealWorkspaceTemplateSecrets, revealWorkspaceTemplateSshKeys, renameWorkspaceTemplateSshKey, setCommitIdentity, updateWorkspaceTemplate, updateWorkspaceTemplateEnvironmentVariable, updateWorkspaceTemplateSecret, getConfiguration } from "@agents-in-the-cloud/workspace-templates";
 import { commitIdentitySettingsFile, hasCommitIdentity } from "../src/commit-identity.ts";
-import { listWorkspaceTemplateEnvironmentVariables } from "../src/environment.ts";
 
 describe("Workspace templates", () => {
   test("parseWorkspaceTemplateSpec supports an optional #branch suffix", () => {
@@ -115,7 +114,7 @@ describe("Workspace templates", () => {
     expect(await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...values, secretValue: "real-value" }, file, keyFile))
       .toMatchObject({ configured: true, annotation: "Upload reports" });
     await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...values, annotation: "", secretValue: "" }, file, keyFile);
-    expect(await listWorkspaceTemplateSecrets(workspaceTemplate.id, file)).toMatchObject([{ annotation: "", configured: true }]);
+    expect((await getConfiguration(workspaceTemplate.id, file)).secrets).toMatchObject([{ annotation: "", configured: true }]);
     expect(await revealWorkspaceTemplateSecrets(workspaceTemplate.id, file, keyFile)).toMatchObject([{ secretValue: "real-value" }]);
     expect(await readFile(file, "utf8")).not.toContain("real-value");
   });
@@ -130,7 +129,7 @@ describe("Workspace templates", () => {
     delete store.projects[0].secrets[0].annotation;
     store.projects[0].secrets[0].optional = true;
     await writeFile(file, JSON.stringify(store));
-    const [secret] = await listWorkspaceTemplateSecrets(workspaceTemplate.id, file);
+    const [secret] = (await getConfiguration(workspaceTemplate.id, file)).secrets;
     expect(secret).toMatchObject({ annotation: "", configured: true });
     expect(secret).not.toHaveProperty("optional");
   });
@@ -149,12 +148,12 @@ describe("Workspace templates", () => {
     expect(first.workspaceTemplateId).toBe(workspaceTemplate.id);
     expect(first).not.toHaveProperty("projectId");
 
-    expect(await listWorkspaceTemplateSshKeys(workspaceTemplate.id, file)).toEqual([first, second]);
+    expect((await getConfiguration(workspaceTemplate.id, file)).sshKeys).toEqual([first, second]);
     const publicKey = await deriveWorkspaceTemplateSshPublicKey(workspaceTemplate.id, first.id, file, keyFile);
     expect(publicKey).toMatch(/^ssh-ed25519 /);
     expect(await deriveWorkspaceTemplateSshPublicKey(workspaceTemplate.id, second.id, file, keyFile)).toBe(publicKey);
     expect(await renameWorkspaceTemplateSshKey(workspaceTemplate.id, first.id, "  GitHub deploy key  ", file)).toEqual({ ...first, name: "GitHub deploy key" });
-    expect((await listWorkspaceTemplateSshKeys(workspaceTemplate.id, file))[0]?.name).toBe("GitHub deploy key");
+    expect((await getConfiguration(workspaceTemplate.id, file)).sshKeys[0]?.name).toBe("GitHub deploy key");
     const oldStore = JSON.parse(await readFile(file, "utf8"));
     expect(oldStore.projects[0].sshKeys[0].projectId).toBe(workspaceTemplate.id);
     delete oldStore.projects[0].sshKeys[1].name;
@@ -162,9 +161,9 @@ describe("Workspace templates", () => {
     oldStore.projects[0].sshKeys[1].fingerprint = "SHA256:legacy";
     await writeFile(file, JSON.stringify(oldStore));
     expect(await deriveWorkspaceTemplateSshPublicKey(workspaceTemplate.id, second.id, file, keyFile)).toBe(publicKey);
-    expect((await listWorkspaceTemplateSshKeys(workspaceTemplate.id, file))[1]).not.toHaveProperty("publicKey");
-    expect((await listWorkspaceTemplateSshKeys(workspaceTemplate.id, file))[1]).not.toHaveProperty("fingerprint");
-    expect((await listWorkspaceTemplateSshKeys(workspaceTemplate.id, file))[1]?.name).toBeUndefined();
+    expect((await getConfiguration(workspaceTemplate.id, file)).sshKeys[1]).not.toHaveProperty("publicKey");
+    expect((await getConfiguration(workspaceTemplate.id, file)).sshKeys[1]).not.toHaveProperty("fingerprint");
+    expect((await getConfiguration(workspaceTemplate.id, file)).sshKeys[1]?.name).toBeUndefined();
     await renameWorkspaceTemplateSshKey(workspaceTemplate.id, second.id, "Legacy key", file);
     expect(await readFile(file, "utf8")).not.toContain('"publicKey"');
     expect(await readFile(file, "utf8")).not.toContain('"fingerprint"');
@@ -189,7 +188,7 @@ describe("Workspace templates", () => {
     await createWorkspaceTemplateEnvironmentVariable(workspaceTemplate.id, { name: "EMPTY", value: "" }, file);
     await updateWorkspaceTemplateEnvironmentVariable(workspaceTemplate.id, created.id, { name: "SERVICE_URL", value: "https://service.example.com" }, file);
 
-    expect(await listWorkspaceTemplateEnvironmentVariables(workspaceTemplate.id, file)).toMatchObject([
+    expect((await getConfiguration(workspaceTemplate.id, file)).environment).toMatchObject([
       { name: "EMPTY", value: "" },
       { name: "SERVICE_URL", value: "https://service.example.com" },
     ]);
@@ -197,7 +196,7 @@ describe("Workspace templates", () => {
     expect((await listWorkspaceTemplates(file)).workspaceTemplates[0]!.configurationFingerprint).not.toBe(workspaceTemplate.configurationFingerprint);
 
     await deleteWorkspaceTemplateEnvironmentVariable(workspaceTemplate.id, created.id, file);
-    expect(await listWorkspaceTemplateEnvironmentVariables(workspaceTemplate.id, file)).toHaveLength(1);
+    expect((await getConfiguration(workspaceTemplate.id, file)).environment).toHaveLength(1);
   });
 
   test("deleteWorkspaceTemplate removes a Workspace template by id", async () => {

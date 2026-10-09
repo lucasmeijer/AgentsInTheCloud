@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { acquireFileLock, AgentsInTheCloudCoreError, getAgentsInTheCloudRuntimeContext, isNotFoundError, writeJsonAtomic } from "@agents-in-the-cloud/core";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
+import type { WorkspaceInitInstruction } from "@agents-in-the-cloud/workspace";
 
 export type WorkspaceTemplateSummary = Omit<WorkspaceTemplateRecord, "secrets" | "sshKeys" | "sshKnownHosts" | "environment"> & {
   configurationFingerprint?: string;
@@ -11,13 +12,21 @@ export type WorkspaceTemplateSummary = Omit<WorkspaceTemplateRecord, "secrets" |
   lastUsedAt?: number;
 };
 export type StoredWorkspaceTemplateSecret = Static<typeof storedWorkspaceTemplateSecretSchema>;
-export type WorkspaceTemplateSecretSummary = Omit<StoredWorkspaceTemplateSecret, "projectId" | "encryptedSecret" | "annotation"> & { workspaceTemplateId: string; annotation: string; configured: boolean };
+/** workspaceTemplateId is absent for global entries. */
+export type WorkspaceTemplateSecretSummary = Omit<StoredWorkspaceTemplateSecret, "projectId" | "encryptedSecret" | "annotation"> & { workspaceTemplateId?: string; annotation: string; configured: boolean };
 export type StoredWorkspaceTemplateSshKey = Static<typeof storedWorkspaceTemplateSshKeySchema>;
-export type WorkspaceTemplateSshKeySummary = Omit<StoredWorkspaceTemplateSshKey, "projectId" | "encryptedPrivateKey"> & { workspaceTemplateId: string };
+export type WorkspaceTemplateSshKeySummary = Omit<StoredWorkspaceTemplateSshKey, "projectId" | "encryptedPrivateKey"> & { workspaceTemplateId?: string };
 export type StoredWorkspaceTemplateEnvironmentVariable = Static<typeof workspaceTemplateEnvironmentVariableSchema>;
-export type WorkspaceTemplateEnvironmentVariable = Omit<StoredWorkspaceTemplateEnvironmentVariable, "projectId"> & { workspaceTemplateId: string };
+export type WorkspaceTemplateEnvironmentVariable = Omit<StoredWorkspaceTemplateEnvironmentVariable, "projectId"> & { workspaceTemplateId?: string };
 export type WorkspaceTemplateRecord = Static<typeof workspaceTemplateRecordSchema>;
-export type WorkspaceTemplateStore = { workspaceTemplates: WorkspaceTemplateRecord[] };
+/** Records that own Secrets, SSH keys, trusted SSH servers and Environment variables. */
+export type ConfigurationRecord = Static<typeof configurationRecordSchema>;
+export type WorkspaceTemplateStore = { workspaceTemplates: WorkspaceTemplateRecord[]; global: ConfigurationRecord };
+
+/** Global workspace settings apply to every new workspace; a template's own entry with the same name wins. */
+export const globalWorkspaceConfiguration = { kind: "global" } as const;
+/** A workspace template ID, or the global workspace settings. */
+export type ConfigurationScope = string | typeof globalWorkspaceConfiguration;
 
 export interface WorkspaceTemplateListResult {
   workspaceTemplates: WorkspaceTemplateSummary[];
@@ -68,6 +77,15 @@ const storedWorkspaceTemplateSshKeySchema = Type.Object({
   encryptedPrivateKey: Type.String(),
 });
 
+const configurationProperties = {
+  secrets: Type.Optional(Type.Array(storedWorkspaceTemplateSecretSchema)),
+  sshKeys: Type.Optional(Type.Array(storedWorkspaceTemplateSshKeySchema)),
+  sshKnownHosts: Type.Optional(Type.String()),
+  environment: Type.Optional(Type.Array(workspaceTemplateEnvironmentVariableSchema)),
+};
+
+const configurationRecordSchema = Type.Object(configurationProperties);
+
 const workspaceTemplateRecordSchema = Type.Object({
   id: Type.String(),
   name: Type.String(),
@@ -78,10 +96,7 @@ const workspaceTemplateRecordSchema = Type.Object({
   createdAt: Type.Optional(Type.Number()),
   lastWorkspaceCreatedAt: Type.Optional(Type.Number()),
   swatchColor: Type.Optional(Type.String({ pattern: "^#[0-9a-fA-F]{6}$" })),
-  secrets: Type.Optional(Type.Array(storedWorkspaceTemplateSecretSchema)),
-  sshKeys: Type.Optional(Type.Array(storedWorkspaceTemplateSshKeySchema)),
-  sshKnownHosts: Type.Optional(Type.String()),
-  environment: Type.Optional(Type.Array(workspaceTemplateEnvironmentVariableSchema)),
+  ...configurationProperties,
   privileged: Type.Optional(Type.Boolean()),
   seedConfigEnabled: Type.Optional(Type.Boolean()),
   dockerfile: Type.Optional(Type.String()),
@@ -109,6 +124,8 @@ declare module "@agents-in-the-cloud/workspace" {
 
 const workspaceTemplateStoreSchema = Type.Object({
   projects: Type.Array(workspaceTemplateRecordSchema),
+  /** Absent in files saved before global workspace settings existed. */
+  global: Type.Optional(configurationRecordSchema),
 });
 
 export function workspaceTemplatesFile(dataDir = getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir): string {
@@ -146,7 +163,7 @@ export function parseWorkspaceTemplateSpec(spec: string): { gitUrl: string; bran
 export async function readWorkspaceTemplateStore(file: string): Promise<WorkspaceTemplateStore> {
   try {
     const stored = Value.Parse(workspaceTemplateStoreSchema, JSON.parse(await readFile(file, "utf8")));
-    const store: WorkspaceTemplateStore = { workspaceTemplates: stored.projects };
+    const store: WorkspaceTemplateStore = { workspaceTemplates: stored.projects, global: stored.global ?? {} };
     // Ignore the retired requirement flag in older saved secrets.
     for (const workspaceTemplate of store.workspaceTemplates) for (const secret of workspaceTemplate.secrets ?? []) {
       Reflect.deleteProperty(secret, "optional");
@@ -158,7 +175,7 @@ export async function readWorkspaceTemplateStore(file: string): Promise<Workspac
     }
     return store;
   } catch (error) {
-    if (isNotFoundError(error)) return { workspaceTemplates: [] };
+    if (isNotFoundError(error)) return { workspaceTemplates: [], global: {} };
     throw error;
   }
 }
@@ -177,7 +194,7 @@ export async function updateWorkspaceTemplateStore<Result>(file: string, mutate:
     const store = await readWorkspaceTemplateStore(file);
     const result = await mutate(store);
     // Preserve the existing on-disk envelope; this is serialization, not a data migration.
-    await writeJsonAtomic(file, { projects: store.workspaceTemplates });
+    await writeJsonAtomic(file, { projects: store.workspaceTemplates, global: store.global });
     for (const listener of workspaceTemplateStoreListeners) listener();
     return result;
   } finally {
@@ -191,22 +208,58 @@ export function findWorkspaceTemplateRecord(store: WorkspaceTemplateStore, works
   return workspaceTemplate;
 }
 
-export function workspaceTemplateConfigurationFingerprint(workspaceTemplate: Pick<WorkspaceTemplateRecord, "gitUrl" | "branch" | "dockerfile" | "privileged" | "seedConfigEnabled" | "secrets" | "sshKnownHosts"> & { environment?: Pick<WorkspaceTemplateEnvironmentVariable, "name" | "value">[] }): string {
+export function isGlobalScope(scope: ConfigurationScope): scope is typeof globalWorkspaceConfiguration {
+  return scope === globalWorkspaceConfiguration;
+}
+
+export function findConfigurationRecord(store: WorkspaceTemplateStore, scope: ConfigurationScope): ConfigurationRecord {
+  return isGlobalScope(scope) ? store.global : findWorkspaceTemplateRecord(store, scope);
+}
+
+/** The scopes configuring a workspace, global first so a template's own entries win. Empty workspaces have no template. */
+export function workspaceScopes(workspaceTemplateId?: string): ConfigurationScope[] {
+  return workspaceTemplateId ? [globalWorkspaceConfiguration, workspaceTemplateId] : [globalWorkspaceConfiguration];
+}
+
+const globalConfigurationKey = "global";
+
+/** Identifies a scope in stored records and encryption. Template IDs end in a digest, so they never equal the global key. */
+export function configurationScopeKey(scope: ConfigurationScope): string {
+  return isGlobalScope(scope) ? globalConfigurationKey : scope;
+}
+
+/** The workspaceTemplateId summary field for a stored record's projectId; absent for global entries. */
+export function configurationScopeSummary(projectId: string): { workspaceTemplateId?: string } {
+  return projectId === globalConfigurationKey ? {} : { workspaceTemplateId: projectId };
+}
+
+type FingerprintedConfiguration = Pick<ConfigurationRecord, "secrets" | "sshKnownHosts"> & { environment?: Pick<WorkspaceTemplateEnvironmentVariable, "name" | "value">[] };
+
+function configurationSnapshot(configuration: FingerprintedConfiguration) {
+  return {
+    environment: (configuration.environment ?? []).map(({ name, value }) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)),
+    secrets: (configuration.secrets ?? []).filter((secret) => secret.encryptedSecret).map(({ envName, hostPattern, placeholder, allowInPath, encryptedSecret }) => ({ envName, hostPattern, placeholder, allowInPath, encryptedSecret })).sort((a, b) => a.envName.localeCompare(b.envName)),
+    sshKnownHosts: configuration.sshKnownHosts ?? "",
+  };
+}
+
+export function workspaceTemplateConfigurationFingerprint(workspaceTemplate: Pick<WorkspaceTemplateRecord, "gitUrl" | "branch" | "dockerfile" | "privileged" | "seedConfigEnabled"> & FingerprintedConfiguration, global: FingerprintedConfiguration = {}): string {
   // Only workspace setup snapshots belong here; SSH keys are authorized live. Renaming a template
   // also changes its session share key, which is not worth warning existing workspaces about.
-  const configuration = {
+  const globalSnapshot = configurationSnapshot(global);
+  const templateConfiguration = {
     gitUrl: workspaceTemplate.gitUrl, branch: workspaceTemplate.branch,
     privileged: workspaceTemplate.privileged ?? false,
     seedConfigEnabled: workspaceTemplate.seedConfigEnabled ?? false,
     dockerfile: workspaceTemplate.dockerfile ?? "",
-    environment: (workspaceTemplate.environment ?? []).map(({ name, value }) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)),
-    secrets: (workspaceTemplate.secrets ?? []).filter((secret) => secret.encryptedSecret).map(({ envName, hostPattern, placeholder, allowInPath, encryptedSecret }) => ({ envName, hostPattern, placeholder, allowInPath, encryptedSecret })).sort((a, b) => a.envName.localeCompare(b.envName)),
-    sshKnownHosts: workspaceTemplate.sshKnownHosts ?? "",
+    ...configurationSnapshot(workspaceTemplate),
   };
+  // Omitted while empty, so fingerprints saved before global settings existed stay valid.
+  const configuration = globalSnapshot.environment.length || globalSnapshot.secrets.length || globalSnapshot.sshKnownHosts ? { ...templateConfiguration, global: globalSnapshot } : templateConfiguration;
   return createHash("sha256").update(JSON.stringify(configuration)).digest("hex");
 }
 
-function workspaceTemplateSummary(workspaceTemplate: WorkspaceTemplateRecord): WorkspaceTemplateSummary {
+function workspaceTemplateSummary(workspaceTemplate: WorkspaceTemplateRecord, global: ConfigurationRecord): WorkspaceTemplateSummary {
   return {
     id: workspaceTemplate.id,
     name: workspaceTemplate.name,
@@ -221,7 +274,7 @@ function workspaceTemplateSummary(workspaceTemplate: WorkspaceTemplateRecord): W
     seedConfigEnabled: workspaceTemplate.seedConfigEnabled ?? false,
     dockerfile: workspaceTemplate.dockerfile,
     preloadImages: [...(workspaceTemplate.preloadImages ?? [])],
-    configurationFingerprint: workspaceTemplateConfigurationFingerprint(workspaceTemplate),
+    configurationFingerprint: workspaceTemplateConfigurationFingerprint(workspaceTemplate, global),
   };
 }
 
@@ -231,27 +284,55 @@ export type WorkspaceTemplateConfiguration = WorkspaceTemplateSummary & {
 };
 
 export function workspaceTemplateSecretSummary(secret: StoredWorkspaceTemplateSecret): WorkspaceTemplateSecretSummary {
-  const { encryptedSecret, projectId: workspaceTemplateId, ...metadata } = secret;
-  return { ...metadata, workspaceTemplateId, annotation: secret.annotation ?? "", configured: !!encryptedSecret };
+  const { encryptedSecret, projectId, ...metadata } = secret;
+  return { ...metadata, ...configurationScopeSummary(projectId), annotation: secret.annotation ?? "", configured: !!encryptedSecret };
 }
 
-export function workspaceTemplateSecretSummaries(workspaceTemplate: WorkspaceTemplateRecord): WorkspaceTemplateSecretSummary[] {
-  return (workspaceTemplate.secrets ?? []).map(workspaceTemplateSecretSummary).sort((a, b) => a.envName.localeCompare(b.envName));
+function workspaceTemplateSecretSummaries(configuration: ConfigurationRecord): WorkspaceTemplateSecretSummary[] {
+  return (configuration.secrets ?? []).map(workspaceTemplateSecretSummary).sort((a, b) => a.envName.localeCompare(b.envName));
+}
+
+function workspaceTemplateEnvironmentVariableSummaries(configuration: ConfigurationRecord): WorkspaceTemplateEnvironmentVariable[] {
+  return (configuration.environment ?? []).map(workspaceTemplateEnvironmentVariableSummary).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Non-sensitive settings derived from a single persisted template snapshot. */
 export async function getWorkspaceTemplateConfiguration(workspaceTemplateId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateConfiguration> {
-  const workspaceTemplate = findWorkspaceTemplateRecord(await readWorkspaceTemplateStore(file), workspaceTemplateId);
+  const store = await readWorkspaceTemplateStore(file);
+  const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
   return {
-    ...workspaceTemplateSummary(workspaceTemplate),
-    environment: (workspaceTemplate.environment ?? []).map(workspaceTemplateEnvironmentVariableSummary).sort((a, b) => a.name.localeCompare(b.name)),
+    ...workspaceTemplateSummary(workspaceTemplate, store.global),
+    environment: workspaceTemplateEnvironmentVariableSummaries(workspaceTemplate),
     secrets: workspaceTemplateSecretSummaries(workspaceTemplate),
+  };
+}
+
+export function workspaceTemplateSshKeySummary(key: StoredWorkspaceTemplateSshKey): WorkspaceTemplateSshKeySummary {
+  const { encryptedPrivateKey: _, projectId, ...result } = key;
+  return { ...result, ...configurationScopeSummary(projectId) };
+}
+
+export interface ScopeConfiguration {
+  environment: WorkspaceTemplateEnvironmentVariable[];
+  secrets: WorkspaceTemplateSecretSummary[];
+  sshKeys: WorkspaceTemplateSshKeySummary[];
+  sshKnownHosts: string;
+}
+
+/** Non-sensitive Secrets, SSH keys, trusted SSH servers and Environment variables of a template or the global workspace settings. */
+export async function getConfiguration(scope: ConfigurationScope, file = workspaceTemplatesFile()): Promise<ScopeConfiguration> {
+  const configuration = findConfigurationRecord(await readWorkspaceTemplateStore(file), scope);
+  return {
+    environment: workspaceTemplateEnvironmentVariableSummaries(configuration),
+    secrets: workspaceTemplateSecretSummaries(configuration),
+    sshKeys: (configuration.sshKeys ?? []).map(workspaceTemplateSshKeySummary),
+    sshKnownHosts: configuration.sshKnownHosts ?? "",
   };
 }
 
 export async function listWorkspaceTemplates(file = workspaceTemplatesFile()): Promise<WorkspaceTemplateListResult> {
   const store = await readWorkspaceTemplateStore(file);
-  const workspaceTemplates = [...store.workspaceTemplates].sort((a, b) => a.name.localeCompare(b.name) || (a.branch ?? "").localeCompare(b.branch ?? "") || a.gitUrl.localeCompare(b.gitUrl)).map(workspaceTemplateSummary);
+  const workspaceTemplates = [...store.workspaceTemplates].sort((a, b) => a.name.localeCompare(b.name) || (a.branch ?? "").localeCompare(b.branch ?? "") || a.gitUrl.localeCompare(b.gitUrl)).map((workspaceTemplate) => workspaceTemplateSummary(workspaceTemplate, store.global));
   return { workspaceTemplates };
 }
 
@@ -268,7 +349,7 @@ export async function addWorkspaceTemplate(spec: string, file = workspaceTemplat
       : baseName;
     const workspaceTemplate = { id, name, gitUrl, branch, sessionShareKey: baseName, createdAt: Date.now() };
     store.workspaceTemplates.push(workspaceTemplate);
-    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate) };
+    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate, store.global) };
   });
 }
 
@@ -298,7 +379,7 @@ export async function updateWorkspaceTemplate(id: string, values: { name: string
     workspaceTemplate.gitUrl = gitUrl;
     workspaceTemplate.branch = branch;
     workspaceTemplate.sessionShareKey = name;
-    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate) };
+    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate, store.global) };
   });
 }
 
@@ -306,7 +387,7 @@ export async function deleteWorkspaceTemplate(id: string, file = workspaceTempla
   return await updateWorkspaceTemplateStore(file, (store) => {
     const workspaceTemplate = findWorkspaceTemplateRecord(store, id);
     store.workspaceTemplates = store.workspaceTemplates.filter((candidate) => candidate.id !== id);
-    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate) };
+    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate, store.global) };
   });
 }
 
@@ -320,12 +401,17 @@ export function workspaceTemplateIdFromInit(init: GitWorkspaceTemplateInitInstru
 }
 
 export function workspaceTemplateEnvironmentVariableSummary(variable: StoredWorkspaceTemplateEnvironmentVariable): WorkspaceTemplateEnvironmentVariable {
-  const { projectId: workspaceTemplateId, ...metadata } = variable;
-  return { ...metadata, workspaceTemplateId };
+  const { projectId, ...metadata } = variable;
+  return { ...metadata, ...configurationScopeSummary(projectId) };
 }
 
 export function isGitWorkspaceTemplateInit(init: unknown): init is GitWorkspaceTemplateInitInstruction {
   return Value.Check(gitWorkspaceTemplateInitSchema, init);
+}
+
+/** The template a workspace was created from; empty workspaces have none. */
+export function workspaceTemplateIdOfInit(init: WorkspaceInitInstruction | undefined): string | undefined {
+  return isGitWorkspaceTemplateInit(init) ? workspaceTemplateIdFromInit(init) : undefined;
 }
 
 export function validateWorkspaceTemplateDockerfile(dockerfile: string): void {
@@ -340,7 +426,7 @@ export async function setWorkspaceTemplateDockerfile(id: string, dockerfile: str
     const workspaceTemplate = findWorkspaceTemplateRecord(store, id);
     if (dockerfile.trim()) workspaceTemplate.dockerfile = dockerfile;
     else delete workspaceTemplate.dockerfile;
-    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate) };
+    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate, store.global) };
   });
 }
 
@@ -357,7 +443,7 @@ export async function setWorkspaceTemplatePreloadImages(id: string, images: stri
   return await updateWorkspaceTemplateStore(file, (store) => {
     const workspaceTemplate = findWorkspaceTemplateRecord(store, id);
     workspaceTemplate.preloadImages = preloadImages;
-    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate) };
+    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate, store.global) };
   });
 }
 
@@ -366,7 +452,7 @@ export async function setWorkspaceTemplatePrivileged(id: string, privileged: boo
   return updateWorkspaceTemplateStore(file, (store) => {
     const workspaceTemplate = findWorkspaceTemplateRecord(store, id);
     workspaceTemplate.privileged = privileged;
-    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate) };
+    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate, store.global) };
   });
 }
 
@@ -375,6 +461,6 @@ export async function setWorkspaceTemplateSeedConfigEnabled(id: string, enabled:
   return updateWorkspaceTemplateStore(file, (store) => {
     const workspaceTemplate = findWorkspaceTemplateRecord(store, id);
     workspaceTemplate.seedConfigEnabled = enabled;
-    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate) };
+    return { workspaceTemplate: workspaceTemplateSummary(workspaceTemplate, store.global) };
   });
 }

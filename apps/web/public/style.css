@@ -490,7 +490,7 @@ html.software-keyboard-visible .composer.launch-composer :is(.agent-attach-row, 
 .template-settings-content { max-width: 760px; margin-inline: auto; padding: 24px; display: grid; gap: 16px; }
 .template-settings-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .template-settings-note { margin: 0; }
-#template_settings_error:empty { display: none; }
+.settings-editor-error:empty { display: none; }
 .template-settings-remove { display: grid; gap: 12px; padding-top: 8px; }
 #template_settings_delete .button.danger.icon-only { --button-foreground: var(--danger); --button-hover-foreground: var(--danger); }
 .template-settings-inline-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }

@@ -2,8 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addWorkspaceTemplate, createWorkspaceTemplateEnvironmentVariable, createWorkspaceTemplateSecret, listWorkspaceTemplates, revealWorkspaceTemplateSecrets, updateWorkspaceTemplate, updateWorkspaceTemplateSecret } from "@agents-in-the-cloud/workspace-templates";
-import { listWorkspaceTemplateEnvironmentVariables } from "../src/environment.ts";
+import { addWorkspaceTemplate, createWorkspaceTemplateEnvironmentVariable, createWorkspaceTemplateSecret, listWorkspaceTemplates, revealWorkspaceTemplateSecrets, updateWorkspaceTemplate, updateWorkspaceTemplateSecret, getConfiguration } from "@agents-in-the-cloud/workspace-templates";
 
 let directory: string;
 let file: string;
@@ -34,7 +33,7 @@ test("Workspace template, environment variable, and encrypted Secret mutations s
     createWorkspaceTemplateSecret(workspaceTemplate.id, { envName: "TOKEN_TWO", hostPattern: "example.com", secretValue: "two" }, file, keyFile),
   ]);
   expect((await listWorkspaceTemplates(file)).workspaceTemplates[0].name).toBe("Renamed");
-  expect(await listWorkspaceTemplateEnvironmentVariables(workspaceTemplate.id, file)).toMatchObject([{ name: "API_URL", value: "https://example.com" }]);
+  expect((await getConfiguration(workspaceTemplate.id, file)).environment).toMatchObject([{ name: "API_URL", value: "https://example.com" }]);
   expect((await revealWorkspaceTemplateSecrets(workspaceTemplate.id, file, keyFile)).map((secret) => secret.secretValue).sort()).toEqual(["one", "two"]);
 });
 
@@ -48,5 +47,5 @@ test("failed async mutations are not persisted and release the transaction", asy
   await createWorkspaceTemplateEnvironmentVariable(workspaceTemplate.id, { name: "AFTER_FAILURE", value: "saved" }, file);
 
   expect(await revealWorkspaceTemplateSecrets(workspaceTemplate.id, file, keyFile)).toMatchObject([{ envName: "TOKEN", hostPattern: "example.com", secretValue: "original" }]);
-  expect(await listWorkspaceTemplateEnvironmentVariables(workspaceTemplate.id, file)).toMatchObject([{ name: "AFTER_FAILURE", value: "saved" }]);
+  expect((await getConfiguration(workspaceTemplate.id, file)).environment).toMatchObject([{ name: "AFTER_FAILURE", value: "saved" }]);
 });
