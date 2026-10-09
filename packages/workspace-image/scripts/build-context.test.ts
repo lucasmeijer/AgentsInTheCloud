@@ -95,7 +95,9 @@ describe("workspace image layer ordering", () => {
     const { dockerfile } = await generateInCheckout();
     const moduleBlock = (name: string) => dockerfile.split(`# Module: ${name}\n`)[1]!.split("# Module:")[0]!.split("# Files independent")[0]!;
     const base = moduleBlock("base");
-    expect(base.indexOf("apt-get install")).toBeLessThan(base.indexOf("npm install -g playwright"));
+    const lastAptLayer = (block: string) => block.lastIndexOf("bash /tmp/apt-layer.sh");
+    expect(lastAptLayer(base)).toBeGreaterThan(-1);
+    expect(lastAptLayer(base)).toBeLessThan(base.indexOf("npm install -g playwright"));
     expect(base).not.toContain("      socat");
     expect(base).not.toContain("      openbox");
     expect(base).not.toContain("      tmux");
@@ -103,7 +105,8 @@ describe("workspace image layer ordering", () => {
     expect(moduleBlock("workspace-terminal")).toContain("tmux-$tmux_version.tar.gz");
     const desktop = moduleBlock("desktop");
     expect(desktop).toContain("      openbox");
-    expect(desktop.indexOf("apt-get install")).toBeLessThan(desktop.indexOf("RUN glib-compile-schemas"));
+    expect(lastAptLayer(desktop)).toBeGreaterThan(-1);
+    expect(lastAptLayer(desktop)).toBeLessThan(desktop.indexOf("RUN glib-compile-schemas"));
     expect(dockerfile.indexOf("# Module: base")).toBeLessThan(dockerfile.indexOf("# Module: vscode"));
     expect(dockerfile.indexOf("# Module: vscode")).toBeLessThan(dockerfile.indexOf("# Module: desktop"));
   });
@@ -118,6 +121,16 @@ describe("workspace image layer ordering", () => {
     expect(prefix(after.dockerfile)).toBe(prefix(before.dockerfile));
     expect(after.dockerfile.match(/      socat/g)).toHaveLength(1);
     expect(after.dockerfile).toContain("      socat \\\n      strace");
+  });
+
+  test("spreads a large module's apt install over several layers", async () => {
+    const { dockerfile, output } = await generateInCheckout();
+    const moduleBlock = (name: string) => dockerfile.split(`# Module: ${name}\n`)[1]!.split("# Module:")[0]!;
+    const layers = (name: string) => [...moduleBlock(name).matchAll(/bash \/tmp\/apt-layer.sh (\d+) (\d+) \\\n/g)].map((match) => `${match[1]}/${match[2]}`);
+    expect(layers("base")).toEqual(["1/6", "2/6", "3/6", "4/6", "5/6", "6/6"]);
+    expect(layers("desktop")).toEqual(["1/1"]);
+    expect(layers("proxy-egress")).toEqual(["1/1"]);
+    expect(await readFile(join(output, "apt-layer.sh"), "utf8")).toBe(await readFile(join(root, "packages/workspace-image/scripts/apt-layer.sh"), "utf8"));
   });
 
   test.each([

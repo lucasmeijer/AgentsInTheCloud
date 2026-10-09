@@ -45,6 +45,11 @@ const runtimeImage = (await readFile(join(packagesDir, "workspace-image/runtime-
 
 await rm(outDir, { recursive: true, force: true });
 await mkdir(join(outDir, "files"), { recursive: true });
+await cp(join(dirname(fileURLToPath(import.meta.url)), "apt-layer.sh"), join(outDir, "apt-layer.sh"));
+// A module's apt install is spread over one layer per ~10 requested packages
+// (at most 6) so it downloads in parallel; apt-layer.sh sizes each layer from
+// apt's install plan at build time.
+const aptLayers = (packages) => Math.min(6, Math.ceil(packages.length / 10));
 
 const hash = createHash("sha256");
 // v14 embeds the resulting signature as an image label.
@@ -104,7 +109,9 @@ for (const module of modules) {
   dockerfile += `# Module: ${module.name}\n`;
   if (module.aptPackages.length) {
     const aptPackages = dockerContinuationList(module.aptPackages);
-    dockerfile += `RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\\n    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\\n    apt-get update \\\n && apt-get install -y --no-install-recommends \\\n${aptPackages}\n\n`;
+    const layers = aptLayers(module.aptPackages);
+    for (let layer = 1; layer <= layers; layer++)
+      dockerfile += `RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\\n    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\\n    --mount=type=bind,source=apt-layer.sh,target=/tmp/apt-layer.sh \\\n    bash /tmp/apt-layer.sh ${layer} ${layers} \\\n${aptPackages}\n\n`;
   }
   appendCopies(module.copyInstructions);
   for (const script of module.runInstructions) dockerfile += `RUN ${dockerEscapeRun(script)}\n\n`;
