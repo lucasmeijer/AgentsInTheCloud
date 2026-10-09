@@ -10,7 +10,7 @@ export type SubscriptionUsage = {
   resets?: { available: number };
   /** Prepaid money rather than allowance windows; amounts are in currency units. */
   balance?: { currency: string; available: number; monthSpend: number };
-  windows: { limitName: string; meteredFeature: string | null; kind: "primary" | "secondary"; usedPercent: number; durationSeconds: number; resetsAt: string | null }[];
+  windows: { limitName: string; meteredFeature: string | null; kind: "primary" | "secondary"; usedPercent: number; durationSeconds: number | null; resetsAt: string | null }[];
 };
 
 /** Expected provider/authentication failures that can be shown in the usage overview. */

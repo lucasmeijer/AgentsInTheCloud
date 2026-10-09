@@ -216,6 +216,12 @@ export function createPiModelRuntime(): Promise<ModelRuntime> {
   })();
 }
 
+/** Read only after getAuth has let Pi refresh/serialize the Copilot credential. */
+export async function readGitHubCopilotUsageToken(): Promise<string | undefined> {
+  const credential = (await readJsonSettings(piAuthJsonPath()))["github-copilot"];
+  return isJsonObject(credential) && credential.type === "oauth" ? jsonString(credential.refresh) : undefined;
+}
+
 export type PiAuthPrompt = AuthPrompt;
 
 export class ProviderCatalogueRefreshError extends Error {

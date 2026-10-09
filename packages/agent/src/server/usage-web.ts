@@ -24,7 +24,8 @@ export function renderUsagePaneAction(): string {
 const number = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 1 });
 
 /** Two compact units for allowance windows, reset countdowns, and pacing gaps. */
-function usageDuration(seconds: number): string {
+function usageDuration(seconds: number | null): string {
+  if (seconds === null) return "Unknown period";
   let remaining = Math.max(0, Math.floor(seconds));
   const parts: string[] = [];
   for (const [size, suffix] of [[86400, "d"], [3600, "h"], [60, "m"], [1, "s"]] as const) {
@@ -45,7 +46,7 @@ function usagePace(seconds: number | null): string {
 
 function renderUsageWindow(paced: PacedUsageWindow): string {
   const { reported: window, timing } = paced;
-  const label = `${window.limitName} · ${usageDuration(window.durationSeconds)}`;
+  const label = window.durationSeconds === null ? window.limitName : `${window.limitName} · ${usageDuration(window.durationSeconds)}`;
   const remaining = window.resetsAt === null ? null : (new Date(window.resetsAt).getTime() - Date.now()) / 1000;
   const reset = remaining === null ? "Reset time unavailable" : remaining > 0 ? `Resets in ${usageDuration(remaining)}` : "Reset due";
   const difference = timing.paceDifferenceSeconds;
@@ -117,7 +118,7 @@ function renderUsageRings({ provider, reported, error, windows }: ProviderUsageO
     caption: usageWindowCaption(window),
     referencePercent: timing.elapsedPercent ?? 0,
     valuePercent: window.usedPercent,
-    label: `${window.limitName} · ${usageDuration(window.durationSeconds)}: ${timing.elapsedPercent === null ? "reset time unavailable" : `Time ${number(timing.elapsedPercent)}%`}, Usage ${number(window.usedPercent)}%`,
+    label: `${window.limitName} · ${usageDuration(window.durationSeconds)}: ${timing.elapsedPercent === null ? "Pacing unavailable" : `Time ${number(timing.elapsedPercent)}%`}, Usage ${number(window.usedPercent)}%`,
   })).join("") : "";
   const balance = reported?.balance && !error ? `<span class="usage-caption">${money(reported.balance.available, reported.balance.currency)} left</span>` : "";
   return `<turbo-frame class="usage-rings" id="${providerUsageFrameId("rings", provider.id, scope)}">${rings || balance || `<span class="usage-caption"${error ? ` title="${escapeHtml(error)}"` : ""}>Usage unavailable</span>`}</turbo-frame>`;
