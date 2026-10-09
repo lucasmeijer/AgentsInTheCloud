@@ -244,7 +244,7 @@ async function refreshConnectedProviderCatalogue(runtime: ModelRuntime, provider
 
 function forgetSubscriptionState(provider: string): void {
   if (provider === "anthropic") anthropicUsageSource.forget();
-  if (provider === "anthropic" || provider === "openai-codex") forgetSubscriptionInference(provider);
+  if (provider === "anthropic" || provider === "openai-codex" || provider === "github-copilot") forgetSubscriptionInference(provider);
 }
 
 export async function loginPiOAuthProvider(providerId: string, interaction: AuthInteraction): Promise<void> {

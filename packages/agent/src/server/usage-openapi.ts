@@ -9,7 +9,7 @@ const reportedUsageWindowSchema = {
   type: "object",
   properties: {
     limitName: { type: "string" }, meteredFeature: { type: ["string", "null"] }, kind: { enum: ["primary", "secondary"] },
-    usedPercent: { type: "number" }, durationSeconds: { type: ["integer", "null"], description: "Null when the provider does not report a window duration; pacing is unavailable." }, resetsAt: { type: ["string", "null"], format: "date-time", description: "Null when the provider has not reported reset timing; usage is still reported." },
+    usedPercent: { type: "number" }, durationSeconds: { type: ["integer", "null"], description: "Null when a window duration cannot be established; pacing is unavailable." }, resetsAt: { type: ["string", "null"], format: "date-time", description: "Null when the provider has not reported reset timing; usage is still reported." },
   },
 };
 const providerUsageSchema = {
@@ -39,7 +39,7 @@ export const usageOpenApiPaths = {
   "/usage": { get: {
     summary: "Inspect all connected, supported providers",
     parameters: [refreshParameter],
-    description: "JSON only; in the app, usage shows on each provider in the Models dialog (`GET /models`). Includes provider-reported subscription windows and pacing. Supports OpenAI Codex, Anthropic, xAI, Radius and GitHub Copilot subscriptions. Copilot uses the stored GitHub OAuth token to read premium-request and chat quotas; its endpoint reports no window duration, so pacing is unavailable. Anthropic requires OAuth sign-in, not an API key; its main limits come from Claude Code responses through the workspace proxy. AgentsInTheCloud asks Anthropic with a one-token message to its cheapest model only on the first read after start or a credential change, after a window resets, and on refresh. Provider failures are explicit per-provider errors.",
+    description: "JSON only; in the app, usage shows on each provider in the Models dialog (`GET /models`). Includes provider-reported subscription windows and pacing. Supports OpenAI Codex, Anthropic, xAI, Radius and GitHub Copilot subscriptions. Copilot uses the stored GitHub OAuth token to read premium-request and chat quotas; pacing uses the actual UTC calendar month ending at the reported reset. Unknown or non-calendar reset periods have no pacing estimate. Anthropic requires OAuth sign-in, not an API key; its main limits come from Claude Code responses through the workspace proxy. AgentsInTheCloud asks Anthropic with a one-token message to its cheapest model only on the first read after start or a credential change, after a window resets, and on refresh. Provider failures are explicit per-provider errors.",
     responses: jsonResponse("Usage overview", { type: "object", properties: { providers: { type: "array", items: providerUsageSchema } } }),
   } },
   "/usage/button": { get: { summary: "Usage button perimeter for the most urgent recently used subscription", responses: htmlSurfaceResponses("Server-rendered button frame; it opens the Models dialog with that provider expanded. Among subscriptions used in the 30 minutes ending at the last recorded inference, shows the active allowance projected to reach 100% soonest before its next reset, at its average consumption rate since the window began. Projections stop at the next reset; limits that will not fill before then have no projected hit before reset. Ties prefer higher usage. Green is Time beyond Usage; red is Usage beyond Time. No ring without recorded activity or an active reported limit.") } },
