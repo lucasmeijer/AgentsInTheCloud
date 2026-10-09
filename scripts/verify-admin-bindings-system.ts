@@ -9,7 +9,7 @@ import { Value } from "typebox/value";
 import { parseArgs } from "node:util";
 import { createAdminStore, adminScopes } from "../apps/web/src/server/admin/store.ts";
 
-const { values } = parseArgs({ options: { app: { type: "string", default: "agents-in-the-cloud-admin:local" }, system: { type: "string", default: "agents-in-the-cloud-system:admin-local" }, workspace: { type: "string" } } });
+const { values } = parseArgs({ options: { app: { type: "string", default: "agents-in-the-cloud-admin:local" }, system: { type: "string", default: "agents-in-the-cloud-system:admin-local" }, workspace: { type: "string" }, "release-updates": { type: "boolean", default: false } } });
 const name = `aitc-admin-integration-${crypto.randomUUID().slice(0, 8)}`;
 const volume = name;
 const fixtureApp = `${name}:app`;
@@ -90,6 +90,32 @@ try {
   assert(!JSON.stringify(globalDetail).includes("integration-only-after"), "Global inspection must not return secret values");
   assert.equal((await api(`${variablePath}/delete`, "POST", "{}")).status, 200);
   assert.equal((await api(`${secretPath}/delete`, "POST", "{}")).status, 200);
+  if (values["release-updates"]) {
+    assert.equal((await api("/settings/release-source")).status, 200);
+    assert.equal((await api("/settings/release-source", "POST", JSON.stringify({ appRepository: "https://bad.example/app", systemRepository: "ghcr.io/example/system" }))).status, 400);
+    const credentials = await api("/settings/release-registry", "POST", JSON.stringify({ username: "fixture-user", token: "fixture-token" }));
+    assert.deepEqual(credentials.body, { configured: true });
+    assert.equal(await exec("stat", "-c", "%a", "/data/supervisor/docker-auth/config.json"), "600");
+    assert.equal(await exec("stat", "-c", "%a", "/data/supervisor/docker-auth"), "700");
+    assert.equal((await api("/settings/release-registry")).body.configured, true);
+    assert.equal((await api("/settings/release-registry", "DELETE", "{}")).body.configured, false);
+    const initial = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))')).currentImage;
+    const second = `${name}:second`;
+    await run(["docker", "exec", "-i", name, "docker", "build", "-t", second, "-"], `FROM ${fixtureApp}\nLABEL org.opencontainers.image.revision="fixture-second"\n`);
+    const secondId = await exec("docker", "image", "inspect", "--format", "{{.Id}}", second);
+    assert.notEqual(secondId, initial);
+    await exec("bun", "-e", `const r=await fetch("http://127.0.0.1:3001/update",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({image:${JSON.stringify(secondId)}})});if(r.status!==202)throw new Error("Update rejected");`);
+    await until(async () => {
+      const state = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))'));
+      return state.healthy && state.currentImage === secondId && state.previousImage === initial;
+    }, "second app version is healthy with recorded rollback image");
+    assert.equal((await api("/update/rollback", "POST", "{}")).status, 202);
+    await until(async () => {
+      const state = JSON.parse(await exec("bun", "-e", 'console.log(JSON.stringify(await (await fetch("http://127.0.0.1:3001/status")).json()))'));
+      return state.healthy && state.currentImage === initial && state.previousImage === secondId;
+    }, "rollback restores the first app image");
+    console.log("PASS: release source validation, private registry credential isolation, two-version pinned app replacement and rollback");
+  }
   const cli = JSON.parse(await exec("docker", "exec", "--user", "1000:1000", "agents-in-the-cloud", "bun", "/app/apps/web/scripts/admin-bindings.ts", "show"));
   assert.equal(cli.tokens.length, 1);
   // Deliberately corrupt optional configuration, then verify real UI health after app restart.

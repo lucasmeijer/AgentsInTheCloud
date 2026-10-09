@@ -241,3 +241,43 @@ test("switching from stable to latest persists the channel and refreshes the tar
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("fork updates pin the configured app repository rather than upstream", async () => {
+  const releaseSource = { appRepository: "ghcr.io/example/fork-app", systemRepository: "ghcr.io/example/fork-system" };
+  const references: string[] = [];
+  const instance = manager({ readSource: async () => releaseSource, prepareUpdate: async reference => { references.push(reference); return { reference, imageId: "prepared" }; } });
+  await instance.initialize(context().ctx);
+  await instance.startPull();
+  expect(references).toEqual([`ghcr.io/example/fork-app@${newDigest}`]);
+  instance.snapshot().releaseSource.appRepository = "ghcr.io/other/app";
+  expect(instance.snapshot().releaseSource.appRepository).toBe(releaseSource.appRepository);
+});
+
+test("changing source persists and discards the old prepared target", async () => {
+  const saved: string[] = [];
+  const instance = manager({ writeSource: async source => { saved.push(source.appRepository); } });
+  await instance.initialize(context().ctx);
+  await instance.startPull();
+  await instance.setReleaseSource({ appRepository: "ghcr.io/example/app", systemRepository: "ghcr.io/example/system", appVersion: "v1" });
+  expect(saved).toEqual(["ghcr.io/example/app"]);
+  expect(instance.snapshot().state).toBe("available");
+  await expect(instance.restart()).rejects.toThrow("No prepared update");
+});
+
+test("JSON source and update controls return JSON without Turbo markup", async () => {
+  const instance = manager();
+  await instance.initialize(context().ctx);
+  const handler = createUpdateRouteHandler(instance);
+  for (const [path, method, body] of [
+    ["/settings/release-source", "GET", undefined],
+    ["/update/status", "GET", undefined],
+    ["/settings/release-source", "POST", JSON.stringify({ appRepository: "ghcr.io/example/app", systemRepository: "ghcr.io/example/system" })],
+    ["/settings/update-channel", "POST", JSON.stringify({ channel: "stable" })],
+    ["/update/check-now", "POST", "{}"],
+  ] as const) {
+    const url = new URL(path, "http://localhost");
+    const response = (await handler(new Request(url, { method, body, headers: { accept: "application/json", "content-type": "application/json" } }), url))!;
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+  }
+});

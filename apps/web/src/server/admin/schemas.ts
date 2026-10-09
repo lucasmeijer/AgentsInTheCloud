@@ -1,3 +1,4 @@
+import { releaseSourceSchema, registryCredentialSchema } from "@agents-in-the-cloud/shared/release-source";
 import { Type, type TSchema } from "typebox";
 import type { AdminRoute } from "./routes.ts";
 import { bindingSchema, tokenInputSchema } from "./store.ts";
@@ -15,6 +16,9 @@ export const workspaceCreateSchema = object({
 /** Runtime validation and OpenAPI share exactly the same mutation contracts. */
 export function adminInputSchema(route: AdminRoute): TSchema {
   const path = route.path;
+  if (path === "/settings/release-source") return releaseSourceSchema;
+  if (path === "/settings/release-registry" && route.method === "POST") return registryCredentialSchema;
+  if (path === "/settings/update-channel") return object({ channel: Type.Union([Type.Literal("stable"), Type.Literal("latest")]) });
   if (path === "/workspaces" && route.method === "POST") return workspaceCreateSchema;
   if (path === "/workspace-templates" && route.method === "POST") return object({ gitUrl: string });
   if (path === "/workspace-templates/{workspaceTemplateId}" && route.method === "POST") return object({ name: string, gitUrl: string, swatchColor: Type.Optional(Type.String({ pattern: "^(#[0-9a-fA-F]{6})?$" })) });

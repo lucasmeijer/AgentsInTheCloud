@@ -139,6 +139,37 @@ For reproducible integration verification on a development machine with Docker, 
 
 Template environment changes still apply to new containers. Existing secret placeholders resolve to rotated credentials on subsequent proxied requests; existing connections may need reconnecting.
 
+## Fork release sources (development branch)
+
+The release-source work on `feature/private-fork-upgrade-channels` is incomplete. App updates and System-owned preparation support the configuration below, but the host installer does not yet consume the selected System repository. Do not use the current installer to update a configured fork: it still selects the upstream System image. Fork publication and upstream-sync CI are also pending.
+
+System-managed installations store release selection in `/data/app/update.json`. With no `releaseSource`, existing upstream Stable/Latest behaviour remains unchanged. A configured source never falls back to upstream. Invalid settings fail before pulling an image.
+
+`security`-scoped admin operations:
+
+- `GET/POST /settings/release-source`: read or replace both GHCR repositories and optional pins.
+- `POST /settings/update-channel`: select `{"channel":"stable"}` or `{"channel":"latest"}` for unpinned components.
+- `GET/POST/DELETE /settings/release-registry`: inspect credential availability, store package read credentials, or remove them. POST takes `{"username":"github-user","token":"package-read-token"}`; no read operation returns credentials.
+- `GET /update/status`: inspect app update state.
+- `POST /update/check-now`, `/update/start`, `/update/restart`: check, prepare, then restart the app. Send `{}` for these mutations.
+- `POST /update/rollback`: restart the previous locally retained app image. Its workspace dependencies must still be present. This does not roll back stored app data or System.
+
+A release-source body contains:
+
+```json
+{
+  "appRepository": "ghcr.io/example/agents-in-the-cloud",
+  "systemRepository": "ghcr.io/example/agents-in-the-cloud-system",
+  "appVersion": "v1.2.3"
+}
+```
+
+`appVersion` and `systemVersion` accept a tag or `sha256:` digest. Omit a version to follow the selected channel. Source changes discard a prepared app update. System resolves the app and its declared dependency metadata before pulling immutable references; it retains the previous app image before replacement for recovery.
+
+Private GHCR credentials live in System's `/data/supervisor/docker-auth/config.json` (mode `0600`, directory `0700`), outside the app/workspace bind mounts. Registry token requests cannot redirect. Recognised signed blob-storage redirects receive no registry bearer token. Host Docker authentication for future System replacement still needs installer integration.
+
+Verification: `bun run check`, focused server tests, and `bun scripts/verify-admin-bindings-system.ts --app LOCAL_APP --system LOCAL_SYSTEM --release-updates`. The disposable integration checks TLS admin access, credential isolation, and two-version app replacement/rollback. Real private GHCR publication and authenticated private image downloads have not been tested.
+
 ## Present a workspace
 
 Workspace, Agent, and Work-view destinations are browser-navigable surfaces:

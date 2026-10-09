@@ -6,7 +6,9 @@ import { escapeHtml } from "../../../packages/shared/src/html.ts";
 import { startLocalIngress } from "./local-ingress.ts";
 import { installationStatus, type Activity } from "./installation-status.ts";
 import { PullProgress } from "./pull-progress.ts";
-import { prepareChannelUpdate } from "./channel-update.ts";
+import { readReleaseSettings, releaseReference } from "../../../packages/shared/src/release-source.ts";
+import { createReleaseRegistry, releaseDockerConfig } from "./release-registry.ts";
+import { createReleaseRequests, prepareRelease } from "./releases.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { installWorkspaceFirewall, resolverAddresses } from "./firewall.ts";
@@ -48,7 +50,7 @@ await Promise.all(
 await mkdir("/run/agents-in-the-cloud-system", { recursive: true });
 await writeFile("/run/agents-in-the-cloud-system/access-v1", "");
 // Retain the serialized accessMode field and external access API spelling.
-type State = { accessMode?: "localhost" | "tailscale"; localPort?: number; currentImage?: string; runningContainers?: string[]; uninstall?: UninstallState };
+type State = { accessMode?: "localhost" | "tailscale"; localPort?: number; currentImage?: string; previousImage?: string; runningContainers?: string[]; uninstall?: UninstallState };
 const persisted: State = (await Bun.file(`${stateDir}/state.json`).exists())
   ? JSON.parse(await readFile(`${stateDir}/state.json`, "utf8"))
   : {};
@@ -193,7 +195,7 @@ async function pullImage(reference: string, description: string) {
   const progress = new PullProgress();
   stage(description);
   try {
-    await command(["docker", "pull", reference], (chunk) => {
+    await command(["docker", "--config", releaseDockerConfig, "pull", reference], (chunk) => {
       const layers = progress.push(chunk);
       activity = { description: layers ? `${description} · ${layers.completed}/${layers.total} layers ready` : description };
       log(chunk);
@@ -220,6 +222,25 @@ async function prepareImage(reference: string, options: { pullApp: boolean; pull
   }
   return image.Id;
 }
+const releaseRegistry = createReleaseRegistry();
+async function prepareSelectedRelease(reference: string) {
+  return prepareRelease(reference, {
+    fetcher: await releaseRegistry.fetcher(),
+    pull: reference => pullImage(reference, "Downloading release image"),
+    tag: async (pinned, alias) => { await docker("tag", pinned, alias); },
+    inspect: reference => docker("image", "inspect", "--format", "{{.Id}}", reference),
+  });
+}
+const releaseRequests = createReleaseRequests({
+  settingsPath: "/data/app/update.json", registry: releaseRegistry,
+  busy: () => busy || stopping || uninstalling,
+  prepare: async reference => {
+    if (busy || stopping || uninstalling) throw new Error("An app operation is already running");
+    busy = true;
+    try { return await prepareSelectedRelease(reference); }
+    finally { busy = false; }
+  },
+});
 let routing: Promise<void> = Promise.resolve();
 let appliedRoute = "";
 function accessOrigin(): string | undefined {
@@ -264,18 +285,19 @@ async function replace(request: Replacement) {
     await configureRoutes(3001);
     stage("Preparing AgentsInTheCloud");
     const reference = "channel" in request
-      ? await prepareChannelUpdate("/data/app/update.json", {
-          pull: (reference) => pullImage(reference, "Downloading AgentsInTheCloud from the selected channel"),
-          inspect: (reference) => docker("image", "inspect", "--format", "{{.Id}}", reference),
-        })
+      ? (await prepareSelectedRelease(releaseReference(await readReleaseSettings("/data/app/update.json"), "app"))).imageId
       : request.image;
     candidate = reference;
     const exact = await prepareImage(reference, {
       pullApp: !("channel" in request) && request.pull,
-      pullDependencies: "channel" in request || request.pull,
+      pullDependencies: !("channel" in request) && request.pull,
     });
     candidate = exact;
     if (stopping) return;
+    if (persisted.currentImage && persisted.currentImage !== exact) {
+      persisted.previousImage = persisted.currentImage;
+      await persist();
+    }
     stage("Stopping AgentsInTheCloud", 1);
     logProcess?.kill();
     logProcess = undefined;
@@ -393,6 +415,11 @@ const server = Bun.serve({
   idleTimeout: 0,
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/release/")) {
+      if (request.method !== "GET" && !allowedOrigin(request)) return new Response("Forbidden", { status: 403 });
+      const response = await releaseRequests(request);
+      if (response) return response;
+    }
     if (url.pathname === "/access") {
       if (request.method === "POST") {
         if (!allowedOrigin(request)) return new Response("Forbidden", { status: 403 });
@@ -421,6 +448,7 @@ const server = Bun.serve({
         busy,
         candidate,
         currentImage: persisted.currentImage,
+        previousImage: persisted.previousImage,
         uninstall: persisted.uninstall,
         tailnetHost,
         connectionState,
@@ -488,6 +516,15 @@ const server = Bun.serve({
           request.headers.get("origin") ?? url.origin,
           303,
         );
+      }
+      if (url.pathname === "/rollback") {
+        if (!persisted.previousImage) return Response.json({ error: "No previous app image is recorded" }, { status: 409 });
+        busy = true;
+        try { await prepareImage(persisted.previousImage, { pullApp: false, pullDependencies: false }); }
+        finally { busy = false; }
+        operation = "update";
+        activeOperation = replace({ image: persisted.previousImage, pull: false });
+        return Response.json({ accepted: true }, { status: 202 });
       }
       if (url.pathname === "/update-channel") {
         operation = "update";

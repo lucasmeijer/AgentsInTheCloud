@@ -56,22 +56,43 @@ export function parseWwwAuthenticate(header: string): RegistryAuth | undefined {
   return out.realm ? out : undefined;
 }
 
+async function fetchRegistryResponse(url: string, init: RequestInit, fetcher: HttpFetcher): Promise<Response> {
+  const response = await fetcher(url, { ...init, redirect: "manual" });
+  if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+  const original = new URL(url);
+  const location = response.headers.get("location");
+  if (!location || !original.pathname.includes("/blobs/")) throw new Error("Unexpected registry redirect");
+  const destination = new URL(location, original);
+  const allowed = original.hostname === "ghcr.io"
+    ? destination.hostname === "pkg-containers.githubusercontent.com"
+    : original.hostname === "registry-1.docker.io" && (destination.hostname === "production.cloudflare.docker.com" || destination.hostname.endsWith(".cloudflarestorage.com"));
+  if (!allowed || destination.protocol !== "https:" || destination.username || destination.password || destination.port) throw new Error("Unsafe registry blob redirect");
+  // Signed blob storage redirects are normal. Never forward the registry bearer token to storage.
+  const headers = new Headers(init.headers);
+  headers.delete("authorization");
+  try { return await fetcher(destination, { ...init, headers, redirect: "error" }); }
+  catch { throw new Error("Registry blob download failed"); }
+}
+
 async function authFetch(url: string, init: RequestInit = {}, fetcher: HttpFetcher = fetch): Promise<Response> {
-  const response = await fetcher(url, init);
+  const response = await fetchRegistryResponse(url, init, fetcher);
   if (response.status !== 401) return response;
   const auth = parseWwwAuthenticate(response.headers.get("www-authenticate") ?? "");
   if (!auth) return response;
   const tokenUrl = new URL(auth.realm);
+  const registryUrl = new URL(url);
+  const expectedOrigin = registryUrl.hostname === "registry-1.docker.io" ? "https://auth.docker.io" : registryUrl.origin;
+  if (tokenUrl.origin !== expectedOrigin || tokenUrl.pathname !== "/token" || tokenUrl.username || tokenUrl.password) throw new Error("Unsafe registry authentication challenge");
   if (auth.service) tokenUrl.searchParams.set("service", auth.service);
   if (auth.scope) tokenUrl.searchParams.set("scope", auth.scope);
-  const tokenResponse = await fetcher(tokenUrl, { headers: { accept: "application/json" } });
+  const tokenResponse = await fetcher(tokenUrl, { headers: { accept: "application/json" }, redirect: "error" });
   if (!tokenResponse.ok) throw new Error(`registry token request failed: ${tokenResponse.status}`);
   const tokenJson = Value.Parse(registryTokenResponseSchema, await tokenResponse.json());
   const token = tokenJson.token ?? tokenJson.access_token;
   if (!token) throw new Error("registry token response did not include a token");
   const headers = new Headers(init.headers);
   headers.set("authorization", `Bearer ${token}`);
-  return await fetcher(url, { ...init, headers });
+  return await fetchRegistryResponse(url, { ...init, headers }, fetcher);
 }
 
 function currentArch(): string {

@@ -39,6 +39,15 @@ route("GET", "/admin/tokens", ["security"], "List token metadata (never bearer s
 route("POST", "/admin/tokens", ["security"], "Issue an admin token; bearer secret returned once");
 route("DELETE", "/admin/tokens/{tokenId}", ["security"], "Revoke an admin token immediately");
 
+route("GET", "/settings/release-source", ["security"], "Read the installation release repositories and pins");
+route("POST", "/settings/release-source", ["security"], "Configure app and System release repositories and pins");
+route("POST", "/settings/update-channel", ["security"], "Select Stable or Latest for unpinned releases");
+route("GET", "/settings/release-registry", ["security"], "Read registry credential availability (never credentials)");
+route("POST", "/settings/release-registry", ["security"], "Store private GHCR package read credentials in System");
+route("DELETE", "/settings/release-registry", ["security"], "Remove private GHCR credentials");
+route("GET", "/update/status", ["security"], "Read app update status");
+for (const suffix of ["check-now", "start", "restart", "rollback"]) route("POST", `/update/${suffix}`, ["security"], "Control the configured app update");
+
 export function matchAdminRoute(method: string, pathname: string): AdminRoute | undefined {
   if (["/workspaces/new", "/workspace-templates/new", "/workspace-templates/github-search"].includes(pathname)) return undefined;
   const segments = pathname.split("/");
