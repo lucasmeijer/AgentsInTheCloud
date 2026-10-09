@@ -4,10 +4,12 @@ import { strict as assert } from "node:assert";
 import { mkdtemp, rm, readFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
 import { parseArgs } from "node:util";
 import { createAdminStore, adminScopes } from "../apps/web/src/server/admin/store.ts";
 
-const { values } = parseArgs({ options: { app: { type: "string", default: "agents-in-the-cloud-admin:local" }, system: { type: "string", default: "agents-in-the-cloud-system:admin-local" }, workspace: { type: "string", default: "agents-in-the-cloud-admin-workspace:ec5a028713912422" } } });
+const { values } = parseArgs({ options: { app: { type: "string", default: "agents-in-the-cloud-admin:local" }, system: { type: "string", default: "agents-in-the-cloud-system:admin-local" }, workspace: { type: "string" } } });
 const name = `aitc-admin-integration-${crypto.randomUUID().slice(0, 8)}`;
 const volume = name;
 const fixtureApp = `${name}:app`;
@@ -27,6 +29,9 @@ async function until(check: () => Promise<boolean>, label: string, milliseconds 
   throw new Error(`Timed out: ${label}`);
 }
 try {
+  const preloads: unknown = JSON.parse(await run(["docker", "image", "inspect", "--format", '{{index .Config.Labels "eagerly-preload"}}', values.app!]));
+  if (!Value.Check(Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }), preloads)) throw new Error("App image must declare its baked workspace image, or use an image built by this repository");
+  const workspaceImage = values.workspace ?? preloads[0]!;
   await run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(directory, "key.pem"), "-out", join(directory, "cert.pem"), "-days", "1", "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1"]);
   await chmod(join(directory, "key.pem"), 0o600);
   const store = createAdminStore(join(directory, "admin-bindings.json"));
@@ -36,7 +41,7 @@ try {
   // Start only dockerd for preloading, as in the existing System bootstrap test.
   await run(["docker", "run", "-d", "--name", name, "--privileged", "--cgroupns=host", "--tmpfs", "/run", "--mount", `source=${volume},target=/data`, "--entrypoint", "/usr/local/bin/agents-in-the-cloud-dockerd", values.system!, "dockerd"]);
   await until(async () => (await exec("docker", "info").then(() => true, () => false)), "inner Docker daemon");
-  const save = Bun.spawn(["docker", "save", values.app!, values.workspace!], { stdout: "pipe", stderr: "pipe" });
+  const save = Bun.spawn(["docker", "save", values.app!, workspaceImage], { stdout: "pipe", stderr: "pipe" });
   const load = Bun.spawn(["docker", "exec", "-i", name, "docker", "load"], { stdin: save.stdout, stdout: "pipe", stderr: "pipe" });
   const outputs = await Promise.all([save.exited, load.exited, new Response(save.stderr).text(), new Response(load.stderr).text(), new Response(load.stdout).text()]);
   assert.equal(outputs[0], 0, "image save"); assert.equal(outputs[1], 0, "inner image load");
@@ -70,6 +75,21 @@ try {
   assert.equal(status.body.connectionState, "Stopped");
   assert.equal((await api("/host/sample")).status, 200);
   assert.equal((await api("/host/terminals")).status, 404);
+  const globalBase = "/global-workspace-settings";
+  assert.equal((await api(globalBase)).status, 200);
+  const variable = await api(`${globalBase}/environment`, "POST", JSON.stringify({ name: "INTEGRATION_REGION", value: "before" }));
+  assert.equal(variable.status, 200);
+  const variablePath = `${globalBase}/environment/${variable.body.environmentVariable.id}`;
+  assert.equal((await api(variablePath, "POST", JSON.stringify({ name: "INTEGRATION_REGION", value: "after" }))).status, 200);
+  const sharedSecret = await api(`${globalBase}/secrets`, "POST", JSON.stringify({ envName: "INTEGRATION_TOKEN", hostPattern: "api.example.com", secretValue: "integration-only-before" }));
+  assert.equal(sharedSecret.status, 200);
+  const secretPath = `${globalBase}/secrets/${sharedSecret.body.secret.id}`;
+  assert.equal((await api(secretPath, "POST", JSON.stringify({ envName: "INTEGRATION_TOKEN", hostPattern: "api.example.com", secretValue: "integration-only-after" }))).status, 200);
+  const globalDetail = await api(globalBase);
+  assert.equal(globalDetail.body.globalWorkspaceSettings.environment[0].value, "after");
+  assert(!JSON.stringify(globalDetail).includes("integration-only-after"), "Global inspection must not return secret values");
+  assert.equal((await api(`${variablePath}/delete`, "POST", "{}")).status, 200);
+  assert.equal((await api(`${secretPath}/delete`, "POST", "{}")).status, 200);
   const cli = JSON.parse(await exec("docker", "exec", "--user", "1000:1000", "agents-in-the-cloud", "bun", "/app/apps/web/scripts/admin-bindings.ts", "show"));
   assert.equal(cli.tokens.length, 1);
   // Deliberately corrupt optional configuration, then verify real UI health after app restart.
@@ -78,7 +98,7 @@ try {
   await until(async () => (await exec("bun", "-e", 'const r=await fetch("http://127.0.0.1:3000/up");process.exit(r.status===200?0:1)').then(() => true, () => false)), "UI survives corrupt optional admin configuration");
   await run(["docker", "stop", "--time", "60", name]);
   assert.equal(await run(["docker", "inspect", "--format", mappingTemplate, name]), mapping, "persistent mappings survive stopped System");
-  console.log("PASS: real System, TLS publication, separate client container, nested CLI, access/status/diagnostics, startup isolation, stopped-container publication persistence");
+  console.log("PASS: real System, TLS publication, separate client container, nested CLI, access/status/diagnostics, global settings JSON CRUD, startup isolation, stopped-container publication persistence");
 } finally {
   await run(["docker", "rm", "-f", name]).catch(() => {});
   await run(["docker", "volume", "rm", volume]).catch(() => {});

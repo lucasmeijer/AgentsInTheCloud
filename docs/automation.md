@@ -99,16 +99,31 @@ Send `Content-Type: application/json` for all mutations, including `{}` for oper
 
 | Scope | Operations |
 | --- | --- |
-| `configuration` | Template creation/update/deletion, environment variables, preload images |
-| `secrets` | Template secret creation/update/deletion |
+| `configuration` | Template creation/update/deletion and preload images; template and global environment variables |
+| `secrets` | Template and global secret creation/update/deletion |
 | `workspaces` | List/inspect/create/rename/park/unpark/delete, provisioning recovery, warning dismissal |
 | `workspaces:force-delete` | Additional permission for explicit forced deletion; also requires `workspaces` |
 | `host:read` | Host availability, bounded diagnostic samples and System status; no terminals or raw supervisor logs |
-| `security` | Privileged mode, credential seeding, Dockerfiles, SSH keys/trust, System access mode, admin binding/token management |
+| `security` | Privileged mode, credential seeding, Dockerfiles, template/global SSH keys and trust, System access mode, admin binding/token management |
 
-Template configuration reads are shared by `configuration`, `secrets`, `security` and `workspaces` tokens and include environment values, never plaintext managed secrets/private keys. Changing an existing configured secret's environment name, placeholder, host destination or path policy requires a nonempty `secretValue` to be supplied again, atomically replacing the value; otherwise the operation returns `409 workspace_template_secret_routing_changed` without altering storage. Annotation-only edits and rotation at the same destination do not require knowledge of the old value. These restrictions also apply to the normal UI's secret edits. A supplied replacement may differ from the old value: this prevents rerouting an unknown existing credential, not authorized replacement of it.
+Template and global configuration reads are shared by `configuration`, `secrets`, `security` and `workspaces` tokens and include environment values, never plaintext managed secrets/private keys. Changing an existing configured secret's environment name, placeholder, host destination or path policy requires a nonempty `secretValue` to be supplied again, atomically replacing the value; otherwise the operation returns `409 workspace_template_secret_routing_changed` without altering storage. Annotation-only edits and rotation at the same destination do not require knowledge of the old value. These restrictions also apply to the normal UI's secret edits. A supplied replacement may differ from the old value: this prevents rerouting an unknown existing credential, not authorized replacement of it.
 
 `security` remains administrative power: it can mint any scopes and enable privileged containers. Scope separation does not sandbox repository setup, Dockerfiles or code run during workspace creation. Do not give lifecycle/configuration tokens to parties who must not launch repository code.
+
+Shared workspace settings are also available on admin listeners under `/global-workspace-settings`:
+
+| Method | Path suffix | Permission |
+| --- | --- | --- |
+| GET | (none) | Any of `configuration`, `secrets`, `security`, `workspaces` |
+| POST | `/environment`, `/environment/{variableId}`, `/environment/{variableId}/delete` | `configuration` |
+| POST | `/secrets`, `/secrets/{secretId}`, `/secrets/{secretId}/delete` | `secrets` |
+| POST | `/ssh-keys`, `/ssh-keys/{keyId}`, `/ssh-keys/{keyId}/delete` | `security` |
+| GET | `/ssh-keys/{keyId}/public-key`, `/ssh-known-hosts` | `security` |
+| POST | `/ssh-known-hosts` | `security` |
+
+Use the same JSON bodies as the corresponding template routes. A GET on the base returns `{ "globalWorkspaceSettings": { "environment": [...], "secrets": [...], "sshKeys": [...], "sshKnownHosts": "..." } }`; use those record IDs to update/delete entries. This read includes environment values and SSH/secret metadata, never private keys or secret values. UI editor paths and `viewTemplate` query parameters are not part of the admin API. Global Dockerfiles, privileged mode, image preloads and credential seeding are deliberately not exposed: upstream defines these per template, not globally.
+
+These settings include empty/non-template workspaces. Template-local environment variables and secrets override global entries with the same name; rotating a global secret does not overwrite such overrides. Global secret rotation affects subsequent proxied requests from existing workspaces, and global SSH keys are authorised live. Environment variables and trusted SSH server configuration are applied during workspace preparation; ordinary updates do not rewrite existing container environments. For a bulk migration, inspect global settings, update records by ID, then separately create/retire workspaces as required. There is no atomic bulk migration operation, and deleting a template-local entry reveals any inherited global value; deleting a global entry leaves template-local entries unchanged.
 
 Additional operations: `GET/PUT /admin/bindings`, `GET/POST /admin/tokens`, `DELETE /admin/tokens/{tokenId}`, `GET /host/status`, `GET/POST /settings/access`. Token issuance returns `{ token, secret }` once; revocation requires `{}`. System access reads/changes require `security` and return `authUrl` when Tailscale sign-in is needed. Treat that URL as sensitive; open it manually and poll access status to complete login. `host:read` status never returns it or raw logs. Standalone instances return `503` for System-only operations. Diagnostic probes are read-only and bounded, but their output is operationally sensitive.
 

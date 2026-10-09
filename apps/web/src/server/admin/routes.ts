@@ -12,11 +12,17 @@ route("POST", "/workspace-templates", ["configuration"]);
 const template = "/workspace-templates/{workspaceTemplateId}";
 route("GET", template, discovery);
 route("POST", template, ["configuration"]);
-for (const suffix of ["delete", "environment", "environment/{variableId}", "environment/{variableId}/delete", "preload-images"]) route("POST", `${template}/${suffix}`, ["configuration"]);
-for (const suffix of ["secrets", "secrets/{secretId}", "secrets/{secretId}/delete"]) route("POST", `${template}/${suffix}`, ["secrets"]);
-for (const suffix of ["privileged", "seed-config", "dockerfile", "ssh-known-hosts", "ssh-keys", "ssh-keys/{keyId}", "ssh-keys/{keyId}/delete"]) route("POST", `${template}/${suffix}`, ["security"]);
-route("GET", `${template}/ssh-known-hosts`, ["security"]);
-route("GET", `${template}/ssh-keys/{keyId}/public-key`, ["security"]);
+const globalSettings = "/global-workspace-settings";
+route("GET", globalSettings, discovery, "Inspect shared workspace environment, secret metadata and SSH configuration");
+for (const prefix of [template, globalSettings]) {
+  for (const suffix of ["environment", "environment/{variableId}", "environment/{variableId}/delete"]) route("POST", `${prefix}/${suffix}`, ["configuration"]);
+  for (const suffix of ["secrets", "secrets/{secretId}", "secrets/{secretId}/delete"]) route("POST", `${prefix}/${suffix}`, ["secrets"]);
+  for (const suffix of ["ssh-known-hosts", "ssh-keys", "ssh-keys/{keyId}", "ssh-keys/{keyId}/delete"]) route("POST", `${prefix}/${suffix}`, ["security"], `Manage ${prefix === globalSettings ? "shared" : "template"} SSH configuration`);
+  route("GET", `${prefix}/ssh-known-hosts`, ["security"]);
+  route("GET", `${prefix}/ssh-keys/{keyId}/public-key`, ["security"]);
+}
+for (const suffix of ["delete", "preload-images"]) route("POST", `${template}/${suffix}`, ["configuration"]);
+for (const suffix of ["privileged", "seed-config", "dockerfile"]) route("POST", `${template}/${suffix}`, ["security"]);
 route("GET", "/workspaces", ["workspaces"]);
 route("POST", "/workspaces", ["workspaces"]);
 route("GET", "/workspaces/{id}", ["workspaces"]);
