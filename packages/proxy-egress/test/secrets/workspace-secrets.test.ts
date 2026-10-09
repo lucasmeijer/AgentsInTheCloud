@@ -136,7 +136,7 @@ describe("workspace secrets", () => {
     const custom = await createWorkspaceTemplateSecret(workspaceTemplate.id, { envName: "CUSTOM", hostPattern: "api.example.com", secretValue: "custom-credential", allowInPath: true });
     const customRequest = () => new Request("https://api.example.com/AGENTSINTHECLOUD_PROXY_READY_CUSTOM");
     expect((await (await load()).hooks.onRequest(customRequest())).url).toBe("https://api.example.com/custom-credential");
-    await updateWorkspaceTemplateSecret(workspaceTemplate.id, custom.id, { envName: "CUSTOM", hostPattern: "api.example.com", allowInPath: false });
+    await updateWorkspaceTemplateSecret(workspaceTemplate.id, custom.id, { envName: "CUSTOM", hostPattern: "api.example.com", allowInPath: false, secretValue: "custom-credential" });
     expect((await (await load()).hooks.onRequest(customRequest())).url).toBe(customRequest().url);
   });
 

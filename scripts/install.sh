@@ -7,6 +7,8 @@ action=""
 uninstall_requested=0
 access_mode=""
 admin_publish=()
+admin_publish_disabled=0
+admin_allow_all=0
 system_name=agents-in-the-cloud-system
 
 # Keep subprocess output available without turning the welcome into a log tail.
@@ -121,6 +123,8 @@ Update also installs the newest AgentsInTheCloud app on the installation's selec
   --app-image REF      First-install app image (default: ghcr.io/lucasmeijer/agents-in-the-cloud:latest)
   --access-mode MODE  localhost or tailscale (default selected for this machine)
   --admin-publish IP:HOST_PORT:ADMIN_PORT  Publish an admin listener (repeatable; TLS/token setup separate)
+  --no-admin-publish   Remove all admin port publications on install/update
+  --allow-admin-all-interfaces  Explicitly allow 0.0.0.0 admin publication (all host interfaces)
   --action ACTION     install, update, connect, or open
                       connect enables Tailscale without replacing an existing installation
   --uninstall         Permanently delete installation data (also supports Atelier System)
@@ -145,6 +149,8 @@ while [ "$#" -gt 0 ]; do
     --admin-publish)
       [ "$#" -ge 2 ] && [ -n "$2" ] || fail "$1 requires IP:HOST_PORT:ADMIN_PORT"
       admin_publish+=("$2"); shift 2 ;;
+    --no-admin-publish) admin_publish_disabled=1; shift ;;
+    --allow-admin-all-interfaces) admin_allow_all=1; shift ;;
     --uninstall) uninstall_requested=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) fail "unknown option: $1" ;;
@@ -168,7 +174,14 @@ validate_admin_publish() {
   case "$container_port" in 2999|3000|3001|3080|24800) fail "Cannot publish an internal management or gateway port as an admin listener" ;; esac
   [ "$container_port" -lt 41000 ] || [ "$container_port" -gt 41999 ] || fail "Cannot publish a workspace preview port as an admin listener"
 }
-for mapping in "${admin_publish[@]}"; do validate_admin_publish "$mapping"; done
+[ "$admin_publish_disabled" -eq 0 ] || [ "${#admin_publish[@]}" -eq 0 ] || fail "--no-admin-publish cannot be combined with --admin-publish"
+for mapping in "${admin_publish[@]}"; do
+  validate_admin_publish "$mapping"
+  if [[ "$mapping" == 0.0.0.0:* ]]; then
+    [ "$admin_allow_all" -eq 1 ] || fail "0.0.0.0 exposes all host interfaces; requires --allow-admin-all-interfaces"
+    printf 'Warning: admin publication covers all interfaces, possibly public. Docker publication may bypass host firewall rules.\n' >&2
+  fi
+done
 # stdin may carry the script itself (curl | bash). With sudo's use_pty option,
 # /dev/tty is sudo's relay PTY and receives no input when sudo itself was piped.
 # SUDO_TTY names the caller's terminal, which remains available for prompts.
@@ -568,6 +581,10 @@ if [ -z "$action" ]; then
   case "$action" in connect|update|open) ;; *) fail "unknown action: $action" ;; esac
 fi
 
+if [ "${#admin_publish[@]}" -gt 0 ] || [ "$admin_publish_disabled" -eq 1 ] || [ "$admin_allow_all" -eq 1 ]; then
+  case "$action" in install|update) ;; *) fail "Admin publication options require --action install or update; Docker ports require container replacement" ;; esac
+fi
+
 case "$action" in
   install|update)
     if [ "$installed" -eq 1 ]; then
@@ -592,8 +609,8 @@ case "$action" in
       case "${answer:-1}" in 1) ;; 2) access_mode="$alternate_mode" ;; *) fail "choose 1 or 2" ;; esac
     fi
     # Docker port publication is fixed at container creation. Preserve admin mappings on update.
-    if [ "$installed" -eq 1 ] && [ "${#admin_publish[@]}" -eq 0 ]; then
-      saved_admin_publish="$(docker inspect --format '{{range $port, $bindings := .NetworkSettings.Ports}}{{if ne $port "3080/tcp"}}{{range $bindings}}{{.HostIp}}:{{.HostPort}}:{{$port}}{{println}}{{end}}{{end}}{{end}}' "$system_name")"
+    if [ "$installed" -eq 1 ] && [ "${#admin_publish[@]}" -eq 0 ] && [ "$admin_publish_disabled" -eq 0 ]; then
+      saved_admin_publish="$(docker inspect --format '{{range $port, $bindings := .HostConfig.PortBindings}}{{if ne $port "3080/tcp"}}{{range $bindings}}{{.HostIp}}:{{.HostPort}}:{{$port}}{{println}}{{end}}{{end}}{{end}}' "$system_name")"
       while IFS= read -r mapping; do
         [[ "$mapping" == */tcp ]] || continue
         mapping="${mapping%/tcp}"
@@ -623,7 +640,7 @@ case "$action" in
   open) ;;
 esac
 if [ "$action" = install ] || [ "$action" = update ] || [ "$action" = connect ] || [ -n "$access_mode" ]; then
-  local_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "3080/tcp") 0).HostPort}}' "$system_name")"
+  local_port="$(docker inspect --format '{{(index (index .HostConfig.PortBindings "3080/tcp") 0).HostPort}}' "$system_name")"
   for ((attempt=0; attempt<60; attempt++)); do
     check_system_running
     if docker exec "$system_name" bun -e '

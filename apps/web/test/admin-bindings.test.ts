@@ -162,10 +162,10 @@ describe("admin request boundary", () => {
     await handler(request("/workspace-templates/one/secrets?token=query-private", "POST", '{"secretValue":"body-private"}'), "127.0.0.1");
     const audit = await readFile(auditPath, "utf8");
     for (const value of [issued.secret, "body-private", "query-private"]) expect(audit).not.toContain(value);
-    expect(JSON.parse(audit).operation).toBe("/workspace-templates/{workspaceTemplateId}/secrets");
+    expect(JSON.parse(audit.trim().split("\n").at(-1)!).operation).toBe("/workspace-templates/{workspaceTemplateId}/secrets");
     expect((await stat(auditPath)).mode & 0o777).toBe(0o600);
   }));
-  test("System bridge is narrow and strips logs and auth URLs", () => fixture(async ({ store, auditPath, request }) => {
+  test("System bridge strips logs but exposes sign-in URL only to security scope", () => fixture(async ({ store, auditPath, request }) => {
     const calls: string[] = [];
     const handler = createAdminHandler({ store, auditPath, app: { fetch: async () => Response.json({}) }, systemAvailable: () => true, systemFetch: async (path, req) => {
       calls.push(path);
@@ -174,7 +174,9 @@ describe("admin request boundary", () => {
     } });
     const status = await (await handler(request("/host/status"))).json();
     expect(status).toEqual({ healthy: true, busy: false });
-    expect((await handler(request("/settings/access", "POST", '{"mode":"localhost"}'))).status).toBe(200);
+    const access = await handler(request("/settings/access", "POST", '{"mode":"localhost"}'));
+    expect(access.status).toBe(200);
+    expect((await access.json()).authUrl).toBe("private");
     expect((await handler(request("/settings/access", "POST", '{"localPort":3000}'))).status).toBe(400);
     expect(calls).toEqual(["/status", "/access"]);
   }));

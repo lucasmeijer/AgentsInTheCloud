@@ -423,6 +423,8 @@ const server = Bun.serve({
         currentImage: persisted.currentImage,
         uninstall: persisted.uninstall,
         tailnetHost,
+        connectionState,
+        localOrigin: persisted.localPort ? `http://agents-in-the-cloud.localhost:${persisted.localPort}` : undefined,
         logs,
       });
     }

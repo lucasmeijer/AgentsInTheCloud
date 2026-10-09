@@ -1,9 +1,11 @@
 import { getAgentsInTheCloudRuntimeContext, isJsonObject } from "@agents-in-the-cloud/core";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { createAdminStore, publicToken } from "../src/server/admin/store.ts";
 
 export async function adminBindingsCommand(args: string[]) {
+  if (existsSync("/run/agents-in-the-cloud-system/access-v1") && process.getuid?.() !== 1000) throw new Error("Run the admin CLI as UID/GID 1000:1000 in the System app container to avoid unreadable root-owned configuration");
   const { positionals, values } = parseArgs({ args, allowPositionals: true, options: { "data-dir": { type: "string" }, file: { type: "string" } } });
   const [command, id] = positionals;
   if (positionals.length > (command === "revoke" ? 2 : 1)) throw new Error("Unexpected arguments");

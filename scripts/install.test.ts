@@ -503,3 +503,33 @@ test("updates retain previously published admin ports", () => {
   expect(result.status).toBe(0);
   expect(result.output).toContain("--publish 192.168.1.10:3443:3443");
 });
+
+test("admin publication removal skips saved mappings on update", () => {
+  const result = run({ installed: true, adminMappings: "192.168.1.10:3443:3443/tcp" }, ["--action", "update", "--no-admin-publish"]);
+  expect(result.status).toBe(0);
+  expect(result.output).not.toContain("--publish 192.168.1.10:3443:3443");
+});
+test("publication persistence reads Docker HostConfig, including stopped System", () => {
+  expect(installer).toContain(".HostConfig.PortBindings");
+  expect(installer).not.toContain(".NetworkSettings.Ports");
+  const result = run({ installed: true, initiallyStopped: true, adminMappings: "192.168.1.10:3443:3443/tcp" }, ["--action", "update"]);
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("--publish 192.168.1.10:3443:3443");
+});
+test("publication flags cannot be silently ignored on open or connect", () => {
+  for (const action of ["open", "connect"]) {
+    const result = run({ installed: true }, ["--action", action, "--admin-publish", "127.0.0.1:3443:3443"]);
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("require --action install or update");
+  }
+});
+test("wildcard publication requires explicit informed opt-in", () => {
+  const denied = run({}, ["--action", "install", "--admin-publish", "0.0.0.0:3443:3443"]);
+  expect(denied.status).not.toBe(0);
+  const allowed = run({}, ["--action", "install", "--admin-publish", "0.0.0.0:3443:3443", "--allow-admin-all-interfaces"]);
+  expect(allowed.status).toBe(0);
+  expect(allowed.output).toContain("Docker publication may bypass host firewall");
+});
+test("publication removal and replacement are mutually exclusive", () => {
+  expect(run({}, ["--action", "install", "--admin-publish", "127.0.0.1:3443:3443", "--no-admin-publish"]).status).not.toBe(0);
+});

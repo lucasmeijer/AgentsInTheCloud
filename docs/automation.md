@@ -35,34 +35,67 @@ This is CSRF protection, not authentication. Keep management unreachable from un
 
 ## Optional authenticated admin bindings
 
-Admin bindings provide a separate, JSON-only management API for host-local or LAN automation without Tailscale. They are disabled by default. Every request, including `GET /openapi.json`, requires `Authorization: Bearer <token>`. No browser `Origin` header is required on these listeners. The existing UI ingress and its Origin policy are unchanged.
+Admin bindings are a separate JSON-only management API for host-local or LAN automation without Tailscale. They are disabled by default. Every request, including `GET /openapi.json`, requires `Authorization: Bearer <token>`. These listeners do not use browser `Origin` authentication; the existing UI ingress retains its CSRF policy.
 
-Bootstrap locally with `bun apps/web/scripts/admin-bindings.ts`:
+### Direct host process
+
+Run the CLI as the **same OS user and with the same data directory as the app**:
 
 ```sh
-# Set a private umask before creating input files or capturing an issued token.
 umask 077
-# bindings.json: {"bindings":[{"host":"127.0.0.1","port":3443}]}
+# /secure/bindings.json: {"bindings":[{"host":"127.0.0.1","port":3443}]}
 bun apps/web/scripts/admin-bindings.ts configure --file /secure/bindings.json
-# token-input.json: {"name":"automation","scopes":["configuration","secrets","workspaces","host:read","security"]}
+# /secure/token-input.json: {"name":"automation","scopes":["configuration","secrets","workspaces","host:read","security"]}
 bun apps/web/scripts/admin-bindings.ts issue --file /secure/token-input.json > /secure/issued-token.json
 ```
 
-The CLI uses the normal application data directory; `--data-dir PATH` overrides it for offline/local administration. Configuration lives in `admin-bindings.json`, with private permissions and only token hashes. The bearer secret is returned once. Token metadata can be listed with `show`; `revoke TOKEN_ID` takes effect on subsequent requests without restarting. Optional `expiresAt` sets token expiry.
+`--data-dir PATH` selects another app data directory. `admin-bindings.json` contains listener configuration and only token hashes, with mode `0600`. `show` lists metadata; `revoke TOKEN_ID` applies to subsequent requests without restarting. The issued bearer secret is returned once: capture it privately, never put it in a URL or commit it. Optional expiry must be a future UTC ISO timestamp such as `2030-01-01T00:00:00Z` or `2030-01-01T00:00:00.000Z`. Other date formats, timezone offsets and impossible dates are rejected.
 
-Bindings take effect on **app startup**. Change them and restart the app, not individual workspaces. An empty `bindings` array disables all admin listeners on the next startup. Local CLI configuration remains available for lockout recovery.
+Direct process loopback listeners may use HTTP. Every non-loopback listener requires TLS. Use a certificate whose SAN matches the hostname/IP clients use, issued by a CA those clients trust. For a private/self-signed CA, use the client's explicit CA trust option (e.g. curl `--cacert`), not disabled certificate verification.
 
-Non-loopback bindings require TLS. Certificate/key paths must be absolute and readable by the app:
+### System installation: nested Docker and TLS
+
+The app container is managed by **System's inner Docker daemon**, not the host daemon. From the installation host, use:
+
+```sh
+docker exec agents-in-the-cloud-system docker exec --user 1000:1000 \
+  agents-in-the-cloud bun /app/apps/web/scripts/admin-bindings.ts show
+```
+
+Place input JSON and TLS files under the app's persisted `/data/app`. On the host, that directory is inside System's `agents-in-the-cloud-system` volume. Commands executed in System can access `/data/app` directly. Files should belong to UID/GID `1000:1000`; use `0700` for the TLS directory and `0600` for the private key and configuration. The CLI refuses a different UID in the managed app container. Listener startup also rejects private keys readable by group/others. Certificate files must be readable by the app; `0600` is suitable. Do not print key contents.
+
+A container binding for either host-only or LAN publication is:
 
 ```json
 {"bindings":[{"host":"0.0.0.0","port":3443,"tls":{"cert":"/data/app/admin-tls/cert.pem","key":"/data/app/admin-tls/key.pem"}}]}
 ```
 
-For System installations, configure the app's persisted `/data/app` directory using the CLI **inside the app container as UID/GID 1000:1000** (for example, `docker exec --user 1000:1000 agents-in-the-cloud bun /app/apps/web/scripts/admin-bindings.ts ...`), and put TLS material there with matching ownership and private key permissions. Docker port publication is separate: install/update with `--admin-publish 192.168.1.10:3443:3443` for LAN access, or `--admin-publish 127.0.0.1:3443:3443` for host-only access. In both cases the container listener should use `0.0.0.0` with TLS. The option accepts explicit IPv4 `HOST_IP:HOST_PORT:ADMIN_PORT`, is repeatable, and existing publications are retained on updates unless replacements are supplied. No LAN ports are published by default. Never publish the UI or supervisor ports as admin ports. Applying installation updates interrupts running workspaces; do not update a live installation just to experiment with bindings.
+Host-only and LAN publication are separate from that inner binding:
 
-Send `Content-Type: application/json` for mutations, including `{}` for operations without fields. Responses are JSON, and `/openapi.json` on the admin listener documents only its allowlisted operations and bearer authentication. UI routes, previews, arbitrary commands, agent prompting and terminal WebSockets are not exposed. SSH public-key responses are wrapped as `{ "publicKey": "..." }`.
+- **Host-only:** `--admin-publish 127.0.0.1:3443:3443`
+- **LAN:** `--admin-publish 192.168.1.10:3443:3443` (replace with the host's LAN IP)
 
-Scopes:
+Use those repeatable options with the installer **only for `--action install` or `--action update`**. The format is explicit IPv4 `HOST_IP:HOST_PORT:ADMIN_PORT`. Updates preserve existing publications from Docker's persistent `HostConfig.PortBindings`, even if System is stopped. Supply replacement mappings to replace the set, or `--no-admin-publish` to remove all admin publications. Removal and replacement cannot be combined. `open`/`connect` reject publication options rather than silently ignoring them.
+
+Both System publication modes require TLS: the inner listener is non-loopback within **System's** network namespace even when the host publishes only on loopback. This differs from direct-process localhost HTTP. There is no plaintext exception for Docker publication.
+
+**Exposure warning:** Docker publications can bypass host firewall policies such as ufw. Bind to a specific trusted interface and enforce network filtering; do not rely solely on an ordinary host firewall rule. Publishing to `0.0.0.0` covers every host IPv4 interface, possibly including public interfaces, and requires `--allow-admin-all-interfaces`. No admin port is published by default. Reserved UI, supervisor and preview ports cannot be published through this option.
+
+### Restart, certificate renewal and recovery
+
+Binding changes return `restartRequired: true` and apply on the next app startup. An empty bindings array disables the API then. Certificates are read at startup; renewal also requires an app restart. **In System, restart only the inner app**:
+
+```sh
+docker exec agents-in-the-cloud-system docker restart --time 30 agents-in-the-cloud
+```
+
+This interrupts UI/API connections and in-flight management/provisioning work; it does not replace workspace containers. Check active operations first. Restarting/updating **System** is broader and interrupts running workspaces too. Docker publication changes need System container replacement through installation/update, not merely an app restart. Do not update a live installation to experiment.
+
+Invalid configuration, missing/unreadable TLS files, bad certificates or bind failures disable the admin listener set and produce a local error, while leaving normal UI startup available. Correct configuration through the local CLI and restart the app. If an older/root-owned or corrupt configuration cannot be read, back it up locally without displaying it, correct ownership/mode (`1000:1000`, `0600` in System), or move the corrupt file aside and bootstrap fresh. Fresh configuration invalidates previous tokens. If the app is stopped, start it without usable admin configuration so the UI is available, then use the CLI; the CLI is not an API dependency. Keep local Docker/OS administration available as the recovery path.
+
+### Contracts and permissions
+
+Send `Content-Type: application/json` for all mutations, including `{}` for operations without fields. Unknown fields and invalid nested payloads are rejected before dispatch. `/openapi.json` documents the same runtime body schemas and scopes. UI routes, previews, arbitrary commands, agent prompting and terminal WebSockets are excluded. SSH public-key responses are `{ "publicKey": "..." }`.
 
 | Scope | Operations |
 | --- | --- |
@@ -73,11 +106,23 @@ Scopes:
 | `host:read` | Host availability, bounded diagnostic samples and System status; no terminals or raw supervisor logs |
 | `security` | Privileged mode, credential seeding, Dockerfiles, SSH keys/trust, System access mode, admin binding/token management |
 
-Template discovery/configuration reads are shared by `configuration`, `secrets`, `security` and `workspaces` tokens. These reads include template environment values, but never plaintext secret or private-key values. `security` is administrative power: it can issue tokens with any scope and enable privileged containers. Scope separation does not sandbox repository setup or privileged Dockerfiles.
+Template configuration reads are shared by `configuration`, `secrets`, `security` and `workspaces` tokens and include environment values, never plaintext managed secrets/private keys. Changing an existing configured secret's environment name, placeholder, host destination or path policy requires a nonempty `secretValue` to be supplied again, atomically replacing the value; otherwise the operation returns `409 workspace_template_secret_routing_changed` without altering storage. Annotation-only edits and rotation at the same destination do not require knowledge of the old value. These restrictions also apply to the normal UI's secret edits. A supplied replacement may differ from the old value: this prevents rerouting an unknown existing credential, not authorized replacement of it.
 
-Additional management endpoints are `GET/PUT /admin/bindings`, `GET/POST /admin/tokens`, `DELETE /admin/tokens/{tokenId}`, `GET /host/status`, and `GET/POST /settings/access`. Binding updates return `restartRequired: true`; token issuance returns `{ token, secret }` once. Revocation requires a JSON `{}` body. Access changes require System; unsupported standalone instances return `503`. Diagnostic collection uses existing read-only, bounded probes, although diagnostic output can contain operational details and must be treated as sensitive.
+`security` remains administrative power: it can mint any scopes and enable privileged containers. Scope separation does not sandbox repository setup, Dockerfiles or code run during workspace creation. Do not give lifecycle/configuration tokens to parties who must not launch repository code.
 
-`admin-audit.jsonl` records token ID, peer, operation template, method and status, without payloads, raw URLs, credentials or diagnostic output. Audit-file retention is operator-managed. Mutations accept at most 1 MiB of JSON. Template environment variables still apply to new containers; existing secret placeholders resolve to rotated credentials on subsequent proxied requests.
+Additional operations: `GET/PUT /admin/bindings`, `GET/POST /admin/tokens`, `DELETE /admin/tokens/{tokenId}`, `GET /host/status`, `GET/POST /settings/access`. Token issuance returns `{ token, secret }` once; revocation requires `{}`. System access reads/changes require `security` and return `authUrl` when Tailscale sign-in is needed. Treat that URL as sensitive; open it manually and poll access status to complete login. `host:read` status never returns it or raw logs. Standalone instances return `503` for System-only operations. Diagnostic probes are read-only and bounded, but their output is operationally sensitive.
+
+### Audit and request limits
+
+`admin-audit.jsonl` uses admission/completion records joined by `requestId`. It records token ID, **transportPeer** (the socket peer, possibly Docker's proxy rather than the original client), method, route template and status. Forwarded client headers are never trusted. Payloads, raw URLs, bearer secrets, sign-in URLs and diagnostic output are omitted.
+
+Audit storage is bounded to about 1 MiB plus one 1 MiB `.1` backup; rotation serializes concurrent writes. Rejections are aggregated per status, at most once a minute (suppression counts are included when the next sample is written). Requests are limited to 120/minute per transport peer and 600/minute per process, with a bounded peer map; `429` includes `Retry-After: 60`. A Docker proxy can cause clients to share one peer budget. These are application resource bounds, not protection against network-level denial of service.
+
+If admission logging fails, the API returns `503 audit_unavailable` **without executing the operation**. If completion logging fails after execution, the original response is preserved with `X-Admin-Audit-Warning: completion-record-unavailable` and a local error is reported: do not retry a successful mutation merely because of this warning. Server errors retain their machine-readable code while replacing sensitive diagnostic messages. Mutations accept at most 1 MiB of JSON.
+
+For reproducible integration verification on a development machine with Docker, build local app/System/workspace images, then run `bun scripts/verify-admin-bindings-system.ts --app APP_IMAGE --system SYSTEM_IMAGE --workspace WORKSPACE_IMAGE`. It creates a uniquely named disposable System, tests a separate client container, nested CLI, TLS, real System endpoints, startup isolation and stopped-container port persistence, then removes its containers/volume. It never targets an existing installation. It needs several GiB of free disk for the inner image store. This verifies Docker network access, not reachability or firewall policy from a separate physical LAN machine; verify that deployment-specific boundary separately.
+
+Template environment changes still apply to new containers. Existing secret placeholders resolve to rotated credentials on subsequent proxied requests; existing connections may need reconnecting.
 
 ## Present a workspace
 

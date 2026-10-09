@@ -24,7 +24,7 @@ import { gzipSync } from "node:zlib";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { createAdminStore } from "./admin/store.ts";
-import { startAdminBindings } from "./admin/bindings.ts";
+import { startOptionalAdminBindings } from "./admin/bindings.ts";
 import { connectionModeManaged } from "./settings/connection-mode.ts";
 import { getAgentType, rememberAgentType } from "./agent-types.ts";
 import { createWebApp, type WebApp } from "./app.ts";
@@ -360,12 +360,12 @@ const server = Bun.serve<SocketData>({
     },
   },
 });
-const adminServers = await startAdminBindings({
+const adminServers = await startOptionalAdminBindings({
   store: createAdminStore(join(runtimeContext.agentsInTheCloudDataDir, "admin-bindings.json")),
   auditPath: join(runtimeContext.agentsInTheCloudDataDir, "admin-audit.jsonl"),
   app,
   systemAvailable: connectionModeManaged,
-  reportError: () => console.error("Admin operation failed; inspect local operation state"),
+  reportError: error => console.error(error.message),
 });
 for (const listener of adminServers) console.log(`Admin API listening on ${listener.hostname}:${listener.port}`);
 const serverPort = server.port ?? requestedPort;

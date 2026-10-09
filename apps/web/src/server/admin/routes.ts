@@ -35,5 +35,9 @@ route("DELETE", "/admin/tokens/{tokenId}", ["security"], "Revoke an admin token 
 
 export function matchAdminRoute(method: string, pathname: string): AdminRoute | undefined {
   if (["/workspaces/new", "/workspace-templates/new", "/workspace-templates/github-search"].includes(pathname)) return undefined;
-  return adminRoutes.find(route => route.method === method && new RegExp(`^${route.path.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(pathname));
+  const segments = pathname.split("/");
+  return adminRoutes.find(route => {
+    const pattern = route.path.split("/");
+    return route.method === method && pattern.length === segments.length && pattern.every((segment, index) => /^\{[^}]+\}$/.test(segment) ? Boolean(segments[index]) : segment === segments[index]);
+  });
 }

@@ -363,7 +363,7 @@ export function createWorkspaceTemplateRoutes(deps: {
     try {
       return await handleRoute(request, url);
     } catch (error) {
-      if (!requestAcceptsJson(request) && request.method === "POST" && url.pathname.startsWith("/workspace-templates/") && error instanceof AgentsInTheCloudCoreError && ["invalid_arguments", "invalid_ssh_private_key", "workspace_template_secret_exists", "workspace_template_environment_variable_exists", "workspace_template_exists", "workspace_template_secret_not_found", "workspace_template_environment_variable_not_found", "workspace_template_ssh_key_not_found"].includes(error.code)) {
+      if (!requestAcceptsJson(request) && request.method === "POST" && url.pathname.startsWith("/workspace-templates/") && error instanceof AgentsInTheCloudCoreError && ["invalid_arguments", "invalid_ssh_private_key", "workspace_template_secret_exists", "workspace_template_secret_routing_changed", "workspace_template_environment_variable_exists", "workspace_template_exists", "workspace_template_secret_not_found", "workspace_template_environment_variable_not_found", "workspace_template_ssh_key_not_found"].includes(error.code)) {
         return turboStreamResponse(update("template_settings_error", templateSettingsErrorHtml(error.code === "invalid_ssh_private_key" ? "This key couldn’t be read. Paste an unencrypted OpenSSH private key and try again." : error.message)), { status: 422 });
       }
       throw error;

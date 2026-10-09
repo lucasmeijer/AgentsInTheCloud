@@ -12,8 +12,9 @@ export const bindingSchema = Type.Object({
   host: Type.String(), port: Type.Integer({ minimum: 1024, maximum: 65535 }),
   tls: Type.Optional(Type.Object({ cert: Type.String(), key: Type.String() }, { additionalProperties: false })),
 }, { additionalProperties: false });
-export const tokenInputSchema = Type.Object({ name: Type.String({ minLength: 1, maxLength: 100 }), scopes: Type.Array(scopeSchema, { minItems: 1, uniqueItems: true }), expiresAt: Type.Optional(Type.String()) }, { additionalProperties: false });
-const tokenSchema = Type.Object({ id: Type.String(), name: Type.String(), scopes: Type.Array(scopeSchema), hash: Type.String({ pattern: "^[a-f0-9]{64}$" }), createdAt: Type.String(), expiresAt: Type.Optional(Type.String()) }, { additionalProperties: false });
+export const expiryPattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$";
+export const tokenInputSchema = Type.Object({ name: Type.String({ minLength: 1, maxLength: 100 }), scopes: Type.Array(scopeSchema, { minItems: 1, uniqueItems: true }), expiresAt: Type.Optional(Type.String({ pattern: expiryPattern, description: "UTC ISO 8601 timestamp, e.g. 2030-01-01T00:00:00Z" })) }, { additionalProperties: false });
+const tokenSchema = Type.Object({ id: Type.String(), name: Type.String(), scopes: Type.Array(scopeSchema), hash: Type.String({ pattern: "^[a-f0-9]{64}$" }), createdAt: Type.String(), expiresAt: Type.Optional(Type.String({ pattern: expiryPattern, description: "UTC ISO 8601 timestamp, e.g. 2030-01-01T00:00:00Z" })) }, { additionalProperties: false });
 const storeSchema = Type.Object({ bindings: Type.Array(bindingSchema), tokens: Type.Array(tokenSchema) }, { additionalProperties: false });
 export type AdminBinding = { host: string; port: number; tls?: { cert: string; key: string } };
 export type AdminTokenInput = { name: string; scopes: AdminScope[]; expiresAt?: string };
@@ -36,6 +37,11 @@ export function validateBindings(value: JsonValue): AdminBinding[] {
   return value;
 }
 
+function validExpiry(value: string) {
+  if (!new RegExp(expiryPattern).test(value) || !Number.isFinite(Date.parse(value))) return false;
+  return new Date(value).toISOString() === (value.includes(".") ? value : value.replace("Z", ".000Z"));
+}
+
 const hashToken = (secret: string) => createHash("sha256").update(secret).digest("hex");
 export function publicToken({ hash: _hash, ...token }: AdminToken) { return token; }
 
@@ -47,7 +53,7 @@ export function createAdminStore(path: string) {
     const value: JsonValue = JSON.parse(text);
     if (!Value.Check(storeSchema, value)) throw new Error("Invalid admin configuration file");
     validateBindings(value.bindings);
-    if (value.tokens.some(token => token.expiresAt !== undefined && !Number.isFinite(Date.parse(token.expiresAt)))) throw new Error("Invalid stored token expiry");
+    if (value.tokens.some(token => token.expiresAt !== undefined && !validExpiry(token.expiresAt))) throw new Error("Invalid stored token expiry");
     return value;
   }
   async function update<T>(change: (config: AdminConfiguration) => T): Promise<T> {
@@ -66,7 +72,7 @@ export function createAdminStore(path: string) {
     },
     async issue(value: JsonValue) {
       if (!Value.Check(tokenInputSchema, value)) throw new Error("Invalid token name, scopes or expiry");
-      if (value.expiresAt !== undefined && (!Number.isFinite(Date.parse(value.expiresAt)) || Date.parse(value.expiresAt) <= Date.now())) throw new Error("Token expiry must be a future timestamp");
+      if (value.expiresAt !== undefined && (!validExpiry(value.expiresAt) || Date.parse(value.expiresAt) <= Date.now())) throw new Error("Token expiry must be a future timestamp");
       const secret = `aitc_admin_${randomBytes(32).toString("base64url")}`;
       const token: AdminToken = { ...value, id: crypto.randomUUID(), createdAt: new Date().toISOString(), hash: hashToken(secret) };
       return update(config => { config.tokens.push(token); return { token: publicToken(token), secret }; });

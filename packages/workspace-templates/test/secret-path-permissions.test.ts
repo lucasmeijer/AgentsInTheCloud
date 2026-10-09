@@ -38,3 +38,28 @@ test("path overrides persist, omitted updates preserve them, and older files get
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("configured secret routing cannot reuse an unknown value, and failed updates are atomic", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "aitc-secret-routing-"));
+  const file = join(directory, "templates.json"), keyFile = join(directory, "key");
+  try {
+    const { workspaceTemplate } = await addWorkspaceTemplate("https://github.com/example/routing.git", file);
+    const original = { envName: "TOKEN", hostPattern: "api.example.com", secretValue: "fixture-only-value" };
+    const secret = await createWorkspaceTemplateSecret(workspaceTemplate.id, original, file, keyFile);
+    const baseline = await readFile(file, "utf8");
+    for (const changed of [
+      { envName: "TOKEN", hostPattern: "attacker.example.com" },
+      { envName: "RENAMED", hostPattern: "api.example.com" },
+      { envName: "TOKEN", hostPattern: "api.example.com", allowInPath: true },
+      { envName: "TOKEN", hostPattern: "api.example.com", placeholder: "NEW" },
+    ]) {
+      await expect(updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, changed, file, keyFile)).rejects.toMatchObject({ code: "workspace_template_secret_routing_changed" });
+      expect(await readFile(file, "utf8")).toBe(baseline);
+    }
+    // Metadata edits and rotation at the same destination do not need to know the old value.
+    await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { envName: "TOKEN", hostPattern: "api.example.com", annotation: "Metadata only" }, file, keyFile);
+    await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...original, secretValue: "rotated-value" }, file, keyFile);
+    const changed = await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { ...original, hostPattern: "new.example.com", secretValue: "new-destination-value" }, file, keyFile);
+    expect(changed.hostPattern).toBe("new.example.com");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
