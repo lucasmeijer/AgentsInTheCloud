@@ -175,6 +175,7 @@ export function createFileEditorController(Controller: WorkspaceClientController
         state: EditorState.create({
           doc: editorText(this.draft.content),
           extensions: [
+            EditorView.lineWrapping,
             history(),
             drawSelection(),
             highlightActiveLine(),

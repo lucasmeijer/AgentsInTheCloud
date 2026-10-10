@@ -20,7 +20,7 @@
 .file-editor-rendered-markdown > :last-child { margin-bottom: 0; }
 .file-editor-host .cm-editor { height: 100%; color: var(--text-bright); background: var(--bg); background-image: var(--editor-background-image); font: var(--text-code)/var(--leading-standard) var(--font-mono); }
 .file-editor-host .cm-scroller { overflow: auto; font-family: inherit; }
-.file-editor-host .cm-content { min-width: max-content; padding: 12px 0 40px; caret-color: var(--text-bright); }
+.file-editor-host .cm-content { min-width: 0; padding: 12px 0 40px; caret-color: var(--text-bright); }
 .file-editor-host .cm-line { padding: 0 12px; }
 .file-editor-host .cm-focused { outline: none; }
 .file-editor-host .cm-cursor { border-left-color: var(--text-bright); }
