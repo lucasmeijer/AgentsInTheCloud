@@ -5,7 +5,10 @@ export function registerLaunchComposerCommand(hooks: WorkspaceClientHooks): void
     ...launchComposerCommand,
     scope: "global",
     run() {
-      const workspaceTemplateId = localStorage.getItem(recentWorkspaceTemplateStorageKey);
+      const selectedWorkspace = document.querySelector<HTMLElement>('[data-workspace-entry-id][aria-current="page"]');
+      const workspaceTemplateId = selectedWorkspace
+        ? selectedWorkspace.dataset.workspaceTemplateId
+        : localStorage.getItem(recentWorkspaceTemplateStorageKey);
       const frame = document.getElementById("launch_composer")!;
       frame.replaceChildren();
       frame.removeAttribute("src");

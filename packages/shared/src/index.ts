@@ -444,8 +444,8 @@ export const recentWorkspaceTemplateStorageKey = "agents-in-the-cloud:recent-wor
 /** The hot path for starting work: a launch composer seeded from the current workspace's template. */
 export const launchComposerCommand = {
   id: "agent.open-launch-composer",
-  label: "New workspace from same template",
-  description: "Open the launch composer for a new workspace from the current workspace's template.",
+  label: "New workspace",
+  description: "Open the launch composer, using the selected workspace’s template when available.",
   binding: "Meta+Alt+Quote",
 } as const;
 
