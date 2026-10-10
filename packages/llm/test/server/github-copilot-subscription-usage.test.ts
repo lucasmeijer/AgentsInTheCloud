@@ -3,7 +3,7 @@ import { fetchGitHubCopilotSubscriptionUsage } from "../../src/server/github-cop
 import { usageWindowTiming, selectPacingWindow, estimatedTimeToHitLimitSeconds } from "../../src/server/usage-window.ts";
 
 function payload() {
-  return { copilot_plan: "individual", quota_reset_date: "2026-11-01", quota_snapshots: {
+  return { copilot_plan: "individual", token_based_billing: false, quota_reset_date: "2026-11-01", quota_snapshots: {
     premium_interactions: { entitlement: 300, remaining: 210, percent_remaining: 70 },
     chat: { entitlement: 500, remaining: 400 },
   } };
@@ -24,11 +24,11 @@ test("reads Copilot quotas using GitHub's token and editor headers", async () =>
     return Response.json(payload());
   });
   expect(usage.plan).toBe("individual");
-  expect(usage.limitReached).toBe(false);
+  expect(usage.limitReached).toBeNull();
   expect(usage.windows).toEqual([
-    { limitName: "Premium requests", meteredFeature: "premium_interactions", kind: "primary", usedPercent: 30, durationSeconds: 31 * 86400, resetsAt: "2026-11-01T00:00:00.000Z" },
-    { limitName: "Chat", meteredFeature: "chat", kind: "secondary", usedPercent: 20, durationSeconds: 31 * 86400, resetsAt: "2026-11-01T00:00:00.000Z" },
+    { periodBasis: "calendar-month-estimate", limitName: "Premium requests", meteredFeature: "premium_interactions", kind: "primary", usedPercent: 30, durationSeconds: 31 * 86400, resetsAt: "2026-11-01T00:00:00.000Z" },
   ]);
+  expect(usage.allowances?.find((allowance) => allowance.quotaId === "chat")?.remainingPercent).toBe(80);
   const windows = usage.windows.map(reported => ({ reported, timing: usageWindowTiming(reported, new Date("2026-10-16T12:00:00Z")) }));
   expect(windows[0]!.timing).toEqual({ state: "active", startsAt: "2026-10-01T00:00:00.000Z", elapsedPercent: 50, paceDifferencePoints: -20, paceDifferenceSeconds: -0.2 * 31 * 86400 });
   expect(selectPacingWindow(windows)).toBe(windows[0]);
@@ -40,13 +40,14 @@ test("prefers percent_remaining over entitlement arithmetic", async () => {
   expect((await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json(data))).windows[0]!.usedPercent).toBe(30);
 });
 
-test("unlimited chat is omitted and exhausted premium requests are reported", async () => {
+test("unlimited chat is preserved without a pacing window and exhaustion is separate from access", async () => {
   const data = payload();
   const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...data, quota_snapshots: {
     premium_interactions: { percent_remaining: 0 }, chat: { unlimited: true, entitlement: 0 },
   } }));
   expect(usage.windows).toHaveLength(1);
-  expect(usage.limitReached).toBe(true);
+  expect(usage.limitReached).toBeNull();
+  expect(usage.allowances?.find((allowance) => allowance.selected)?.remainingPercent).toBe(0);
 });
 
 test("missing reset timing retains quotas without inventing pacing", async () => {
@@ -63,7 +64,7 @@ test("empty snapshots are recognised without fabricating usage", async () => {
 
 for (const status of [401, 403, 429, 500]) {
   test(`Copilot HTTP ${status} becomes a usage error`, async () => {
-    await expect(fetchGitHubCopilotSubscriptionUsage("secret", async () => new Response("secret", { status }))).rejects.toThrow(status === 401 || status === 403 ? "Reconnect GitHub Copilot" : `HTTP ${status}`);
+    await expect(fetchGitHubCopilotSubscriptionUsage("secret", async () => new Response("secret", { status }))).rejects.toThrow(status === 401 ? "Reconnect GitHub Copilot" : `HTTP ${status}`);
   });
 }
 
@@ -75,7 +76,7 @@ test("invalid JSON is a usage error", async () => {
   await expect(fetchGitHubCopilotSubscriptionUsage("token", async () => new Response("not json"))).rejects.toThrow("invalid usage response");
 });
 
-for (const data of [ {}, { quota_snapshots: { premium_interactions: {} } }, { ...payload(), quota_reset_date: "bad date" }, { quota_snapshots: { chat: { entitlement: "not a number" } } } ]) {
+for (const data of [ { ...payload(), quota_reset_date: "bad date" }, { quota_snapshots: { chat: { entitlement: "not a number" } } } ]) {
   test(`rejects unrecognised Copilot response ${JSON.stringify(data)}`, async () => {
     await expect(fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json(data))).rejects.toThrow("unrecognized usage response");
   });
@@ -122,9 +123,8 @@ test("each quota's epoch-seconds reset overrides account dates independently", a
   } }));
   expect(usage.windows[0]!.resetsAt).toBe("2026-11-01T00:00:00.000Z");
   expect(usage.windows[0]!.durationSeconds).toBe(31 * 86400);
-  expect(usage.windows[1]!.resetsAt).toBe("2026-10-15T13:00:00.000Z");
-  expect(usage.windows[1]!.durationSeconds).toBeNull();
-  expect(usageWindowTiming(usage.windows[1]!, new Date("2026-10-10"))).toEqual({ state: "unknown", startsAt: null, elapsedPercent: null, paceDifferencePoints: null, paceDifferenceSeconds: null });
+  expect(usage.allowances?.find((allowance) => allowance.quotaId === "chat")?.resetsAt).toBe("2026-10-15T13:00:00.000Z");
+  expect(usage.windows).toHaveLength(1);
 });
 
 test("offset timestamps resolve to UTC without daylight-saving or host-timezone shifts", async () => {
@@ -146,7 +146,8 @@ test("current credit fields accept string entitlements and prefer quota_remainin
   } }));
   expect(usage.windows[0]!.limitName).toBe("AI credits");
   expect(usage.windows[0]!.usedPercent).toBe(30);
-  expect(usage.windows[1]!.usedPercent).toBe(25);
+  expect(usage.allowances?.find((allowance) => allowance.quotaId === "chat")?.remainingPercent).toBe(75);
+  expect(usage.allowances?.[0]!.remainingPercentSource).toBe("quantity-estimate");
 });
 
 test("zero-entitlement and unlimited categories do not cause division by zero or false exhaustion", async () => {
@@ -154,14 +155,14 @@ test("zero-entitlement and unlimited categories do not cause division by zero or
     premium_interactions: { entitlement: "0", percent_remaining: 0 }, chat: { entitlement: "-1", percent_remaining: 0 },
   } }));
   expect(usage.windows).toEqual([]);
-  expect(usage.limitReached).toBe(false);
+  expect(usage.limitReached).toBeNull();
 });
 
 test("paid overage does not signal blocked access, but preserves allowance exhaustion", async () => {
   const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...payload(), quota_snapshots: {
     premium_interactions: { percent_remaining: 0, overage_permitted: true },
   } }));
-  expect(usage.limitReached).toBe(false);
+  expect(usage.limitReached).toBeNull();
   expect(usage.windows[0]!.usedPercent).toBe(100);
   const reported = usage.windows[0]!;
   expect(estimatedTimeToHitLimitSeconds({ reported, timing: usageWindowTiming(reported, new Date("2026-10-15")) })).toBe(0);
@@ -171,11 +172,81 @@ test("rounding and overage percentages stay within the displayed allowance range
   const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...payload(), quota_snapshots: {
     premium_interactions: { percent_remaining: -1 }, chat: { percent_remaining: 101 },
   } }));
-  expect(usage.windows.map(window => window.usedPercent)).toEqual([100, 0]);
+  expect(usage.windows.map(window => window.usedPercent)).toEqual([100]);
+  expect(usage.allowances?.map(allowance => allowance.remainingPercent)).toEqual([0, 100]);
 });
 
 test("free-plan reset date also supports calendar pacing", async () => {
-  const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ limited_user_reset_date: "2026-11-01", quota_snapshots: { chat: { entitlement: 50, remaining: 25 } } }));
+  const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ copilot_plan: "free", limited_user_reset_date: "2026-11-01", quota_snapshots: { chat: { entitlement: 50, remaining: 25 } } }));
   expect(usage.windows[0]!.durationSeconds).toBe(31 * 86400);
   expect(usage.windows[0]!.usedPercent).toBe(50);
+});
+
+test("paid accounts prefer premium_models without merging premium_interactions or chat", async () => {
+  const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...payload(), quota_snapshots: {
+    premium_models: { entitlement: 300, remaining: 180, percent_remaining: 60, quota_id: "premium" },
+    premium_interactions: { entitlement: 300, remaining: 30, percent_remaining: 10 },
+    chat: { entitlement: -1, remaining: -1, unlimited: true, percent_remaining: 100 },
+    completions: { entitlement: -1, unlimited: true },
+  } }));
+  expect(usage.windows).toHaveLength(1);
+  expect(usage.windows[0]!.meteredFeature).toBe("premium_models");
+  expect(usage.windows[0]!.usedPercent).toBe(40);
+  expect(usage.allowances).toHaveLength(4);
+  expect(usage.allowances?.filter(allowance => allowance.selected).map(allowance => allowance.quotaId)).toEqual(["premium_models"]);
+  expect(usage.allowances?.[0]!.sourceQuotaId).toBe("premium");
+  expect(usage.allowances?.find(allowance => allowance.quotaId === "chat")?.unlimited).toBe(true);
+  expect(usage.allowances?.find(allowance => allowance.quotaId === "completions")?.unlimited).toBe(true);
+});
+
+for (const classification of [{ copilot_plan: "free" }, { copilot_plan: "unknown", access_type_sku: "free_limited_copilot" }]) {
+  test(`free classification ${JSON.stringify(classification)} selects chat independently of premium usage`, async () => {
+    const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...payload(), ...classification, quota_snapshots: {
+      chat: { entitlement: 50, remaining: 40, percent_remaining: 80 },
+      premium_models: { entitlement: 300, percent_remaining: 0 },
+    } }));
+    expect(usage.windows).toHaveLength(1);
+    expect(usage.windows[0]!.limitName).toBe("Chat requests");
+    expect(usage.windows[0]!.usedPercent).toBe(20);
+    expect(usage.allowances?.find(allowance => allowance.selected)?.quotaId).toBe("chat");
+    expect(usage.allowed).toBeNull();
+  });
+}
+
+test("unlimited primary allowance is a reported state, not zero usage or missing quota", async () => {
+  const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...payload(), quota_snapshots: {
+    premium_models: { entitlement: "-1", remaining: -1, unlimited: true, percent_remaining: 100 },
+  } }));
+  expect(usage.windows).toEqual([]);
+  expect(usage.allowances?.[0]).toMatchObject({ selected: true, unlimited: true, entitlement: -1, remaining: -1 });
+});
+
+test("rounded percentages never replace exact remaining amounts and overage is kept separate", async () => {
+  const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...payload(), quota_snapshots: {
+    premium_interactions: { entitlement: 300, remaining: 179.875, percent_remaining: 60, overage_count: "0.0125", overage_permitted: true },
+  } }));
+  expect(usage.windows[0]!.usedPercent).toBe(40);
+  expect(usage.allowances?.[0]).toMatchObject({ remaining: 179.875, remainingPercent: 60, remainingPercentSource: "reported", overageCount: 0.0125, overagePermitted: true, unit: "requests" });
+});
+
+for (const data of [{}, { quota_snapshots: { premium_interactions: {} } }, { quota_snapshots: { premium_interactions: { entitlement: 300, quota_reset_at: null } } }]) {
+  test(`incomplete snapshot ${JSON.stringify(data)} stays unknown`, async () => {
+    const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json(data));
+    expect(usage.windows).toEqual([]);
+    expect(usage.allowed).toBeNull();
+    expect(usage.limitReached).toBeNull();
+    if (usage.allowances?.length) expect(usage.allowances[0]!.remainingPercent).toBeNull();
+  });
+}
+
+test("missing free chat does not silently substitute an exhausted premium bucket", async () => {
+  const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ ...payload(), copilot_plan: "free", quota_snapshots: { premium_interactions: { percent_remaining: 0 } } }));
+  expect(usage.windows).toEqual([]);
+  expect(usage.allowances?.some(allowance => allowance.selected)).toBe(false);
+});
+
+test("unknown billing generation uses a neutral label instead of inventing request or credit units", async () => {
+  const usage = await fetchGitHubCopilotSubscriptionUsage("token", async () => Response.json({ quota_snapshots: { premium_models: { entitlement: 300, percent_remaining: 60 } } }));
+  expect(usage.windows[0]!.limitName).toBe("Premium allowance");
+  expect(usage.allowances?.[0]!.unit).toBe("unknown");
 });

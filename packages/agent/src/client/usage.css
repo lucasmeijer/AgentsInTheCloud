@@ -32,3 +32,11 @@
 .usage-limit-title { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .usage-limit-title h3 { flex: 0 1 auto; }
 .usage-limit-title .usage-comparison { flex: 1 0 48px; }
+/* Account allowance copy includes provenance and policy; keep it readable on narrow cards. */
+.usage-limit--allowance .usage-metrics { white-space: normal; overflow-x: visible; }
+.usage-limit--allowance .usage-metrics-row { flex-wrap: wrap; }
+.usage-limit--allowance .usage-metrics-row > * { flex: 0 1 auto; }
+@media (max-width: 520px) {
+  .usage-limit--allowance .usage-metrics-row { display: grid; }
+  .usage-limit--allowance .usage-metrics-row > * + *::before { content: none; }
+}

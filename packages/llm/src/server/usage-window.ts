@@ -35,7 +35,7 @@ export interface PacedUsageWindow {
 }
 
 /** Forecast at the average consumption rate since this window began.
- * Infinity means no projected blockage before the next reset (or no usable rate).
+ * Infinity means no projected allowance exhaustion before the next reset (or no usable rate).
  * Does not project consumption through resets. */
 export function estimatedTimeToHitLimitSeconds({ reported, timing }: PacedUsageWindow): number {
   if (timing.state !== "active" || reported.durationSeconds === null) return Infinity;
@@ -47,7 +47,7 @@ export function estimatedTimeToHitLimitSeconds({ reported, timing }: PacedUsageW
   return (100 - reported.usedPercent) / reported.usedPercent * elapsedSeconds;
 }
 
-/** Surface the active allowance with the shortest projected time to blockage.
+/** Surface the active allowance with the shortest projected time to exhaustion.
  * Ties prefer higher usage. When all are unused, show the main allowance. */
 export function selectPacingWindow(windows: readonly PacedUsageWindow[]): PacedUsageWindow | undefined {
   const active = windows.filter((window) => window.timing.state === "active");
