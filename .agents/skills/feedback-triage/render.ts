@@ -16,14 +16,25 @@ import { dirname, extname, resolve } from "node:path";
 export interface Report {
   source: { url: string; label: string };              // e.g. "GitHub issue #37"
   reporter: { name: string; avatarUrl: string };       // name/login + avatar only
-  classification:
-    | { type: "bug"; reproduced: boolean }
+  classification: (
+    | {
+        type: "bug";
+        /** Reproduced under the cause below (or under the reporter's exact steps if there's no cause). */
+        reproduced: boolean;
+        /** What triggers it, e.g. "a stale ghcr.io login in the user's Docker". Set confirmed: false while it's
+         *  your hypothesis about the reporter's setup rather than something they confirmed or you observed. */
+        cause?: { summary: string; confirmed: boolean };
+      }
     | { type: "feature"; inSpirit: "yes" | "partly" | "no"; designHeavy: "no" | "some" | "yes" }
     | { type: "docs" }
-    | { type: "noise" };
-  /** First person, in the reporter's voice: "I want to …". One or two sentences. */
+    | { type: "noise" }
+  ) & {
+    /** Secondary types when the feedback is genuinely more than one, e.g. a feature that's also a docs gap. */
+    also?: Array<"bug" | "feature" | "docs">;
+  };
+  /** First person, in the voice of the person who has the problem (not a bot or agent relaying it): "I want to …". */
   goal: string;
-  /** First person, what the reporter suggested: "I suggested …". One sentence. Omit if they didn't. */
+  /** First person, what they suggested: "I suggested …". One sentence. Omit if they didn't. */
   proposal?: string;
   recommendation: {
     action: string;                                   // short: "Merge the smaller version"
@@ -38,7 +49,7 @@ export interface Report {
     /** (md) What it does, how it was verified, what couldn't be shown. Media go here:
      *  ![alt](media/x.png), <video src="media/x.webm" controls></video>. Keep it short. */
     body: string;
-    /** Files whose diff (main...branch) is rendered with Pierre. Omit to show every changed file. */
+    /** Files whose diff (origin/main...branch) is rendered with Pierre. Omit to show every changed file. */
     diffPaths?: string[];
   }>;
   claims: Array<{ claim: string; verdict: "true" | "false" | "partly" | "unverified"; evidence: string /* (md) */ }>;
@@ -76,10 +87,10 @@ const pierre = (html: string) =>
   html.replaceAll('<diffs-container data-controller="markdown-diff"><template data-markdown-diff-content>', '<diffs-container><template shadowrootmode="open">');
 
 function branchDiff(branch: string, paths?: string[]): string {
-  const result = Bun.spawnSync(["git", "diff", "--no-color", `main...${branch}`, "--", ...(paths ?? [])]);
-  if (result.exitCode !== 0) throw new Error(`git diff main...${branch} failed: ${result.stderr.toString()}`);
+  const result = Bun.spawnSync(["git", "diff", "--no-color", `origin/main...${branch}`, "--", ...(paths ?? [])]);
+  if (result.exitCode !== 0) throw new Error(`git diff origin/main...${branch} failed: ${result.stderr.toString()}`);
   const patch = result.stdout.toString().replace(/\n$/, "");
-  if (!patch) throw new Error(`git diff main...${branch} is empty`);
+  if (!patch) throw new Error(`git diff origin/main...${branch} is empty`);
   return `<div class="markdown-diff">${pierre(renderMarkdownDiff(patch))}</div>`;
 }
 
@@ -90,10 +101,15 @@ const repoUrl = report.source.url.match(/^https:\/\/github\.com\/[^/]+\/[^/]+/)?
 function chips(): string[] {
   const c = report.classification;
   const list: string[] = [];
-  if (c.type === "bug") list.push("🐛 Bug", c.reproduced ? "Reproduced" : "Not reproduced");
+  if (c.type === "bug") {
+    list.push("🐛 Bug", c.reproduced ? "Reproduced" : "Not reproduced");
+    if (c.cause) list.push(`Cause: ${c.cause.summary}${c.cause.confirmed ? "" : " (suspected)"}`);
+  }
   if (c.type === "feature") list.push("✨ Feature", `In spirit: ${c.inSpirit}`, `Design-heavy: ${c.designHeavy}`);
   if (c.type === "docs") list.push("📖 Docs gap");
   if (c.type === "noise") list.push("💬 Noise");
+  const ALSO = { bug: "+ 🐛 Bug", feature: "+ ✨ Feature", docs: "+ 📖 Docs gap" } as const;
+  for (const extra of c.also ?? []) list.push(ALSO[extra]);
   return list;
 }
 

@@ -24,18 +24,21 @@ The argument is a URL or pasted text, possibly with screenshots.
 - **GitHub PR**: also `gh pr view <n> --json ...` and `gh pr diff <n>`. Treat the PR's code as a proposal too: does it solve the underlying problem, and is it correct?
 - **X / LinkedIn**: try to fetch it. If it's behind a login wall, ask the user to paste the text (and any images).
 - Comments from others with the same problem are useful. Fold their goal into yours, and mention them in a claim or a note.
+- Feedback is often written or relayed by someone's agent or bot. The person with the problem is the human behind it.
 - **Reporter**: name/login and avatar only (`https://github.com/<login>.png?size=64` on GitHub). Don't research their history.
 
 ## Process
 
 1. **Sync**: `git fetch origin && git switch main && git pull --ff-only`. If the feedback cites an old revision, check whether anything relevant has changed since then.
-2. **Find the underlying goal**: what is the user actually trying to *do*? Write it **in the first person, in the user's voice**, in plain words, without implementation terms, e.g. *"I want my agent to talk to a self-hosted service on my own network."* Keep it separate from what they proposed (*"I suggested …"*).
+2. **Find the underlying goal**: what is the user actually trying to *do*? Write it **in the first person, in the voice of the person who has the problem** (not the bot relaying it), in plain words, without implementation terms, e.g. *"I want my agent to talk to a self-hosted service on my own network."* Keep it separate from what they proposed (*"I suggested …"*).
 3. **Verify the claims**: read the code and docs and run commands. Record the claims that matter to the decision, with evidence (`file:line`, a command and its output, or a repro).
 4. **Classify**:
    - 🐛 **Bug**: the product doesn't do what it is designed or documented to do.
    - ✨ **Feature**: also give **In spirit** (`yes` / `partly` / `no`: does it fit what the product is and how it is built?) and **Design-heavy** (`no` / `some` / `yes`: would doing it properly need a lot of thinking and design, or is the right shape obvious?).
    - 📖 **Docs gap**: the product already supports it, or deliberately doesn't, and the user couldn't tell.
    - 💬 **Noise**: praise, off-topic, or unactionable.
+   - If it's genuinely more than one (e.g. a feature request that also exposes a docs gap), pick the main type and add the others to `also`.
+   - **Bugs triggered by the user's setup** (stale credentials, unusual config) still count as bugs when the product handles them badly, e.g. with an unhelpful error. Set `cause`, and mark it `confirmed: false` while it's your hypothesis about their setup. `reproduced: true` then means "reproduced under that cause".
 5. **Act**. Each change you make is an **experiment**: its own branch, pushed, and its own row in the pack.
    - **Bug**: reproduce it for real from the latest `main` (running app, script, test, command). Show the limitation for a feature, too, when that's cheap.
      - **Reproduced**: fix it on a branch, re-run the repro to prove the fix, run the relevant existing tests, commit, and push.
@@ -44,13 +47,19 @@ The argument is a URL or pasted text, possibly with screenshots.
    - **Feature, not in spirit**: no prototype. Explain why, citing the product. If a smaller, in-spirit variant would solve the goal, describe it (and optionally prototype that one).
    - **Docs gap**: the experiment is the docs change, if one is warranted.
    - More than one experiment is fine when there are genuinely different approaches worth comparing. Don't pad.
-6. **Show it**: UI changes need screenshots or a short video. Run AgentsInTheCloud (`bun run web`), stage it via `docs/automation.md`, and capture with Playwright. If the real environment can't be reproduced (e.g. LAN networking from a nested instance), demonstrate the closest real thing (a real request through the real proxy, a script), and say plainly what you couldn't show.
+6. **Show it**:
+   - **UI changes** need screenshots or a short video. Run AgentsInTheCloud (`bun run web`), stage it via `docs/automation.md`, and capture with Playwright.
+   - **CLI, installer, or other terminal changes**: put the real before/after output in fenced `text` blocks in the experiment body, trimmed to the lines that matter.
+   - **Running AgentsInTheCloud inside AgentsInTheCloud** has two traps:
+     - This workspace's `HTTP_PROXY`/`HTTPS_PROXY` are inherited by everything you start, so the inner instance's outbound traffic goes through the outer proxy and its policy. When a repro depends on the inner instance's own networking, unset them for that process and say so.
+     - A fresh instance opens a "Set up AgentsInTheCloud" dialog over every page. Dismiss it before capturing: `curl -X POST -H 'Origin: http://localhost:<port>' http://localhost:<port>/onboarding/finish`.
+   - If the real environment can't be reproduced (e.g. LAN networking from a nested instance), demonstrate the closest real thing (a real request through the real proxy, a script), and say plainly what you couldn't show.
 7. **Recommend**: commit to one recommendation with a confidence level (`high` / `medium` / `low`) and the one reason that drives it.
 8. **Draft replies**: one per realistic decision (usually 2–3), in the maintainer's voice: friendly, informal, lighthearted, brief (see the copy guidelines in `AGENTS.md`). Never post anything yourself.
 
 ### Branches
 
-Name branches `triage/<source>-<id>` (e.g. `triage/gh-37`, or `triage/gh-37-b` for a second experiment). Branch from up-to-date `main`, follow the repo's `AGENTS.md` (no UI tests, no new env vars, …), commit any repro script that proves the change alongside it (e.g. under `scripts/` or as a test where tests fit), and `git push -u origin <branch>`. **Never open a PR.** Leave the local branches in place, because the renderer diffs them against `main`. Switch the checkout back to `main` when you're done.
+Name branches `triage/<source>-<id>` (e.g. `triage/gh-37`, or `triage/gh-37-b` for a second experiment). Branch from up-to-date `main`, follow the repo's `AGENTS.md` (no UI tests, no new env vars, …), commit any repro script that proves the change alongside it (e.g. under `scripts/` or as a test where tests fit; committed repro scripts must be safe to run, so they must not install anything or change the host), and `git push -u origin <branch>`. **Never open a PR.** Leave the local branches in place, because the renderer diffs them against `origin/main`. Switch the checkout back to `main` when you're done.
 
 ## The pack
 
@@ -67,7 +76,7 @@ If your Write tool refuses to create report files, write the JSON with a shell h
 ### What goes where
 
 - **Above the fold** (`goal`, `proposal`, `classification`, `recommendation`, `unverified`): enough to decide. `recommendation.why` is one or two sentences. `unverified` is one sentence.
-- **`experiments[]`**: one collapsible row each, holding everything that belongs to that experiment: what it does (2–4 sentences), how you verified it (commands, before/after), what you couldn't show, and its screenshots and videos. The renderer adds the branch's real diff (`main...<branch>`) with Pierre. Use `diffPaths` to limit it to the files that matter when the diff is large (skip tests, lockfiles, generated files). Don't paste diffs into `body`. The renderer also adds copyable prompts per experiment (play with the branch in a new workspace, merge it to main), so the branch must be pushed and self-explanatory from its commits.
+- **`experiments[]`**: one collapsible row each, holding everything that belongs to that experiment: what it does (2–4 sentences), how you verified it (commands, before/after), what you couldn't show, and its screenshots and videos. The renderer adds the branch's real diff (`origin/main...<branch>`) with Pierre. Use `diffPaths` to limit it to the files that matter when the diff is large (skip tests, lockfiles, generated files). Don't paste diffs into `body`. The renderer also adds copyable prompts per experiment (play with the branch in a new workspace, merge it to main), so the branch must be pushed and self-explanatory from its commits.
 - **`claims[]`**: only claims that matter to the decision, with one-line evidence.
 - **`openQuestions[]`**: only if design-heavy, each with your recommended answer.
 - **`notes`**: everything else worth keeping, collapsed. Keep it short anyway.
@@ -76,5 +85,10 @@ If your Write tool refuses to create report files, write the JSON with a shell h
 Write for a reader who knows the codebase well but hasn't read the feedback. Prefer `file:line` references and visuals over prose. Every sentence must earn its place, and never present an unverified claim as fact.
 
 ## Finish
+
+Clean up first:
+- `/tmp/feedback-triage/<source>-<id>/` should contain only `report.json`, `report.html`, `report.md`, and `media/`.
+- Stop dev servers and tmux sessions you started.
+- If running the product's own scripts left traces on the host (files in `/etc`, logs, containers), list them in `notes`.
 
 Reply with the path to `report.html`, the branches you pushed, and anything in these instructions or the report contract that got in your way.
