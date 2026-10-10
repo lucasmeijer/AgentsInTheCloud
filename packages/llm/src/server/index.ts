@@ -6,6 +6,7 @@ export { renderModelsDialog, handleModelsRequest, modelsDialogId } from "./model
 export { llmWorkspaceModule as agentsInTheCloudServerModule } from "./web.ts";
 export { estimatedTimeToHitLimitSeconds, type PacedUsageWindow } from "./usage-window.ts";
 export { recordSubscriptionInference, providersInLastInferenceWindow, selectSubscriptionLimit } from "./recent-subscription-activity.ts";
+export type { ReportedAllowance } from "./subscription-usage.ts";
 export { connectedUsageProviders, getProviderUsageOverview, providerUsageFrameId, supportedUsageProviders, type ProviderUsageOverview } from "./provider-usage.ts";
 
 export { installSubscriptionCli, installCodexSubscriptionAuth } from "./subscription-cli.ts";

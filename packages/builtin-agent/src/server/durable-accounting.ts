@@ -20,9 +20,9 @@ export function durableContextTokens(view: ContextView): number {
 export function durableSubscriptionActivity(models: Pick<ModelRuntime, "getAuth">, record = recordSubscriptionInference) {
   return defineExtension({ name: "agents-in-the-cloud.subscription-activity", hooks: [hook(GenerationTask, {
     async afterResponse(message) {
-      // Only Codex has OpenAI subscription limits we can fetch for pacing.
-      if (message.provider !== "openai-codex" || message.stopReason === "error" || message.stopReason === "aborted" || message.stopReason === "deferred") return;
-      if ((await models.getAuth("openai-codex"))?.source === "OAuth") record("openai-codex");
+      // These providers expose subscription quotas with known pacing periods.
+      if ((message.provider !== "openai-codex" && message.provider !== "github-copilot") || message.stopReason === "error" || message.stopReason === "aborted" || message.stopReason === "deferred") return;
+      if ((await models.getAuth(message.provider))?.source === "OAuth") record(message.provider);
     },
   })] });
 }

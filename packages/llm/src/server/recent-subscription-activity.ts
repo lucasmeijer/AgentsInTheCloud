@@ -19,7 +19,7 @@ export function providersInLastInferenceWindow(): UsageProvider["id"][] {
   return [...lastUsed].filter(([, usedAt]) => latest - usedAt < activityWindowMs).map(([provider]) => provider);
 }
 
-/** Select the shortest projected time to blockage across all candidate subscriptions. */
+/** Select the shortest projected time to allowance exhaustion across candidate subscriptions. */
 export function selectSubscriptionLimit(
   candidates: readonly { provider: UsageProvider; windows: readonly PacedUsageWindow[] }[],
 ): { provider: UsageProvider; window: PacedUsageWindow } | undefined {

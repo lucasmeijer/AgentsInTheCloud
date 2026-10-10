@@ -19,7 +19,7 @@ export type UsageWindowTiming = {
 
 /** A linear pacing reference, not a prediction of provider allowance consumption. */
 export function usageWindowTiming(window: SubscriptionUsage["windows"][number], at: Date): UsageWindowTiming {
-  if (window.resetsAt === null) return { state: "unknown", startsAt: null, elapsedPercent: null, paceDifferencePoints: null, paceDifferenceSeconds: null };
+  if (window.resetsAt === null || window.durationSeconds === null) return { state: "unknown", startsAt: null, elapsedPercent: null, paceDifferencePoints: null, paceDifferenceSeconds: null };
   const reset = new Date(window.resetsAt).getTime();
   const duration = window.durationSeconds * 1000;
   const start = reset - duration;
@@ -35,10 +35,10 @@ export interface PacedUsageWindow {
 }
 
 /** Forecast at the average consumption rate since this window began.
- * Infinity means no projected blockage before the next reset (or no usable rate).
+ * Infinity means no projected allowance exhaustion before the next reset (or no usable rate).
  * Does not project consumption through resets. */
 export function estimatedTimeToHitLimitSeconds({ reported, timing }: PacedUsageWindow): number {
-  if (timing.state !== "active") return Infinity;
+  if (timing.state !== "active" || reported.durationSeconds === null) return Infinity;
   if (reported.usedPercent >= 100) return 0;
   if (reported.usedPercent === 0 || timing.elapsedPercent === 0) return Infinity;
   // Usage at or below elapsed time reaches 100% at or after the reset.
@@ -47,7 +47,7 @@ export function estimatedTimeToHitLimitSeconds({ reported, timing }: PacedUsageW
   return (100 - reported.usedPercent) / reported.usedPercent * elapsedSeconds;
 }
 
-/** Surface the active allowance with the shortest projected time to blockage.
+/** Surface the active allowance with the shortest projected time to exhaustion.
  * Ties prefer higher usage. When all are unused, show the main allowance. */
 export function selectPacingWindow(windows: readonly PacedUsageWindow[]): PacedUsageWindow | undefined {
   const active = windows.filter((window) => window.timing.state === "active");

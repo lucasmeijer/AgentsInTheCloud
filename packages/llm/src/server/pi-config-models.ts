@@ -216,6 +216,12 @@ export function createPiModelRuntime(): Promise<ModelRuntime> {
   })();
 }
 
+/** Read only after getAuth has let Pi refresh/serialize the Copilot credential. */
+export async function readGitHubCopilotUsageToken(): Promise<string | undefined> {
+  const credential = (await readJsonSettings(piAuthJsonPath()))["github-copilot"];
+  return isJsonObject(credential) && credential.type === "oauth" ? jsonString(credential.refresh) : undefined;
+}
+
 export type PiAuthPrompt = AuthPrompt;
 
 export class ProviderCatalogueRefreshError extends Error {
@@ -238,7 +244,7 @@ async function refreshConnectedProviderCatalogue(runtime: ModelRuntime, provider
 
 function forgetSubscriptionState(provider: string): void {
   if (provider === "anthropic") anthropicUsageSource.forget();
-  if (provider === "anthropic" || provider === "openai-codex") forgetSubscriptionInference(provider);
+  if (provider === "anthropic" || provider === "openai-codex" || provider === "github-copilot") forgetSubscriptionInference(provider);
 }
 
 export async function loginPiOAuthProvider(providerId: string, interaction: AuthInteraction): Promise<void> {

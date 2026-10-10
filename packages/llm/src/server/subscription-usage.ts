@@ -1,6 +1,22 @@
 import type { Static, TSchema } from "typebox";
 import { Value } from "typebox/value";
 
+export interface ReportedAllowance {
+  quotaId: string;
+  sourceQuotaId: string | null;
+  label: string;
+  unit: "requests" | "credits" | "completions" | "unknown";
+  selected: boolean;
+  entitlement: number | null;
+  remaining: number | null;
+  remainingPercent: number | null;
+  remainingPercentSource: "reported" | "quantity-estimate" | "unknown";
+  unlimited: boolean;
+  overageCount: number | null;
+  overagePermitted: boolean | null;
+  resetsAt: string | null;
+}
+
 export type SubscriptionUsage = {
   plan: string | null;
   checkedAt: string;
@@ -10,7 +26,9 @@ export type SubscriptionUsage = {
   resets?: { available: number };
   /** Prepaid money rather than allowance windows; amounts are in currency units. */
   balance?: { currency: string; available: number; monthSpend: number };
-  windows: { limitName: string; meteredFeature: string | null; kind: "primary" | "secondary"; usedPercent: number; durationSeconds: number; resetsAt: string | null }[];
+  /** Account snapshots, distinct from per-call charges or session usage. */
+  allowances?: ReportedAllowance[];
+  windows: { periodBasis?: "calendar-month-estimate"; limitName: string; meteredFeature: string | null; kind: "primary" | "secondary"; usedPercent: number; durationSeconds: number | null; resetsAt: string | null }[];
 };
 
 /** Expected provider/authentication failures that can be shown in the usage overview. */

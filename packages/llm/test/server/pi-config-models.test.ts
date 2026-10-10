@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getCustomModelsJson, getEnabledModels, loginPiOAuthProvider, setCustomModelsJson, setEnabledModels, validateModelProviderApiKey } from "../../src/server/pi-config-models.ts";
+import { getCustomModelsJson, getEnabledModels, loginPiOAuthProvider, readGitHubCopilotUsageToken, setCustomModelsJson, setEnabledModels, validateModelProviderApiKey } from "../../src/server/pi-config-models.ts";
 import { updateJsonSettings } from "@agents-in-the-cloud/core/json-settings";
 let dataDir: string;
 beforeEach(async () => {
@@ -12,6 +12,20 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.ATELIER_DATA_DIR;
   await rm(dataDir, { recursive: true, force: true });
+});
+
+test("Copilot usage reads the stored GitHub token, never the inference or repository token", async () => {
+  const path = join(dataDir, "pi-config", "auth.json");
+  expect(await readGitHubCopilotUsageToken()).toBeUndefined();
+  await updateJsonSettings(path, stored => {
+    stored["github-copilot"] = { type: "oauth", access: "inference-token", refresh: "github-oauth-token", expires: 0 };
+    stored.github = { type: "api_key", key: "repository-token" };
+  });
+  const before = await readFile(path, "utf8");
+  expect(await readGitHubCopilotUsageToken()).toBe("github-oauth-token");
+  expect(await readFile(path, "utf8")).toBe(before);
+  await updateJsonSettings(path, stored => { stored["github-copilot"] = { type: "api_key", key: "api-token" }; });
+  expect(await readGitHubCopilotUsageToken()).toBeUndefined();
 });
 
 describe("API key validation", () => {
