@@ -1,3 +1,4 @@
+import { Type } from "typebox";
 import { buttonHtml } from "@agents-in-the-cloud/design-system/button";
 import { destructiveConfirmationHtml } from "@agents-in-the-cloud/design-system/destructive-confirmation";
 import { Icons } from "@agents-in-the-cloud/design-system/icons";
@@ -7,9 +8,11 @@ import { transientFeedbackHtml } from "@agents-in-the-cloud/design-system/transi
 import { errorMessage, escapeHtml, turboStream, turboStreamResponse, type SettingsContribution, type WorkspaceModule, type WorkspaceServerModuleContext } from "@agents-in-the-cloud/shared";
 import { isUpdateChannel, type UpdateChannel } from "./update-channel.ts";
 import { detectSelfUpdateRuntime, prepareUpdate, type PreparedUpdate, type PullProgress, type SelfUpdateRuntime } from "./docker.ts";
-import { fetchChannelImageMetadata, repository, type ImageMetadata } from "./registry.ts";
-import { readStoredUpdateChannel, writeStoredUpdateChannel } from "./settings-store.ts";
-import { requestSupervisorUpdate } from "./supervisor.ts";
+import { fetchChannelImageMetadata, type ImageMetadata } from "./registry.ts";
+import { readStoredUpdateChannel, writeStoredUpdateChannel, readStoredReleaseSource, writeStoredReleaseSource } from "./settings-store.ts";
+import { defaultReleaseSource, releaseSourceSchema, registryCredentialSchema, type ReleaseSource } from "@agents-in-the-cloud/shared/release-source";
+import { Value } from "typebox/value";
+import { requestSupervisorUpdate, checkSupervisorRelease, prepareSupervisorRelease, supervisorRegistryRequest, requestSupervisorRollback } from "./supervisor.ts";
 
 const updateSidebarContributionId = "agents-in-the-cloud-update";
 const pollIntervalMs = 5 * 60 * 1000;
@@ -23,10 +26,13 @@ interface StateSnapshot {
   selfUpdatable: boolean;
   target?: ImageMetadata;
   updateChannel: UpdateChannel;
+  releaseSource: ReleaseSource;
   progressMessage?: string;
 }
 
 export interface UpdateManagerDeps {
+  readSource?: () => Promise<ReleaseSource | undefined>;
+  writeSource?: (source: ReleaseSource) => Promise<void>;
   readChannel?: () => Promise<UpdateChannel | undefined>;
   writeChannel?: (channel: UpdateChannel) => Promise<void>;
   detectRuntime?: () => Promise<SelfUpdateRuntime | undefined>;
@@ -46,12 +52,14 @@ export class UpdateManager {
   private percent: number | undefined;
   private error: string | undefined;
   private target: ImageMetadata | undefined;
+  private releaseSource: ReleaseSource = { ...defaultReleaseSource };
   private updateChannel: UpdateChannel = "latest";
   private pullPromise: Promise<void> | undefined;
   private prepared: PreparedUpdate | undefined;
   private progressMessage: string | undefined;
   private restarting = false;
   private switchingChannel = false;
+  private configurationError: string | undefined;
   private channelGeneration = 0;
 
   constructor(private readonly deps: UpdateManagerDeps = {}) {}
@@ -59,7 +67,13 @@ export class UpdateManager {
   async initialize(context: WorkspaceServerModuleContext): Promise<void> {
     this.context = context;
     this.runtime = await (this.deps.detectRuntime ?? detectSelfUpdateRuntime)();
-    this.updateChannel = await this.deps.readChannel?.() ?? "latest";
+    try {
+      this.releaseSource = await this.deps.readSource?.() ?? { ...defaultReleaseSource };
+      this.updateChannel = await this.deps.readChannel?.() ?? (this.deps.readSource ? "custom" : "latest");
+    } catch (error) {
+      this.configurationError = errorMessage(error);
+      this.setState("failed", { error: this.configurationError });
+    }
     this.updateSidebar();
     if (!this.runtime) return;
     await this.checkNow().catch((error) => console.error("Update check failed", error));
@@ -73,7 +87,7 @@ export class UpdateManager {
   }
 
   snapshot(): StateSnapshot {
-    return { state: this.state, percent: this.percent, error: this.error, selfUpdatable: Boolean(this.runtime), target: this.target, updateChannel: this.updateChannel, progressMessage: this.progressMessage };
+    return { state: this.state, percent: this.percent, error: this.error, selfUpdatable: Boolean(this.runtime), target: this.target, updateChannel: this.updateChannel, releaseSource: { ...this.releaseSource }, progressMessage: this.progressMessage };
   }
 
   private updateSidebar(checked = false): void {
@@ -81,6 +95,7 @@ export class UpdateManager {
     this.context?.globalSidebarContributions.set(updateSidebarContributionId, sidebarHtml || undefined, [
       { target: "settings-sec-update", html: renderUpdateSettings(this, checked), action: "replace" },
       { target: "settings-sec-update-channel", html: renderUpdateChannelSettings(this), action: "replace" },
+      { target: "settings-sec-release-source", html: renderReleaseSourceSettings(this), action: "replace" },
     ]);
   }
 
@@ -92,7 +107,7 @@ export class UpdateManager {
   }
 
   async checkNow(options: { announceCurrent?: boolean } = {}): Promise<void> {
-    if (!this.runtime || this.switchingChannel || this.pullPromise || this.prepared || this.restarting) return;
+    if (this.configurationError || !this.runtime || this.switchingChannel || this.pullPromise || this.prepared || this.restarting) return;
     const generation = this.channelGeneration;
     const channel = this.updateChannel;
     if (this.state === "idle" || this.state === "failed") this.setState("checking");
@@ -107,9 +122,9 @@ export class UpdateManager {
     }
     if (generation !== this.channelGeneration || this.pullPromise || this.prepared || this.restarting) return;
     this.target = target;
-    const current = this.runtime.currentRevision ?? this.runtime.currentDigest;
+    const current = target.revision ? this.runtime.currentRevision ?? this.runtime.currentDigest : this.runtime.currentDigest;
     const remote = target.revision ?? target.digest;
-    const available = Boolean(remote && current && remote !== current);
+    const available = Boolean(remote && current && remote !== current && this.runtime.currentDigest !== target.digest && this.runtime.currentDigest !== target.indexDigest);
     if (!available) this.setState("idle", {}, options.announceCurrent ?? false);
     else this.setState("available");
   }
@@ -148,7 +163,8 @@ export class UpdateManager {
   }
 
   private async pullNewestTarget(): Promise<void> {
-    const reference = `ghcr.io/${repository}@${this.target!.digest}`;
+    const source = this.updateChannel === "custom" ? this.releaseSource : defaultReleaseSource;
+    const reference = `${source.appRepository}@${this.target!.digest}`;
     this.prepared = undefined;
     this.setState("pulling");
     this.prepared = await (this.deps.prepareUpdate ?? prepareUpdate)(reference, (progress) => {
@@ -175,13 +191,50 @@ export class UpdateManager {
     }
   }
 
+  async setReleaseSource(source: ReleaseSource): Promise<void> {
+    if (!Value.Check(releaseSourceSchema, source)) throw new Error("Invalid release source");
+    if (!this.runtime || this.switchingChannel || this.pullPromise || this.restarting) throw new UpdateConflictError("Cannot change release source during an update or outside System");
+    this.switchingChannel = true;
+    try {
+      await this.deps.writeSource?.(source);
+      this.releaseSource = { ...source };
+      this.updateChannel = "custom";
+      this.configurationError = undefined;
+      this.channelGeneration++;
+      this.target = undefined;
+      this.prepared = undefined;
+      this.setState("idle");
+    } finally { this.switchingChannel = false; }
+    try { await this.checkNow(); }
+    catch (error) { console.error("Release source saved; discovery failed", error); }
+  }
+
   clearError(): void {
     this.error = undefined;
     this.updateSidebar();
   }
 }
 
-const manager = new UpdateManager({ readChannel: readStoredUpdateChannel, writeChannel: writeStoredUpdateChannel });
+const manager = new UpdateManager({
+  readChannel: readStoredUpdateChannel, writeChannel: writeStoredUpdateChannel,
+  readSource: readStoredReleaseSource, writeSource: writeStoredReleaseSource,
+  fetchMetadata: () => checkSupervisorRelease(),
+  prepareUpdate: (reference) => prepareSupervisorRelease(reference),
+});
+
+function renderReleaseSourceSettings(updateManager: UpdateManager, message = ""): string {
+  const snapshot = updateManager.snapshot();
+  const source = snapshot.releaseSource;
+  if (!snapshot.selfUpdatable) return '<section class="settings-sec" id="settings-sec-release-source"><h2>Release source</h2><p class="settings-sub">Release sources and private registry access require a System-managed installation.</p></section>';
+  if (snapshot.updateChannel !== "custom") return '<section class="settings-sec" id="settings-sec-release-source"><h2>Custom source</h2><p class="settings-sub">Stable and Latest use upstream images. Select Custom to choose Docker repositories and versions.</p></section>';
+  const fields = ([
+    ["appRepository", "App repository"], ["systemRepository", "System repository"],
+    ["appVersion", "App version or digest (optional)"], ["systemVersion", "System version or digest (optional)"],
+  ] as const).map(([name, label]) => `<label>${label}<input class="text-field" name="${name}" value="${escapeHtml(source[name] ?? "")}" ${name.endsWith("Repository") ? "required" : ""}></label>`).join("");
+  const save = buttonHtml({ type: "submit", variant: "secondary", content: { kind: "caption", caption: "Use custom source" } });
+  const credentials = buttonHtml({ type: "submit", variant: "secondary", content: { kind: "caption", caption: "Save registry access" } });
+  return `<section class="settings-sec release-source-settings" id="settings-sec-release-source"><h2>Custom source</h2><p class="settings-sub">Saving selects Custom. Use a GHCR or Docker Hub repository, including an upstream image. Leave versions blank to use Latest (or the last selected channel). Stable and Latest select upstream images. System installer integration is not ready yet.</p><form method="post" action="/settings/release-source" data-turbo="true">${fields}${save}</form><h3>Private GHCR access</h3><p class="settings-sub">Stored privately in System, never sent to workspaces. Use a token with package read access.</p><form method="post" action="/settings/release-registry" data-turbo="true" autocomplete="off"><label>GitHub username<input class="text-field" name="username" required></label><label>Package read token<input class="text-field" type="password" name="token" required autocomplete="new-password"></label>${credentials}</form>${message ? `<p role="status">${escapeHtml(message)}</p>` : ""}</section>`;
+}
 
 function renderCheckButton(state: "initial" | "in-progress"): string {
   return progressButtonHtml({
@@ -289,6 +342,7 @@ function renderUpdateChannelSettings(updateManager: UpdateManager): string {
     options: [
       { value: "stable", label: "Stable", disabled },
       { value: "latest", label: "Latest", disabled },
+      { value: "custom", label: "Custom", disabled },
     ],
   });
   return `<section class="settings-sec settings-choice-row" id="settings-sec-update-channel"><h2>Update channel</h2>${channel}</section>`;
@@ -326,36 +380,73 @@ function renderError(snapshot: StateSnapshot): string {
 
 export function createUpdateRouteHandler(updateManager: UpdateManager): (request: Request, url: URL) => Promise<Response | undefined> {
   return async (request, url) => {
+    const json = request.headers.get("accept")?.includes("application/json");
+    const releasePath = url.pathname === "/settings/release-source" || url.pathname === "/settings/release-registry";
+    if ((releasePath || url.pathname === "/update/status") && !updateManager.snapshot().selfUpdatable) return Response.json({ error: "Updates require AgentsInTheCloud System" }, { status: 409 });
+    if (url.pathname === "/update/rollback" && request.method === "POST") {
+      await requestSupervisorRollback();
+      return Response.json({ accepted: true }, { status: 202 });
+    }
+    if (url.pathname === "/update/status" && request.method === "GET") return Response.json(updateManager.snapshot());
+    if (url.pathname === "/settings/release-source") {
+      if (request.method === "GET") return Response.json(updateManager.snapshot().releaseSource);
+      if (request.method === "POST") {
+        let source: unknown;
+        if (request.headers.get("content-type")?.includes("application/json")) source = await request.json();
+        else {
+          const form = await request.formData();
+          source = Object.fromEntries(["appRepository", "systemRepository", "appVersion", "systemVersion"].flatMap(name => {
+            const value = form.get(name); return value ? [[name, value]] : [];
+          }));
+        }
+        if (!Value.Check(releaseSourceSchema, source)) return Response.json({ error: "Invalid Docker release source" }, { status: 400 });
+        try { await updateManager.setReleaseSource(source); }
+        catch (error) {
+          if (error instanceof UpdateConflictError) return Response.json({ error: errorMessage(error) }, { status: 409 });
+          throw error;
+        }
+        return json ? Response.json(updateManager.snapshot().releaseSource) : turboStreamResponse(turboStream("replace", "settings-sec-release-source", renderReleaseSourceSettings(updateManager, "Release source saved.")));
+      }
+    }
+    if (url.pathname === "/settings/release-registry" && (request.method === "GET" || request.method === "POST" || request.method === "DELETE")) {
+      let credentials: unknown;
+      if (request.method === "POST") credentials = request.headers.get("content-type")?.includes("application/json") ? await request.json() : Object.fromEntries(await request.formData());
+      if (request.method === "POST" && !Value.Check(registryCredentialSchema, credentials)) return Response.json({ error: "Invalid registry credentials" }, { status: 400 });
+      const result = await supervisorRegistryRequest(request.method, request.method === "POST" ? Value.Parse(registryCredentialSchema, credentials) : undefined);
+      return json || request.method === "GET" ? Response.json(result) : turboStreamResponse(turboStream("replace", "settings-sec-release-source", renderReleaseSourceSettings(updateManager, "Registry access saved.")));
+    }
     if (request.method === "POST" && (url.pathname.startsWith("/update/") || url.pathname === "/settings/update-channel") && !updateManager.snapshot().selfUpdatable) return new Response("Updates require AgentsInTheCloud System", { status: 409 });
     if (url.pathname === "/update/dismiss-error" && request.method === "POST") {
       updateManager.clearError();
       return turboStreamResponse("");
     }
     if (url.pathname === "/settings/update-channel" && request.method === "POST") {
-      const form = await request.formData();
-      const channel = form.get("channel");
+      const channelInput: unknown = request.headers.get("content-type")?.includes("application/json") ? await request.json() : Object.fromEntries(await request.formData());
+      const channel = Value.Parse(Type.Object({ channel: Type.String() }), channelInput).channel;
       if (!isUpdateChannel(channel)) return new Response("Unsupported update channel", { status: 400 });
       await updateManager.setUpdateChannel(channel);
-      return turboStreamResponse("");
+      return json ? Response.json(updateManager.snapshot()) : turboStreamResponse("");
     }
     if (url.pathname === "/update/start" && request.method === "POST") {
       try {
         void updateManager.startPull();
       } catch (error) {
         if (!(error instanceof UpdateConflictError)) throw error;
-        return turboStreamResponse(updateSettingsStream(updateManager), { status: 409 });
+        return json ? Response.json({ error: errorMessage(error) }, { status: 409 }) : turboStreamResponse(updateSettingsStream(updateManager), { status: 409 });
       }
-      return turboStreamResponse("");
+      return json ? Response.json(updateManager.snapshot(), { status: 202 }) : turboStreamResponse("");
     }
     if (url.pathname === "/update/check-now" && request.method === "POST") {
       await updateManager.checkNow({ announceCurrent: true });
-      return turboStreamResponse("");
+      return json ? Response.json(updateManager.snapshot()) : turboStreamResponse("");
     }
     if (url.pathname === "/update/restart" && request.method === "POST") {
       try {
         await updateManager.restart();
+        if (json) return Response.json({ accepted: true }, { status: 202 });
         return new Response(null, { status: 204, headers: { "x-agents-in-the-cloud-reload": "true" } });
       } catch (error) {
+        if (json) return Response.json({ error: errorMessage(error) }, { status: 409 });
         const surface = url.searchParams.get("surface");
         if (surface !== "settings" && surface !== "sidebar") return new Response("Missing update control surface", { status: 400 });
         const message = errorMessage(error);
@@ -368,7 +459,7 @@ export function createUpdateRouteHandler(updateManager: UpdateManager): (request
 
 export const agentsInTheCloudServerModule: WorkspaceModule = {
   id: "agents-in-the-cloud-update",
-  settingsContributions: [updateChannelSettingsContribution, updateSettingsContribution],
+  settingsContributions: [updateChannelSettingsContribution, { id: "release-source", label: "Release source", order: 16, render: async () => renderReleaseSourceSettings(manager) }, updateSettingsContribution],
   staticFiles: {
     "/update-client.css": { url: new URL("../client/style.css", import.meta.url), contentType: "text/css; charset=utf-8" },
   },

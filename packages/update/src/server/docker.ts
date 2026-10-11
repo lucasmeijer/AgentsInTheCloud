@@ -62,7 +62,7 @@ export async function detectSelfUpdateRuntime(exec: DockerExec = dockerExec, con
   const container = Value.Parse(Type.Array(Type.Object({ Image: Type.String(), Config: Type.Object({ Labels: Type.Optional(Type.Union([labelsSchema, Type.Null()])) }) })), JSON.parse(result.stdout))[0];
   if (container?.Config.Labels?.["agents-in-the-cloud.role"] !== "app") return undefined;
   const image = await dockerImageInspect(container.Image, exec);
-  return { currentRevision: image.Config?.Labels?.["org.opencontainers.image.revision"], currentDigest: image.RepoDigests?.find((ref) => ref.startsWith("ghcr.io/lucasmeijer/agents-in-the-cloud@"))?.split("@")[1] ?? image.Id };
+  return { currentRevision: image.Config?.Labels?.["org.opencontainers.image.revision"], currentDigest: image.RepoDigests?.find((ref) => ref.includes("@sha256:"))?.split("@")[1] ?? image.Id };
 }
 /** Docker preserves images referenced by any container, including stopped containers. */
 export async function pruneUnusedAgentsInTheCloudImages(exec: DockerExec = dockerExec): Promise<void> {

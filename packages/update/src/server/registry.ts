@@ -6,7 +6,7 @@ export const repository = "lucasmeijer/agents-in-the-cloud";
 
 export type HttpFetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
-export interface ImageMetadata { digest: string; revision?: string; }
+export interface ImageMetadata { digest: string; revision?: string; indexDigest?: string; }
 
 interface RegistryAuth { realm: string; service?: string; scope?: string }
 
@@ -56,22 +56,43 @@ export function parseWwwAuthenticate(header: string): RegistryAuth | undefined {
   return out.realm ? out : undefined;
 }
 
+async function fetchRegistryResponse(url: string, init: RequestInit, fetcher: HttpFetcher): Promise<Response> {
+  const response = await fetcher(url, { ...init, redirect: "manual" });
+  if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+  const original = new URL(url);
+  const location = response.headers.get("location");
+  if (!location || !original.pathname.includes("/blobs/")) throw new Error("Unexpected registry redirect");
+  const destination = new URL(location, original);
+  const allowed = original.hostname === "ghcr.io"
+    ? destination.hostname === "pkg-containers.githubusercontent.com"
+    : original.hostname === "registry-1.docker.io" && (destination.hostname === "production.cloudflare.docker.com" || destination.hostname === "production.cloudfront.docker.com" || destination.hostname.endsWith(".cloudflarestorage.com"));
+  if (!allowed || destination.protocol !== "https:" || destination.username || destination.password || destination.port) throw new Error("Unsafe registry blob redirect");
+  // Signed blob storage redirects are normal. Never forward the registry bearer token to storage.
+  const headers = new Headers(init.headers);
+  headers.delete("authorization");
+  try { return await fetcher(destination, { ...init, headers, redirect: "error" }); }
+  catch { throw new Error("Registry blob download failed"); }
+}
+
 async function authFetch(url: string, init: RequestInit = {}, fetcher: HttpFetcher = fetch): Promise<Response> {
-  const response = await fetcher(url, init);
+  const response = await fetchRegistryResponse(url, init, fetcher);
   if (response.status !== 401) return response;
   const auth = parseWwwAuthenticate(response.headers.get("www-authenticate") ?? "");
   if (!auth) return response;
   const tokenUrl = new URL(auth.realm);
+  const registryUrl = new URL(url);
+  const expectedOrigin = registryUrl.hostname === "registry-1.docker.io" ? "https://auth.docker.io" : registryUrl.origin;
+  if (tokenUrl.origin !== expectedOrigin || tokenUrl.pathname !== "/token" || tokenUrl.username || tokenUrl.password) throw new Error("Unsafe registry authentication challenge");
   if (auth.service) tokenUrl.searchParams.set("service", auth.service);
   if (auth.scope) tokenUrl.searchParams.set("scope", auth.scope);
-  const tokenResponse = await fetcher(tokenUrl, { headers: { accept: "application/json" } });
+  const tokenResponse = await fetcher(tokenUrl, { headers: { accept: "application/json" }, redirect: "error" });
   if (!tokenResponse.ok) throw new Error(`registry token request failed: ${tokenResponse.status}`);
   const tokenJson = Value.Parse(registryTokenResponseSchema, await tokenResponse.json());
   const token = tokenJson.token ?? tokenJson.access_token;
   if (!token) throw new Error("registry token response did not include a token");
   const headers = new Headers(init.headers);
   headers.set("authorization", `Bearer ${token}`);
-  return await fetcher(url, { ...init, headers });
+  return await fetchRegistryResponse(url, { ...init, headers }, fetcher);
 }
 
 function currentArch(): string {
@@ -95,6 +116,7 @@ async function fetchRegistryImage(base: string, version: string, fetcher: HttpFe
   let response = await authFetch(`${base}/manifests/${version}`, { headers: { accept } }, fetcher);
   if (!response.ok) throw new Error(`registry manifest request failed: ${response.status}`);
   let digest = response.headers.get("docker-content-digest");
+  const rootDigest = digest;
   const root = Value.Parse(registryManifestSchema, await response.json());
   let manifest: Static<typeof registryImageManifestSchema>;
   if ("manifests" in root) {
@@ -110,10 +132,11 @@ async function fetchRegistryImage(base: string, version: string, fetcher: HttpFe
     throw new Error(`update image is ${config.os}/${config.architecture}, expected ${platform.os}/${platform.architecture}`);
   }
   if (!digest) throw new Error("Registry did not return an immutable image digest");
-  return { digest, layers: manifest.layers, labels: config.config?.Labels ?? {} };
+  return { digest, rootDigest, layers: manifest.layers, labels: config.config?.Labels ?? {} };
 }
 
 export async function fetchChannelImageMetadata(channel: UpdateChannel, fetcher: HttpFetcher = fetch, platform = { os: "linux", architecture: currentArch() }): Promise<ImageMetadata> {
+  if (channel === "custom") throw new Error("Custom discovery requires the selected release source");
   const image = await fetchRegistryImage(`https://ghcr.io/v2/${repository}`, channel, fetcher, platform);
   return { digest: image.digest, revision: image.labels["org.opencontainers.image.revision"] };
 }
@@ -122,6 +145,8 @@ const imageReferenceSchema = Type.String({ pattern: "^[a-zA-Z0-9][a-zA-Z0-9._/:@
 
 export interface PlannedImage {
   reference: string;
+  revision?: string;
+  indexDigest?: string;
   layers: Static<typeof layerSchema>[];
   dependencies: string[];
 }
@@ -146,5 +171,8 @@ export async function resolveImage(reference: string, fetcher: HttpFetcher = fet
   // Preserve an explicitly selected index digest so Docker also registers that declared reference.
   const pinnedDigest = reference.includes("@") ? version : image.digest;
   if (!/^sha256:[a-f0-9]{64}$/.test(pinnedDigest)) throw new Error("Invalid image digest");
-  return { reference: `${registry}/${name}@${pinnedDigest}`, layers: image.layers, dependencies };
+  const plan: PlannedImage = { reference: `${registry}/${name}@${pinnedDigest}`, layers: image.layers, dependencies };
+  if (image.rootDigest && image.rootDigest !== image.digest && /^sha256:[a-f0-9]{64}$/.test(image.rootDigest)) plan.indexDigest = image.rootDigest;
+  if (image.labels["org.opencontainers.image.revision"]) plan.revision = image.labels["org.opencontainers.image.revision"];
+  return plan;
 }

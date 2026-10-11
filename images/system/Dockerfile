@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iotop-c iproute2 iputils-ping linux-perf lsof mtr-tiny ncdu nethogs \
     nftables procps psmisc smem strace sysstat systemd tcpdump tmux util-linux \
     && rm -rf /var/lib/apt/lists/*
+LABEL agents-in-the-cloud.installer-config="1"
 LABEL org.opencontainers.image.source="https://github.com/lucasmeijer/atelier" \
       org.opencontainers.image.title="AgentsInTheCloud System"
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun

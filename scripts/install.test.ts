@@ -2,10 +2,11 @@ import { expect, test } from "bun:test";
 
 const installer = await Bun.file(new URL("./install.sh", import.meta.url)).text();
 
-function run(options: { systemState?: "restarting" | "exited"; nonRoot?: boolean; denySudo?: boolean; mac?: boolean; wsl?: boolean; installed?: boolean; old?: boolean; legacyAtelier?: boolean; legacyVolumeOnly?: boolean; legacyPreSystem?: boolean; legacyDownloadFails?: boolean; legacyDelegateFails?: boolean; pullFails?: boolean; pullDenied?: boolean; appFails?: boolean; retryUpdateRequest?: boolean; rejectUpdateRequest?: boolean; pendingHealth?: boolean; missingFilesystem?: boolean; loadable?: boolean; uninstallAnswer?: string; uninstallFails?: boolean; uninstallRequestFails?: boolean; inventoryFails?: boolean; volumeOnly?: boolean; volumeRemovalFails?: boolean; initiallyStopped?: boolean } = {}, args: string[] = []) {
+function run(options: { savedRepository?: string; savedHostname?: string; appPrepareFails?: boolean; savedRegistry?: boolean; rollbackAvailable?: boolean; installerCompatible?: boolean; promptRepository?: string; promptHostname?: string; systemState?: "restarting" | "exited"; portMappings?: string; nonRoot?: boolean; denySudo?: boolean; mac?: boolean; wsl?: boolean; installed?: boolean; old?: boolean; legacyAtelier?: boolean; legacyVolumeOnly?: boolean; legacyPreSystem?: boolean; legacyDownloadFails?: boolean; legacyDelegateFails?: boolean; pullFails?: boolean; pullDenied?: boolean; appFails?: boolean; retryUpdateRequest?: boolean; rejectUpdateRequest?: boolean; pendingHealth?: boolean; missingFilesystem?: boolean; loadable?: boolean; uninstallAnswer?: string; uninstallFails?: boolean; uninstallRequestFails?: boolean; inventoryFails?: boolean; volumeOnly?: boolean; volumeRemovalFails?: boolean; initiallyStopped?: boolean } = {}, args: string[] = []) {
+  const pinned = `sha256:${"c".repeat(64)}`;
   const logPath = `/tmp/agents-in-the-cloud-install-test-${crypto.randomUUID()}.log`;
   const mock = `
-mktemp() { if [[ "$*" == *atelier-legacy-uninstall* ]]; then echo "${logPath}.legacy"; else echo "${logPath}"; fi; }
+mktemp() { if [ "\${1:-}" = -d ]; then command mktemp "$@"; return; fi; if [[ "$*" == *atelier-legacy-uninstall* ]]; then echo "${logPath}.legacy"; else echo "${logPath}"; fi; }
 curl() { printf 'CURL %s\\n' "$*" >&2; return ${options.legacyDownloadFails ? 22 : 0}; }
 bash() { printf 'LEGACY BASH %s\\n' "$*" >&2; return ${options.legacyDelegateFails ? 1 : 0}; }
 sleep() { command sleep 0.01; }
@@ -28,6 +29,7 @@ modprobe() {
 mkdir() { :; }
 docker() {
   printf 'DOCKER %s\\n' "$*" >&2
+  if [ "$1" = --config ]; then shift 2; fi
   case "$1 \${2:-}" in
     'container inspect')
       case "$3" in
@@ -36,6 +38,23 @@ docker() {
         atelier-system) return ${options.legacyAtelier ? 0 : 1} ;;
         atelier) return ${options.legacyPreSystem ? 0 : 1} ;;
       esac ;;
+    'cp '*) printf '%s' '{"auths":{"ghcr.io":{"auth":"Zml4dHVyZTp0b2tlbg=="}}}' > "$3"; return 0 ;;
+    'run --rm')
+      if [[ "$*" == *' rollback-plan '* ]]; then if [ "${options.rollbackAvailable === false ? 0 : 1}" -eq 0 ]; then return 1; fi; printf '%s\n%s\n%s\n' ${pinned} ${pinned} agents-in-the-cloud-system; return 0; fi
+      if [[ "$*" == *' auth-check '* ]]; then echo ${options.savedRegistry ? 1 : 0}; return 0; fi
+      if [[ "$*" == *" plan "* ]]; then
+        local -a arguments=("$@")
+        local i source app system hostname
+        for ((i=0;i<\${#arguments[@]};i++)); do
+          if [ "\${arguments[i]}" = plan ]; then
+            source="\${arguments[i+1]}"; app="\${arguments[i+2]}"; system="\${arguments[i+3]}"; hostname="\${arguments[i+4]}"; break
+          fi
+        done
+        source="\${source:-${options.savedRepository ?? 'ghcr.io/lucasmeijer/agents-in-the-cloud'}}"
+        printf '%s\n%s\n%s\n' "\${system:-$source-system:latest}" "\${app:-$source:latest}" "\${hostname:-${options.savedHostname ?? 'agents-in-the-cloud-system'}}"
+      fi
+      return 0 ;;
+    'image inspect') if [[ "$*" == *'installer-config'* ]]; then echo ${options.installerCompatible === false ? 0 : 1}; elif [[ "$*" == *'{{.Id}}'* ]]; then echo ${pinned}; fi; return 0 ;;
     'pull '*)
       if [ "${options.pullDenied ? 1 : 0}" -eq 1 ]; then echo 'Error response from daemon: Head "https://ghcr.io/v2/lucasmeijer/agents-in-the-cloud-system/manifests/latest": denied: denied' >&2; return 1; fi
       return ${options.pullFails ? 1 : 0} ;;
@@ -55,6 +74,10 @@ docker() {
         printf '${options.uninstallFails ? "failed\\nvolume is in use" : "complete\\nManaged resources deleted"}\\n'; return 0
       fi ;;
     'exec agents-in-the-cloud-system')
+      if [[ "$*" == *"Cannot prepare the selected app"* ]]; then
+        if [ "${options.appPrepareFails ? 1 : 0}" -eq 1 ]; then return 1; fi
+        echo ${pinned}; return 0
+      fi
       if [[ "$*" == *3001/update-channel* ]]; then
         if [ "${options.rejectUpdateRequest ? 1 : 0}" -eq 1 ]; then return 2; fi
         if [ "${options.retryUpdateRequest ? 1 : 0}" -eq 1 ] && [ ! -e "${logPath}.update-attempted" ]; then
@@ -78,7 +101,7 @@ docker() {
         return
       fi ;;
     'logs --tail') echo 'supervisor startup failed: io.weight unavailable';;
-    'inspect --format') if [[ "$*" == *State.Status* ]]; then echo ${options.systemState ?? 'running'}; elif [[ "$*" == *3080/tcp* ]]; then echo 55123; else echo ${options.initiallyStopped ? "false" : "true"}; fi ;;
+    'inspect --format') if [[ "$*" == *'{{.Image}}'* ]]; then echo ${pinned}; elif [[ "$*" == *'range $port'* ]]; then printf '%b\\n' ${JSON.stringify(options.portMappings ?? '')}; elif [[ "$*" == *State.Status* ]]; then echo ${options.systemState ?? 'running'}; elif [[ "$*" == *3080/tcp* ]]; then echo 55123; else echo ${options.initiallyStopped ? "false" : "true"}; fi ;;
   esac
 }
 `;
@@ -88,7 +111,7 @@ docker() {
     .replace('{ [ -t 0 ]; } 2>/dev/null <"$prompt_input"', "true")
     .replace(
       'IFS= read -r -t 120 "$1" <"$prompt_input"',
-      `if [ "$1" = action ]; then action=update; else answer=${JSON.stringify(options.uninstallAnswer ?? (options.installed ? "yes" : "1"))}; fi`,
+      `if [ "$1" = action ]; then action=update; elif [ "$1" = source_repository ]; then source_repository=${JSON.stringify(options.promptRepository ?? "")}; elif [ "$1" = tailscale_hostname ]; then tailscale_hostname=${JSON.stringify(options.promptHostname ?? "")}; else answer=${JSON.stringify(options.uninstallAnswer ?? (options.installed ? "yes" : "1"))}; fi`,
     );
   const result = Bun.spawnSync([process.platform === "darwin" ? "/bin/bash" : "bash", "-c", mock + script, "installer", ...args], { stdin: "ignore" });
   const log = Bun.spawnSync(["cat", logPath]).stdout.toString();
@@ -101,11 +124,13 @@ test("piped sudo installs read prompts from the caller's terminal", () => {
   expect(installer).toContain('IFS= read -r -t 120 "$1" <"$prompt_input"');
 });
 
+const pinnedSystem = `sha256:${"c".repeat(64)}`;
+
 test("fresh install launches privileged System with persistent named volume and bootstrap app", () => {
   const result = run({}, ["--system-image", "test/system:v1", "--app-image", "test/app:v1"]);
   expect(result.status).toBe(0);
-  expect(result.output).toContain("DOCKER pull test/system:v1");
-  expect(result.output).toContain("--name agents-in-the-cloud-system --hostname agents-in-the-cloud-system --privileged --cgroupns=host --restart unless-stopped --stop-timeout 120 --tmpfs /run --mount source=agents-in-the-cloud-system,target=/data --publish 127.0.0.1:3080:3080 test/system:v1 --app-image test/app:v1 --access-mode tailscale");
+  expect(result.output).toContain("DOCKER image inspect test/system:v1");
+  expect(result.output).toContain(`--name agents-in-the-cloud-system --hostname agents-in-the-cloud-system --privileged --cgroupns=host --restart unless-stopped --stop-timeout 120 --tmpfs /run --mount source=agents-in-the-cloud-system,target=/data --publish 127.0.0.1:3080:3080 ${pinnedSystem} --app-image test/app:v1 --access-mode tailscale`);
   expect(result.output).not.toContain("DOCKER stop");
   expect(result.output).toContain("DOCKER exec agents-in-the-cloud-system bun -e");
 });
@@ -133,20 +158,20 @@ test("failed pull leaves existing System untouched", () => {
   expect(result.status).not.toBe(0);
   expect(result.output).not.toContain("DOCKER stop");
   expect(result.output).not.toContain("DOCKER rm");
-  expect(result.output).not.toContain("DOCKER run");
+  expect(result.output).not.toContain("DOCKER run -d");
 });
 
-test("pull rejected by a stale ghcr.io login explains how to clear it", () => {
+test("private registry denial stops without suggesting credential removal", () => {
   const result = run({ pullDenied: true });
   expect(result.status).not.toBe(0);
-  expect(result.output).toContain("GitHub turned down Docker's saved login for ghcr.io");
-  expect(result.output).toContain("Run: docker logout ghcr.io, then run this installer again.");
+  expect(result.output).toContain("Cannot pull the selected System image");
+  expect(result.output).not.toContain("Run: docker logout");
   expect(result.output).not.toContain("DOCKER run");
 });
 
 test("other pull failures keep the generic message", () => {
   const result = run({ pullFails: true });
-  expect(result.output).toContain("Downloading AgentsInTheCloud services failed. See the bootstrap log for details.");
+  expect(result.output).toContain("no upstream fallback was attempted");
   expect(result.output).not.toContain("docker logout");
 });
 
@@ -241,10 +266,10 @@ test("waits for supervisor readiness without interpreting the activity descripti
 });
 
 
-test("macOS starts System directly without a temporary check container or host module changes", () => {
+test("macOS uses a network-isolated configuration helper without host module changes", () => {
   const result = run({ mac: true, missingFilesystem: true });
   expect(result.status).toBe(0);
-  expect(result.output).not.toContain("DOCKER run --rm");
+  expect(result.output).toContain("DOCKER run --rm --network none --entrypoint bun");
   expect(result.output).not.toContain("MODPROBE");
   expect(result.output).toContain("Open https://app.example/custom-path");
 });
@@ -314,25 +339,19 @@ for (const action of ["open", "connect"]) {
 }
 
 
-test("update requests a channel update before accepting a healthy saved app", () => {
+test("update prepares and pins the app before replacing System", () => {
   const result = run({ installed: true }, ["--action", "update"]);
   expect(result.status).toBe(0);
-  expect(result.output.indexOf("3001/access")).toBeLessThan(result.output.indexOf("3001/update-channel"));
-  expect(result.output.indexOf("3001/update-channel")).toBeLessThan(result.output.indexOf("3001/status"));
+  expect(result.output.indexOf("Cannot prepare the selected app")).toBeLessThan(result.output.indexOf("DOCKER stop --time 120"));
+  expect(result.output).not.toContain("3001/update-channel");
 });
 
-test("update retries an unavailable supervisor even when the saved app failed", () => {
-  const result = run({ installed: true, retryUpdateRequest: true }, ["--action", "update"]);
-  expect(result.status).toBe(0);
-  expect(result.output.match(/http:\/\/127\.0\.0\.1:3001\/update-channel/g)?.length).toBe(2);
-  expect(result.output).toContain("Open https://app.example/custom-path");
-});
-
-test("update fails explicitly when the supervisor rejects the update request", () => {
-  const result = run({ installed: true, rejectUpdateRequest: true }, ["--action", "update"]);
+test("failed app preparation retains existing System", () => {
+  const result = run({ installed: true, appPrepareFails: true }, ["--action", "update"]);
   expect(result.status).not.toBe(0);
-  expect(result.output).toContain("Could not request the AgentsInTheCloud app update");
-  expect(result.output).not.toContain("Open https://");
+  expect(result.output).toContain("existing System was not replaced");
+  expect(result.output).not.toContain("DOCKER stop");
+  expect(result.output).not.toContain("DOCKER rm");
 });
 
 for (const action of ["install", "open", "connect"]) {
@@ -495,4 +514,69 @@ test("legacy installation storage remaining after container removal still delega
   expect(result.output).toContain("LEGACY BASH");
   expect(result.output).toContain("DELETE ATELIER");
   expect(result.output).not.toContain("Nothing to uninstall");
+});
+
+test("updates preserve existing host publications, including a stopped System", () => {
+  const result = run({ installed: true, initiallyStopped: true, portMappings: "192.168.1.10:3443:3443/tcp\n::1:5353:5353/udp" }, ["--action", "update"]);
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("--publish 192.168.1.10:3443:3443/tcp");
+  expect(result.output).toContain("--publish [::1]:5353:5353/udp");
+  expect(installer).not.toContain(".NetworkSettings.Ports");
+});
+
+test("setup prompts for a source repository and hostname and uses the answers", () => {
+  const result = run({ promptRepository: "ghcr.io/example/cloud", promptHostname: "cloud-home" });
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("Release image repository");
+  expect(result.output).toContain("Tailscale hostname");
+  expect(result.output).toContain("DOCKER pull ghcr.io/example/cloud-system:latest");
+  expect(result.output).toContain("--hostname cloud-home");
+  expect(result.output).toContain("--app-image ghcr.io/example/cloud:latest");
+});
+
+test("updates use the saved fork source and hostname without prompting or pulling upstream", () => {
+  const result = run({ installed: true, savedRepository: "ghcr.io/example/fork", savedHostname: "saved-cloud" }, ["--action", "update"]);
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("DOCKER pull ghcr.io/example/fork-system:latest");
+  expect(result.output).not.toContain("DOCKER pull ghcr.io/lucasmeijer");
+  expect(result.output).toContain("--hostname saved-cloud");
+  expect(result.output).not.toContain("Release image repository [");
+});
+
+test("invalid setup hostname is rejected before pulling or replacing System", () => {
+  const result = run({}, ["--tailscale-hostname", "invalid host"]);
+  expect(result.status).not.toBe(0);
+  expect(result.output).toContain("Invalid Tailscale hostname");
+  expect(result.output).not.toContain("DOCKER pull");
+  expect(result.output).not.toContain("DOCKER run -d");
+});
+
+test("saved private registry authentication is reused through a restrictive temporary host config", () => {
+  const result = run({ installed: true, savedRegistry: true, savedRepository: "ghcr.io/example/private" }, ["--action", "update"]);
+  expect(result.status).toBe(0);
+  expect(result.output).toContain("DOCKER --config /tmp/agents-in-the-cloud-registry.");
+  expect(result.output).not.toContain("Zml4dHVyZTp0b2tlbg==");
+  expect(result.output).toContain("pull ghcr.io/example/private-system:latest");
+});
+
+test("rollback uses retained images without registry pulls", () => {
+  const result = run({ installed: true }, ["--action", "rollback"]);
+  expect(result.status).toBe(0);
+  expect(result.output).not.toContain("DOCKER pull");
+  expect(result.output).toContain(" rollback-apply ");
+});
+
+test("rollback without a retained pair leaves the existing installation untouched", () => {
+  const result = run({ installed: true, rollbackAvailable: false }, ["--action", "rollback"]);
+  expect(result.status).not.toBe(0);
+  expect(result.output).not.toContain("DOCKER stop");
+  expect(result.output).not.toContain("DOCKER rm");
+});
+
+test("an incompatible System image is rejected before stopping the current installation", () => {
+  const result = run({ installed: true, installerCompatible: false }, ["--action", "update"]);
+  expect(result.status).not.toBe(0);
+  expect(result.output).toContain("does not support this installer");
+  expect(result.output).not.toContain("DOCKER stop");
+  expect(result.output).not.toContain("DOCKER rm");
 });
