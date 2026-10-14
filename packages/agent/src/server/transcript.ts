@@ -4,7 +4,7 @@ import type { AgentRenderContext } from "./render-context.ts";
 import type { TurnTimingSummary } from "./turn-timing.ts";
 import { Type, type Static } from "typebox";
 import type { StopReason } from "@earendil-works/pi-ai";
-import { Value } from "typebox/value";
+import { Compile } from "typebox/compile";
 import { isJsonObject, type JsonValue } from "@agents-in-the-cloud/core";
 
 export interface SessionImageRef {
@@ -59,10 +59,12 @@ const toolViewDetailsSchema = Type.Object({
   workspaceId: Type.Optional(Type.String()),
 });
 
+const toolViewDetailsValidator = Compile(toolViewDetailsSchema);
+
 type ToolViewDetails = Static<typeof toolViewDetailsSchema> & { [key: string]: JsonValue | undefined };
 
 export function isToolViewDetails(value: unknown): value is ToolViewDetails {
-  if (!Value.Check(toolViewDetailsSchema, value)) return false;
+  if (!toolViewDetailsValidator.Check(value)) return false;
   const definedEntries = Object.entries(value).filter(([, entry]) => entry !== undefined);
   return isJsonObject(Object.fromEntries(definedEntries));
 }
