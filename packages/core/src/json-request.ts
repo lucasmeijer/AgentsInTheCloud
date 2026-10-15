@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { Value } from "typebox/value";
+import { Compile } from "typebox/compile";
 
 import { invalidArguments } from "./errors.ts";
 import type { JsonObject } from "./json.ts";
@@ -16,12 +16,15 @@ const jsonObjectSchema = Type.Cyclic({
   JsonObject: Type.Record(Type.String(), Type.Ref("JsonValue")),
 }, "JsonObject");
 
+// Shared by transcript parsing as well as HTTP input; resolve the recursive schema once.
+const jsonObjectValidator = Compile(jsonObjectSchema);
+
 export function requestAcceptsJson(request: Request): boolean {
   return request.headers.get("accept")?.includes("application/json") ?? false;
 }
 
 export function isJsonObject(value: unknown): value is JsonObject {
-  return Value.Check(jsonObjectSchema, value);
+  return jsonObjectValidator.Check(value);
 }
 
 export async function readJsonObject(request: Request): Promise<JsonObject> {

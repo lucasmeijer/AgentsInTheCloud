@@ -1,7 +1,7 @@
 import { contentText } from "@earendil-works/pi-ai";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
+import { Compile } from "typebox/compile";
 import { isToolViewDetails, type SessionImageRef, type TranscriptRecord } from "./transcript.ts";
 
 import { turnStartEntryType, turnStartSchema, turnTimingEntryType, turnTimingRecordSchema } from "./turn-timing.ts";
@@ -77,10 +77,20 @@ const sessionEntrySchema = Type.Union([
   Type.Object({ ...entryFields, type: Type.Literal("thinking_level_change"), thinkingLevel: Type.String() }),
 ]);
 
+// Resolve history schemas once, not for every entry and content block on reload.
+const sessionImagePartValidator = Compile(sessionImagePartSchema);
+const sessionImageStringValidator = Compile(sessionImageStringSchema);
+const sessionTextSignatureValidator = Compile(sessionTextSignatureSchema);
+const textPartValidator = Compile(textPartSchema);
+const assistantPartValidator = Compile(assistantPartSchema);
+const sessionEntryValidator = Compile(sessionEntrySchema);
+const turnStartValidator = Compile(turnStartSchema);
+const turnTimingRecordValidator = Compile(turnTimingRecordSchema);
+
 type CacheWarmUsage = Extract<SessionEntry, { type: "usage" }>["usage"];
 function sessionContentText(content: string | readonly unknown[]): string {
-  if (Value.Check(sessionImageStringSchema, content)) return content;
-  return contentText(content.filter(part => Value.Check(textPartSchema, part)).map(part => ({ type: "text", text: part.text ?? "" })));
+  if (sessionImageStringValidator.Check(content)) return content;
+  return contentText(content.filter(part => textPartValidator.Check(part)).map(part => ({ type: "text", text: part.text ?? "" })));
 }
 
 
@@ -91,12 +101,12 @@ interface SessionAssistantTextPart {
 }
 
 function sessionContentImages(entryId: string, content: string | readonly unknown[]): SessionImageRef[] {
-  if (Value.Check(sessionImageStringSchema, content)) return [];
+  if (sessionImageStringValidator.Check(content)) return [];
   const images: SessionImageRef[] = [];
   content.forEach((part, contentIndex) => {
-    if (!Value.Check(sessionImagePartSchema, part)) return;
-    const mimeType = Value.Check(sessionImageStringSchema, part.mimeType) ? part.mimeType : undefined;
-    const data = Value.Check(sessionImageStringSchema, part.data) ? part.data : undefined;
+    if (!sessionImagePartValidator.Check(part)) return;
+    const mimeType = sessionImageStringValidator.Check(part.mimeType) ? part.mimeType : undefined;
+    const data = sessionImageStringValidator.Check(part.data) ? part.data : undefined;
     const dimensions = data && mimeType ? imageDimensions(Buffer.from(data.slice(0, 87_384), "base64"), mimeType) : undefined;
     images.push({ entryId, contentIndex, mimeType, ...dimensions });
   });
@@ -119,12 +129,12 @@ export function recordsFromSessionEntries(entries: readonly unknown[]): Transcri
   const records: TranscriptRecord[] = [];
   let lastSettingChange: { type: "model_change" | "thinking_level_change"; record: TranscriptRecord } | undefined;
   for (const entry of entries) {
-    if (!Value.Check(sessionEntrySchema, entry)) continue;
-    if (entry.type === "custom" && entry.customType === turnStartEntryType && Value.Check(turnStartSchema, entry.data)) {
+    if (!sessionEntryValidator.Check(entry)) continue;
+    if (entry.type === "custom" && entry.customType === turnStartEntryType && turnStartValidator.Check(entry.data)) {
       records.push({ kind: "runStart", ...entry.data, timestamp: entryTimestamp(entry) });
       continue;
     }
-    if (entry.type === "custom" && entry.customType === turnTimingEntryType && Value.Check(turnTimingRecordSchema, entry.data)) {
+    if (entry.type === "custom" && entry.customType === turnTimingEntryType && turnTimingRecordValidator.Check(entry.data)) {
       const { turnEntryId, outcome, ...timing } = entry.data;
       records.push({ kind: "timing", timing, turnEntryId, outcome, timestamp: entryTimestamp(entry) });
       continue;
@@ -136,11 +146,11 @@ export function recordsFromSessionEntries(entries: readonly unknown[]): Transcri
       } else if (message.role === "assistant") {
         const parts: Extract<TranscriptRecord, { kind: "assistant" }>["parts"] = [];
         for (const part of message.content ?? []) {
-          if (!Value.Check(assistantPartSchema, part)) continue;
+          if (!assistantPartValidator.Check(part)) continue;
           if (part.type === "thinking") parts.push({ type: "thinking", text: part.thinking ?? "" });
           else if (part.type === "text") {
             const textPart: SessionAssistantTextPart = { type: "text", text: part.text ?? "" };
-            if (Value.Check(sessionTextSignatureSchema, part.textSignature)) textPart.textSignature = part.textSignature;
+            if (sessionTextSignatureValidator.Check(part.textSignature)) textPart.textSignature = part.textSignature;
             parts.push(textPart);
           }
           else if (part.type === "toolCall") parts.push({ type: "toolCall", callId: part.id, name: part.name, args: part.arguments });
