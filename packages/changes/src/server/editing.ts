@@ -14,8 +14,8 @@ export function createChangesEditStore() {
   const sessions = new Map<string, Map<string, EditSession>>();
   async function begin(workspaceId: string, root: Repository, snapshot: ChangesSnapshot, path: string, file = snapshot.files.get(path)): Promise<EditModel> {
     if (snapshot.endpoints.target !== workingTree || !file || !canEditFile(file)) throw new EditError("This file is read-only in this comparison.");
-    const working = await root.workingFile(path, true);
-    if (!working || working.mode !== file.newMode) throw new EditError("This file is no longer editable. Refresh Changes.", 409);
+    const working = await root.workingFile(path, true, maxChangesTextBytes);
+    if (!working || working.oversized || working.mode !== file.newMode) throw new EditError("This file is no longer editable. Refresh Changes.", 409);
     if (!working.contents.equals(Buffer.from(file.newContents!))) throw new EditError("This file changed. Refresh Changes before editing.", 409);
     const model: EditModel = { token: crypto.randomUUID(), path, contents: file.newContents!, ending: editLineEnding(file.newContents!)! };
     let workspace = sessions.get(workspaceId);

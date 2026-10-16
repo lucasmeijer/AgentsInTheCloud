@@ -1,7 +1,7 @@
 import { extensionOf, imageMimeByExtension } from "@agents-in-the-cloud/shared/file-metadata";
 import { isUtf8 } from "node:buffer";
 import { parseDiffFromFile, type FileContents, type FileDiffMetadata } from "@pierre/diffs";
-import { git, parseGitStatus, parseGitNumstat, type GitStatusEntry, type GitNumstat, type Repository } from "@agents-in-the-cloud/workspace/git";
+import { git, readRepositoryBlob, parseGitStatus, parseGitNumstat, type RepositoryContent, type GitStatusEntry, type GitNumstat, type Repository } from "@agents-in-the-cloud/workspace/git";
 import { maxChangesTextBytes, maxChangesTextLines } from "../editing.ts";
 
 type ChangesFileKind = "text" | "binary" | "large" | "mode";
@@ -35,13 +35,12 @@ export type ChangesIndex =
   | { phase: "not-git" }
   | { phase: "ready"; files: ChangesFileSummary[] };
 
-async function gitObject(root: Repository, path: string): Promise<Buffer | undefined> {
-  const result = await root.gitResult(["show", `HEAD:${path}`]);
-  return result.exitCode === 0 ? result.stdout : undefined;
+async function gitObject(root: Repository, path: string, maxBytes = maxChangesTextBytes): Promise<RepositoryContent | undefined> {
+  return readRepositoryBlob(root, `HEAD:${path}`, maxBytes);
 }
 
-async function workingFile(root: Repository, path: string): Promise<Buffer | undefined> {
-  return (await root.workingFile(path))?.contents;
+async function workingFile(root: Repository, path: string, maxBytes = maxChangesTextBytes): Promise<RepositoryContent | undefined> {
+  return root.workingFile(path, undefined, maxBytes);
 }
 
 function decodeText(content: Buffer | undefined): string | undefined {
@@ -61,7 +60,7 @@ async function modes(root: Repository, entry: GitStatusEntry): Promise<{ oldMode
   const match = raw.match(/^:(\d{6}) (\d{6}) /);
   if (match) return { oldMode: match[1], newMode: match[2] };
   if (entry.code === "??") {
-    return { newMode: (await root.workingFile(entry.path))?.mode };
+    return { newMode: (await root.workingFile(entry.path, undefined, 0))?.mode };
   }
   return {};
 }
@@ -73,15 +72,17 @@ function captureImage(path: string, contents: Buffer | undefined, mode?: string)
 
 function changesFileFromContents(
   entry: GitStatusEntry,
-  oldBuffer: Buffer | undefined,
-  newBuffer: Buffer | undefined,
+  oldContent: RepositoryContent | undefined,
+  newContent: RepositoryContent | undefined,
   modes: { oldMode?: string; newMode?: string },
 ): ChangesFile | undefined {
   const oldPath = entry.previousPath ?? entry.path;
-  const change: ChangesFileChange = oldBuffer === undefined ? "added" : newBuffer === undefined ? "removed" : "modified";
+  const change: ChangesFileChange = oldContent === undefined ? "added" : newContent === undefined ? "removed" : "modified";
+  const oldBuffer = oldContent?.contents, newBuffer = newContent?.contents;
   const base: Pick<ChangesFile, "path" | "previousPath" | "change" | "newMode"> = { path: entry.path, change, newMode: modes.newMode };
   if (entry.previousPath) base.previousPath = entry.previousPath;
-  if (oldBuffer === undefined && newBuffer === undefined) return undefined;
+  if (oldContent === undefined && newContent === undefined) return undefined;
+  if (oldContent?.oversized || newContent?.oversized) return { ...base, kind: "large", detail: "File is too large to render safely" };
   const before = captureImage(oldPath, oldBuffer, modes.oldMode);
   const after = captureImage(entry.path, newBuffer, modes.newMode);
   if (before || after) return { ...base, kind: "binary", images: { before, after } };
@@ -162,12 +163,12 @@ export async function collectChangesStats(root: Repository, index: ChangesIndex)
     const base = head.byteLength ? "HEAD" : (await git(root, ["hash-object", "-t", "tree", "/dev/null"])).toString("utf8").trim();
     tracked = parseGitNumstat(await git(root, ["diff", "--numstat", "-z", base, "--"]));
   }
-  return Promise.all(index.files.map(async (file) => {
+  async function fileStats(file: ChangesFileSummary): Promise<ChangesFileStats> {
     if (file.untracked) {
       const content = await workingFile(root, file.path);
-      const text = decodeText(content);
+      const text = content?.oversized ? undefined : decodeText(content?.contents);
       if (content !== undefined && text === undefined) {
-        return { ...file, additions: 0, deletions: 0, binarySizes: { after: content.byteLength } };
+        return { ...file, additions: 0, deletions: 0, binarySizes: { after: content.size } };
       }
       const additions = text ? lineCount(text) - Number(text.endsWith("\n")) : 0;
       return { ...file, additions, deletions: 0 };
@@ -175,13 +176,16 @@ export async function collectChangesStats(root: Repository, index: ChangesIndex)
     const { binary, ...counts } = tracked.get(file.path) ?? { additions: 0, deletions: 0 };
     if (binary) {
       const [before, after] = await Promise.all([
-        gitObject(root, file.previousPath ?? file.path),
-        workingFile(root, file.path),
+        gitObject(root, file.previousPath ?? file.path, 0),
+        workingFile(root, file.path, 0),
       ]);
-      return { ...file, ...counts, binarySizes: { before: before?.byteLength, after: after?.byteLength } };
+      return { ...file, ...counts, binarySizes: { before: before?.size, after: after?.size } };
     }
     return { ...file, ...counts };
-  }));
+  }
+  const results: ChangesFileStats[] = [];
+  for (const file of index.files) results.push(await fileStats(file));
+  return results;
 }
 
 
@@ -238,7 +242,7 @@ export async function collectCommitChangesFile(root: Repository, commit: string,
   if (entry.oldMode === "160000" || entry.newMode === "160000") {
     return { path, change: statusChange(entry), kind: "mode", detail: "Submodule changed" };
   }
-  const contents = (hash: string, mode: string) => mode === "000000" ? undefined : git(root, ["cat-file", "blob", hash]);
+  const contents = (hash: string, mode: string) => mode === "000000" ? undefined : readRepositoryBlob(root, hash, maxChangesTextBytes);
   const [before, after] = await Promise.all([contents(entry.oldHash, entry.oldMode), contents(entry.newHash, entry.newMode)]);
   return changesFileFromContents(entry, before, after, entry);
 }
@@ -258,36 +262,41 @@ export async function collectChangesComparison(root: Repository, base: string, e
   const counts = parseGitNumstat(numstat);
   const files = new Map<string, ChangesFile>();
   const stats: ChangesFileStats[] = new Array(entries.length);
-  await Promise.all(entries.map(async (entry, position) => {
+  // Also bound retained snapshot content, not just in-flight requests.
+  let remainingBytes = 16 * 1024 * 1024;
+  for (const [position, entry] of entries.entries()) {
     const summary: ChangesFileSummary = { path: entry.path, change: statusChange(entry) };
     if (entry.previousPath) summary.previousPath = entry.previousPath;
     if (entry.code === "??") summary.untracked = true;
     if (entry.oldMode === "160000" || entry.newMode === "160000") {
       files.set(entry.path, { ...summary, kind: "mode", detail: "Submodule changed" });
       stats[position] = { ...summary, additions: 0, deletions: 0 };
-      return;
+      continue;
     }
     if (isNestedRepository(entry)) {
       files.set(entry.path, { ...summary, kind: "mode", detail: "Nested Git repository" });
       stats[position] = { ...summary, additions: 0, deletions: 0 };
-      return;
+      continue;
     }
-    const blob = (hash: string, mode: string) => mode === "000000" ? undefined : git(root, ["cat-file", "blob", hash]);
-    const [before, working, committed] = await Promise.all([blob(entry.oldHash, entry.oldMode), end ? undefined : root.workingFile(entry.path), end ? blob(entry.newHash, entry.newMode) : undefined]);
-    const after = end ? committed : working?.contents;
+    const limit = Math.min(maxChangesTextBytes, Math.floor(remainingBytes / 2));
+    const blob = (hash: string, mode: string) => mode === "000000" ? undefined : readRepositoryBlob(root, hash, limit);
+    const [before, working, committed] = await Promise.all([blob(entry.oldHash, entry.oldMode), end ? undefined : root.workingFile(entry.path, undefined, limit), end ? blob(entry.newHash, entry.newMode) : undefined]);
+    const after = end ? committed : working;
+    remainingBytes -= (before?.contents.length ?? 0) + (after?.contents.length ?? 0);
     if (working) entry.newMode = working.mode;
-    if (!entry.previousPath && before !== undefined && after !== undefined && before.equals(after) && entry.oldMode === entry.newMode) return;
+    if (!entry.previousPath && before !== undefined && after !== undefined && !before.oversized && !after.oversized && before.contents.equals(after.contents) && entry.oldMode === entry.newMode) continue;
     const file = changesFileFromContents(entry, before, after, entry);
     if (!file) throw new Error(`File changed while capturing comparison: ${entry.path}`);
     summary.change = file.change;
     files.set(entry.path, file);
     const count = counts.get(entry.path);
-    stats[position] = { ...summary, additions: count?.additions ?? (lineCount(decodeText(after)) - Number(decodeText(after)?.endsWith("\n") ?? false)), deletions: count?.deletions ?? 0 };
+    const text = after?.oversized ? undefined : decodeText(after?.contents);
+    stats[position] = { ...summary, additions: count?.additions ?? (lineCount(text) - Number(text?.endsWith("\n") ?? false)), deletions: count?.deletions ?? 0 };
     if (file.diff) {
       stats[position] = { ...summary, additions: file.diff.hunks.reduce((sum, hunk) => sum + hunk.additionLines, 0), deletions: file.diff.hunks.reduce((sum, hunk) => sum + hunk.deletionLines, 0) };
     }
-    if (file.kind === "binary") stats[position] = { ...summary, additions: 0, deletions: 0, binarySizes: { before: before?.byteLength, after: after?.byteLength } };
-  }));
+    if (file.kind === "binary" || file.kind === "large") stats[position] = { ...summary, additions: 0, deletions: 0, binarySizes: { before: before?.size, after: after?.size } };
+  }
   const capturedStats = stats.filter((stat) => stat !== undefined);
   return { index: { phase: "ready", files: capturedStats.map(({ additions: _a, deletions: _d, binarySizes: _b, ...summary }) => summary) }, stats: capturedStats, files };
 }
@@ -313,14 +322,14 @@ export type UnchangedFile =
   | { kind: "image" | "video" | "audio"; contentType: string }
   | { kind: "binary" | "large" };
 
-/** Images, video and audio are recognised by name, like the Files view, and streamed rather than read here. */
+/** Images, video and audio are recognised by name; their bytes are loaded by the bounded media endpoint. */
 export function unchangedMediaType(path: string): string | undefined {
   const contentType = imageMimeByExtension[extensionOf(path)] ?? Bun.file(path).type.split(";")[0]!;
   return /^(?:image|video|audio)\//.test(contentType) ? contentType : undefined;
 }
 
-export async function readUnchangedContents(root: Repository, target: string | undefined, path: string): Promise<{ contents: Buffer; mode?: string }> {
-  const file = target ? { contents: await git(root, ["cat-file", "blob", `${target}:${path}`]) } : await root.workingFile(path);
+export async function readUnchangedContents(root: Repository, target: string | undefined, path: string, maxBytes = 16 * 1024 * 1024): Promise<RepositoryContent & { mode?: string }> {
+  const file = target ? await readRepositoryBlob(root, `${target}:${path}`, maxBytes) : await root.workingFile(path, undefined, maxBytes);
   if (!file) throw new Error(`${path} no longer exists`);
   return file;
 }
@@ -332,7 +341,8 @@ export async function readUnchangedFile(root: Repository, target: string | undef
     const kind = contentType.split("/")[0] as "image" | "video" | "audio";
     return { kind, contentType };
   }
-  const { contents, mode } = await readUnchangedContents(root, target, path);
+  const { contents, mode, oversized } = await readUnchangedContents(root, target, path, maxChangesTextBytes);
+  if (oversized) return { kind: "large" };
   const text = decodeText(contents);
   if (text === undefined) return { kind: "binary" };
   if (contents.byteLength > maxChangesTextBytes || lineCount(text) > maxChangesTextLines) return { kind: "large" };

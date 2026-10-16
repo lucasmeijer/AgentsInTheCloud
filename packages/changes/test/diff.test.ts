@@ -1,9 +1,9 @@
 import { localRepository } from "../../workspace/test/support/local-repository.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { collectChangesComparison, collectChangesFile, collectChangesIndex, collectChangesStats, collectUnchangedPaths, readUnchangedFile, type ChangesFile } from "../src/server/diff.ts";
+import { collectCommitChangesFile, collectChangesComparison, collectChangesFile, collectChangesIndex, collectChangesStats, collectUnchangedPaths, readUnchangedContents, readUnchangedFile, type ChangesFile } from "../src/server/diff.ts";
 import { command, createChangesRepository } from "./support/repository.ts";
 
 const roots: string[] = [];
@@ -153,6 +153,72 @@ describe("Changes collection", () => {
     expect((await changesFiles(root))[0]!.kind).toBe("binary");
   });
 
+
+  test("multi-GiB sparse untracked files are listed, sized and reviewed without full reads", async () => {
+    const root = await repository();
+    await writeFile(join(root, "firmware.bin"), "");
+    const size = 12 * 1024 ** 3;
+    await truncate(join(root, "firmware.bin"), size);
+    const repo = localRepository(root);
+    const index = await collectChangesIndex(repo);
+    expect(index).toMatchObject({ phase: "ready", files: [{ path: "firmware.bin", untracked: true }] });
+    expect(await collectChangesStats(repo, index)).toMatchObject([{ binarySizes: { after: size }, additions: 0 }]);
+    expect(await collectChangesFile(repo, "firmware.bin")).toMatchObject({ kind: "large", change: "added" });
+    const comparison = await collectChangesComparison(repo, "HEAD");
+    expect(comparison.files.get("firmware.bin")?.kind).toBe("large");
+    expect(comparison.stats[0]?.binarySizes?.after).toBe(size);
+    expect(await readUnchangedFile(repo, undefined, "firmware.bin")).toEqual({ kind: "large" });
+  });
+
+  test("oversized tracked and committed blobs use size probes, not blob content reads", async () => {
+    const root = await repository();
+    await writeFile(join(root, "big.txt"), "");
+    await truncate(join(root, "big.txt"), 1_000_001);
+    await command(root, "git", "add", "big.txt");
+    await command(root, "git", "commit", "-qm", "large blob");
+    const repo = localRepository(root);
+    const original = repo.gitResult;
+    const contentReads: string[][] = [];
+    repo.gitResult = async args => {
+      if (args[0] === "cat-file" && args[1] === "blob") contentReads.push(args);
+      return original(args);
+    };
+    expect(await collectCommitChangesFile(repo, "HEAD", "big.txt")).toMatchObject({ kind: "large" });
+    expect(await readUnchangedFile(repo, "HEAD", "big.txt")).toEqual({ kind: "large" });
+    await writeFile(join(root, "big.txt"), "small\n");
+    expect(await collectChangesFile(repo, "big.txt")).toMatchObject({ kind: "large", change: "modified" });
+    expect((await collectChangesComparison(repo, "HEAD")).files.get("big.txt")?.kind).toBe("large");
+    expect(contentReads).toEqual([]);
+  });
+
+  test("comparison snapshots bound total retained images across many small files", async () => {
+    const root = await repository();
+    await Promise.all(Array.from({ length: 40 }, (_, index) => writeFile(join(root, `image-${index}.png`), Buffer.alloc(500_000))));
+    const comparison = await collectChangesComparison(localRepository(root), "HEAD");
+    expect(comparison.files.size).toBe(40);
+    expect(comparison.stats).toHaveLength(40);
+    expect([...comparison.files.values()].some(file => file.kind === "large")).toBe(true);
+    const bytes = [...comparison.files.values()].reduce((sum, file) => sum + (file.images?.after?.contents.length ?? 0), 0);
+    expect(bytes).toBeGreaterThan(0);
+    expect(bytes).toBeLessThanOrEqual(16 * 1024 * 1024);
+    expect(comparison.stats.every(stat => stat.binarySizes?.after === 500_000)).toBe(true);
+  });
+
+  test("unchanged media defaults to 16 MiB and reports larger content without reading it", async () => {
+    const root = await repository();
+    const path = join(root, "media.mp4"), limit = 16 * 1024 * 1024;
+    await writeFile(path, "");
+    await truncate(path, limit);
+    const repo = localRepository(root);
+    const boundary = await readUnchangedContents(repo, undefined, "media.mp4");
+    expect(boundary.contents.length).toBe(limit);
+    expect(boundary.oversized).toBeUndefined();
+    await truncate(path, limit + 1);
+    expect(await readUnchangedContents(repo, undefined, "media.mp4")).toMatchObject({ contents: Buffer.alloc(0), size: limit + 1, mode: "100644", oversized: true });
+    await command(root, "git", "add", "media.mp4");
+    await command(root, "git", "commit", "-qm", "large media");
+    expect(await readUnchangedContents(repo, "HEAD", "media.mp4")).toEqual({ contents: Buffer.alloc(0), size: limit + 1, oversized: true });
+  });
 
   test("lists and reads unchanged files in the working tree and in commits", async () => {
     const root = await repository();

@@ -177,7 +177,8 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
       if (match[1] === "unchanged-media") {
         const contentType = unchangedMediaType(path);
         if (!contentType || !await isUnchanged(workspaceId, snapshot, path)) return textResponse("Unchanged file not found", { status: 404 });
-        const { contents } = await readUnchangedContents(workspaceRepository(workspaceId), snapshot.target, path);
+        const { contents, oversized } = await readUnchangedContents(workspaceRepository(workspaceId), snapshot.target, path);
+        if (oversized) return textResponse("File is too large to preview safely", { status: 413 });
         return new Response(new Uint8Array(contents), { headers: {
           "Content-Type": contentType, "Cache-Control": "private, no-store",
           "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'",

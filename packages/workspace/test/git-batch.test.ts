@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { decodeRepositoryBatch, repositoryBatchRunner, type RepositoryRequest } from "../src/git-batch.ts";
@@ -16,10 +16,10 @@ async function fixture() {
   await repo.gitResult(["init", "-b", "main"]);
   return { root, repo };
 }
-async function run(root: string, requests: RepositoryRequest[]) {
+async function run(root: string, requests: RepositoryRequest[], runner = repositoryBatchRunner) {
   const wire = requests.map(request => request.kind === "git" ? { ...request, args: safeGitArguments(request.args) }
     : request.kind === "index-tree" ? { ...request, args: safeGitArguments(["rev-parse", "--git-path", "index"]), writeArgs: safeGitArguments(["write-tree"]) } : request);
-  const child = Bun.spawn(["bun", "--no-env-file", "--config=/dev/null", "--eval", repositoryBatchRunner], { cwd: root, env: { ...Bun.env, TMPDIR: join(root, "temporary") }, stdin: Buffer.from(JSON.stringify(wire)), stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(["bun", "--no-env-file", "--config=/dev/null", "--eval", runner], { cwd: root, env: { ...Bun.env, TMPDIR: join(root, "temporary") }, stdin: Buffer.from(JSON.stringify(wire)), stdout: "pipe", stderr: "pipe" });
   const [output, stderr, code] = await Promise.all([new Response(child.stdout).arrayBuffer(), new Response(child.stderr).text(), child.exited]);
   if (code !== 0) throw new Error(stderr);
   return decodeRepositoryBatch(Buffer.from(output), requests.length);
@@ -91,6 +91,59 @@ test("batch runner makes read errors visible and rejects escaping paths", async 
   const { root } = await fixture();
   await expect(run(root, [{ kind: "working-file", path: "../outside" }, { kind: "index-tree" }])).rejects.toThrow("File path escapes repository");
   expect(await readdir(join(root, "temporary"))).toEqual([]);
+});
+
+test("sparse multi-GiB reads and write-original checks never materialise the file", async () => {
+  const { root, repo } = await fixture();
+  await writeFile(join(root, "firmware"), "");
+  await truncate(join(root, "firmware"), 12 * 1024 ** 3);
+  const [result] = await run(root, [{ kind: "working-file", path: "firmware" }]);
+  expect(result!.exitCode).toBe(46);
+  expect(result!.stdout.toString()).toBe(`100644\n${12 * 1024 ** 3}`);
+  expect(await repo.writeWorkingFile("firmware", { hash: "stale", mode: "100644" }, "edit")).toBe("changed");
+});
+
+test("batch content retention is bounded even for many individually allowed files", async () => {
+  const { root } = await fixture();
+  await writeFile(join(root, "allowed"), "");
+  await truncate(join(root, "allowed"), 8 * 1024 ** 2);
+  const results = await run(root, Array.from({ length: 8 }, () => ({ kind: "working-file", path: "allowed" })));
+  expect(results.some(result => result.exitCode === 46)).toBe(true);
+  expect(results.reduce((sum, result) => sum + result.stdout.length, 0)).toBeLessThan(32 * 1024 ** 2);
+});
+
+test("hard descriptor bound survives growth after stat and refuses symlink replacement", async () => {
+  const { root } = await fixture();
+  await writeFile(join(root, "growing"), "tiny");
+  const growing = repositoryBatchRunner.replace("const buffer = Buffer.alloc(info.size + 1);", "await require('node:fs/promises').truncate('growing', 8 * 1024 ** 3); const buffer = Buffer.alloc(info.size + 1);");
+  const [result] = await run(root, [{ kind: "working-file", path: "growing" }], growing);
+  expect(result!.exitCode).toBe(46);
+  expect(result!.stdout.length).toBeLessThan(64);
+  await writeFile(join(root, "victim"), "tiny");
+  const swapped = repositoryBatchRunner.replace("const handle = await open(path,", "await rm(path); await require('node:fs/promises').symlink('growing', path); const handle = await open(path,");
+  expect((await run(root, [{ kind: "working-file", path: "victim" }], swapped))[0]!.exitCode).toBe(44);
+});
+
+test("Git content output has a hard bound, independently of metadata probes", async () => {
+  const { root, repo } = await fixture();
+  await writeFile(join(root, "blob"), "x".repeat(64));
+  await repo.gitResult(["add", "blob"]);
+  const runner = repositoryBatchRunner.replace("const maxFileBytes = 16 * 1024 * 1024;", "const maxFileBytes = 32;");
+  const results = await run(root, [{ kind: "git", args: ["show", ":blob"] }, { kind: "working-file", path: "missing" }], runner);
+  expect(results[0]!.exitCode).toBe(47);
+  expect(results[0]!.stderr).toContain("content budget");
+  expect(results[0]!.stdout.length).toBe(0);
+  expect(results[1]!.exitCode).toBe(44);
+});
+
+test("aggregate Git budget exhaustion is an individual bounded failure, not a crashed batch", async () => {
+  const { root, repo } = await fixture();
+  await writeFile(join(root, "blob"), "small content");
+  await repo.gitResult(["add", "blob"]);
+  const runner = repositoryBatchRunner.replace("const maxBatchBytes = 32 * 1024 * 1024;", "const maxBatchBytes = 64;");
+  const results = await run(root, Array.from({ length: 16 }, () => ({ kind: "git", args: ["show", ":blob"] })), runner);
+  expect(results.some(result => result.exitCode === 47 && result.stderr.includes("content budget"))).toBe(true);
+  expect(results.filter(result => result.exitCode === 0).reduce((sum, result) => sum + result.stdout.length, 0)).toBeLessThanOrEqual(64);
 });
 
 test("framing rejects incomplete headers, truncated contents, wrong counts and trailing bytes", () => {
