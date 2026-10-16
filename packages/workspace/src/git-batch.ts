@@ -1,6 +1,6 @@
 import type { WorkingFileRevision, WorkingFileWriteResult, GitResult } from "./git-repository.ts";
 
-export type RepositoryRequest = { kind: "git"; args: string[] } | { kind: "working-file"; path: string; editable?: true } | { kind: "index-tree" } | { kind: "write-working-file"; path: string; expected: WorkingFileRevision; contents: string };
+export type RepositoryRequest = { kind: "git"; args: string[] } | { kind: "working-file"; path: string; editable?: true; maxBytes?: number } | { kind: "index-tree" } | { kind: "write-working-file"; path: string; expected: WorkingFileRevision; contents: string };
 
 export function decodeWorkingFileWrite(result: GitResult): WorkingFileWriteResult {
   if (result.exitCode === 73) return "changed";
@@ -11,16 +11,64 @@ export function decodeWorkingFileWrite(result: GitResult): WorkingFileWriteResul
 
 /** Fixed trusted source, not loaded from the repository. Requests travel on stdin, never in shell source or argv. */
 export const repositoryBatchRunner = String.raw`
-const { lstat, readFile, readlink, mkdtemp, copyFile, rm, open, rename } = require('node:fs/promises');
+const { lstat, readlink, mkdtemp, copyFile, rm, open, rename } = require('node:fs/promises');
 const { resolve, join, relative, sep } = require('node:path');
 const { tmpdir } = require('node:os');
 const { constants } = require('node:fs');
 const { createHash, randomUUID } = require('node:crypto');
 const requests = JSON.parse(await Bun.stdin.text());
+const maxFileBytes = 16 * 1024 * 1024;
+const maxBatchBytes = 32 * 1024 * 1024;
+let retainedBytes = 0;
+function reserve(size) {
+  if (size > maxBatchBytes - retainedBytes) return false;
+  retainedBytes += size;
+  return true;
+}
 async function execute(args, env) {
   const child = Bun.spawn(args, { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env });
-  const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).arrayBuffer(), new Response(child.stderr).arrayBuffer(), child.exited]);
-  return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
+  const budgetExceeded = new Error('Repository output exceeds content budget');
+  async function bounded(stream) {
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of stream) {
+      size += chunk.length;
+      if (size > maxFileBytes || !reserve(chunk.length)) {
+        child.kill();
+        throw budgetExceeded;
+      }
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  const output = [bounded(child.stdout), bounded(child.stderr), child.exited];
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all(output);
+    return { stdout, stderr, exitCode };
+  } catch (error) {
+    if (error !== budgetExceeded) throw error;
+    await Promise.allSettled(output);
+    return { stdout: Buffer.alloc(0), stderr: Buffer.from(budgetExceeded.message), exitCode: 47 };
+  }
+}
+// Never readFile(): the descriptor may grow after stat, or the pathname may be replaced.
+async function boundedFile(handle, limit) {
+  const info = await handle.stat();
+  if (!info.isFile()) return { info };
+  if (info.size > limit || !reserve(info.size + 1)) return { info };
+  const buffer = Buffer.alloc(info.size + 1);
+  let length = 0;
+  while (length < buffer.length) {
+    const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
+    if (!bytesRead) break;
+    length += bytesRead;
+  }
+  const latest = await handle.stat();
+  if (length !== info.size || latest.size !== info.size || latest.mtimeMs !== info.mtimeMs || latest.ctimeMs !== info.ctimeMs) return { info: latest };
+  return { info, contents: buffer.subarray(0, length) };
+}
+function fileLimit(request) {
+  return Math.max(0, Math.min(maxFileBytes, request.maxBytes ?? maxFileBytes));
 }
 async function run(request) {
   if (request.kind === 'git') return execute(request.args);
@@ -47,15 +95,16 @@ async function run(request) {
       const target = directory + '/' + within.split(sep).at(-1);
       const entry = await lstat(target);
       if (!entry.isFile()) return result(45);
-      handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
-      const info = await handle.stat();
-      const original = await handle.readFile();
+      handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      if (Buffer.byteLength(request.contents, 'utf8') > maxFileBytes) return result(45);
+      const { info, contents: original } = await boundedFile(handle, maxFileBytes);
+      if (!original) return result(73);
       const hash = bytes => createHash('sha256').update(bytes).digest('hex');
       const mode = info.mode & 0o111 ? '100755' : '100644';
       if (hash(original) !== request.expected.hash || mode !== request.expected.mode) return result(73);
       if (original.equals(Buffer.from(request.contents, 'utf8'))) return result(0);
       // Honor the workspace user's file permissions even when directory replacement is allowed.
-      const writable = await open(target, constants.O_WRONLY | constants.O_NOFOLLOW);
+      const writable = await open(target, constants.O_WRONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       await writable.close();
       temporary = directory + '/.agents-in-the-cloud-edit-' + randomUUID();
       const output = await open(temporary, 'wx', 0o600);
@@ -65,7 +114,12 @@ async function run(request) {
         await output.sync();
       } finally { await output.close(); }
       const latest = await lstat(target);
-      if (!latest.isFile() || latest.ino !== info.ino || latest.dev !== info.dev || latest.mode !== info.mode || hash(await readFile(target)) !== request.expected.hash) return result(73);
+      if (!latest.isFile() || latest.ino !== info.ino || latest.dev !== info.dev || latest.mode !== info.mode) return result(73);
+      const check = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      try {
+        const current = await boundedFile(check, maxFileBytes);
+        if (current.info.ino !== info.ino || current.info.dev !== info.dev || !current.contents || hash(current.contents) !== request.expected.hash) return result(73);
+      } finally { await check.close(); }
       await rename(temporary, target);
       return result(0);
     } catch (error) {
@@ -79,27 +133,43 @@ async function run(request) {
     }
   }
   if (request.kind === 'working-file') {
-    const path = resolve(request.path), within = relative(process.cwd(), path);
+    let path = resolve(request.path);
+    const within = relative(process.cwd(), path), directories = [];
     if (within === '..' || within.startsWith('..' + sep)) throw new Error('File path escapes repository');
     try {
       if (request.editable) {
         if (!request.path || request.path.split('/').some(part => part === '..' || part === '.git')) return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 44 };
-        let parent = process.cwd();
+        let parent = await open(process.cwd(), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+        directories.push(parent);
         for (const part of within.split(sep).slice(0, -1)) {
-          parent = join(parent, part);
-          if (!(await lstat(parent)).isDirectory()) return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 44 };
+          parent = await open('/proc/self/fd/' + parent.fd + '/' + part, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+          directories.push(parent);
         }
+        path = '/proc/self/fd/' + parent.fd + '/' + within.split(sep).at(-1);
       }
       const info = await lstat(path);
       if (request.editable && !info.isFile()) return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 44 };
       if (!info.isFile() && !info.isSymbolicLink()) return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 44 };
       const mode = info.isSymbolicLink() ? '120000' : info.mode & 0o111 ? '100755' : '100644';
-      const contents = info.isSymbolicLink() ? Buffer.from(await readlink(path)) : await readFile(path);
-      return { stdout: Buffer.concat([Buffer.from(mode + '\n'), contents]), stderr: Buffer.alloc(0), exitCode: 0 };
+      let contents, size = info.size;
+      if (info.isSymbolicLink()) {
+        contents = Buffer.from(await readlink(path));
+        size = contents.length;
+        if (size > fileLimit(request) || !reserve(size)) contents = undefined;
+      } else {
+        const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        try {
+          const read = await boundedFile(handle, fileLimit(request));
+          if (!read.info.isFile() || read.info.ino !== info.ino || read.info.dev !== info.dev || read.info.mode !== info.mode) return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 44 };
+          contents = read.contents;
+          size = read.info.size;
+        } finally { await handle.close(); }
+      }
+      return { stdout: contents === undefined ? Buffer.from(mode + '\n' + size) : Buffer.concat([Buffer.from(mode + '\n'), contents]), stderr: Buffer.alloc(0), exitCode: contents === undefined ? 46 : 0 };
     } catch (error) {
-      if (error.code === 'ENOENT') return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 44 };
+      if (error.code === 'ENOENT' || error.code === 'ELOOP' || error.code === 'ENOTDIR') return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 44 };
       throw error;
-    }
+    } finally { for (const directory of directories.reverse()) await directory.close(); }
   }
   if (request.kind !== 'index-tree') throw new Error('Unknown repository request');
   const directory = await mkdtemp(join(tmpdir(), 'changes-index-'));

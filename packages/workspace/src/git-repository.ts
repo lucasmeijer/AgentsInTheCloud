@@ -3,14 +3,36 @@ import { decodeWorkingFileWrite, decodeRepositoryBatch, repositoryBatchRunner, t
 import { workspaceRoot, type WorkspaceCommandOptions } from "./index.ts";
 
 export interface GitResult { stdout: Buffer; stderr: string; exitCode: number }
-export interface WorkingFile { contents: Buffer; mode: string }
+export interface RepositoryContent { contents: Buffer; size: number; oversized?: true }
+export interface WorkingFile extends RepositoryContent { mode: string }
+
+export function decodeWorkingFile(result: GitResult): WorkingFile | undefined {
+  if (result.exitCode === 44) return undefined;
+  if (result.exitCode !== 0 && result.exitCode !== 46) throw new Error(result.stderr.trim() || "Couldn’t read workspace file");
+  const separator = result.stdout.indexOf(10);
+  if (separator !== 6) throw new Error("Invalid workspace file response");
+  const mode = result.stdout.subarray(0, separator).toString();
+  const contents = result.stdout.subarray(separator + 1);
+  return result.exitCode === 46 ? { mode, contents: Buffer.alloc(0), size: Number(contents.toString()), oversized: true } : { mode, contents, size: contents.length };
+}
+
+/** Pin moving expressions before probing size; content transport itself also has a hard cap. */
+export async function readRepositoryBlob(root: Repository, ref: string, maxBytes = 16 * 1024 * 1024): Promise<RepositoryContent | undefined> {
+  const resolved = await root.gitResult(["rev-parse", "--verify", "--end-of-options", ref]);
+  if (resolved.exitCode !== 0) return undefined;
+  const hash = resolved.stdout.toString().trim();
+  if ((await git(root, ["cat-file", "-t", hash])).toString().trim() !== "blob") return undefined;
+  const size = Number((await git(root, ["cat-file", "-s", hash])).toString());
+  if (size > Math.min(maxBytes, 16 * 1024 * 1024)) return { contents: Buffer.alloc(0), size, oversized: true };
+  return { contents: await git(root, ["cat-file", "blob", hash]), size };
+}
 export interface WorkingFileRevision { hash: string; mode: string }
 export type WorkingFileWriteResult = "saved" | "changed" | "unsupported";
 const writes = new Map<string, Promise<void>>();
 
 export interface Repository {
   gitResult(args: string[]): Promise<GitResult>;
-  workingFile(path: string, editable?: true): Promise<WorkingFile | undefined>;
+  workingFile(path: string, editable?: true, maxBytes?: number): Promise<WorkingFile | undefined>;
   captureIndexTree(): Promise<Buffer>;
   writeWorkingFile(path: string, expected: WorkingFileRevision, contents: string): Promise<WorkingFileWriteResult>;
 }
@@ -18,7 +40,7 @@ export interface Repository {
 export function safeGitArguments(args: string[]): string[] {
   const command = args[0]!;
   const options = command === "diff" || command === "show" ? ["--no-ext-diff", "--no-textconv"] : [];
-  return ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "log.showSignature=false", "-c", "color.ui=false", command, ...options, ...args.slice(1)];
+  return ["git", "--no-pager", "--no-optional-locks", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "log.showSignature=false", "-c", "color.ui=false", command, ...options, ...args.slice(1)];
 }
 
 /** All repository-controlled execution and file reads stay in the workspace, as its regular user. */
@@ -38,12 +60,6 @@ export function createWorkspaceRepository(
     const batch = pending;
     pending = [];
     try {
-      // Avoid runner startup for operations such as a single history page.
-      if (batch.length === 1 && batch[0]!.request.kind === "git") {
-        const result = await execute(workspaceId, safeGitArguments(batch[0]!.request.args), { workdir, user: "agents-in-the-cloud" });
-        batch[0]!.resolve(result);
-        return;
-      }
       const requests = batch.map(({ request }) => request.kind === "git" ? { ...request, args: safeGitArguments(request.args) }
         : request.kind === "index-tree" ? { ...request, args: safeGitArguments(["rev-parse", "--git-path", "index"]), writeArgs: safeGitArguments(["write-tree"]) } : request);
       const result = await execute(workspaceId, ["bun", "--no-env-file", "--config=/dev/null", "--eval", repositoryBatchRunner], { workdir, user: "agents-in-the-cloud", stdin: JSON.stringify(requests) });
@@ -63,16 +79,11 @@ export function createWorkspaceRepository(
   }
   return {
     gitResult: args => enqueue({ kind: "git", args }),
-    async workingFile(path, editable) {
+    async workingFile(path, editable, maxBytes) {
       if (path.startsWith("/")) throw new Error("File path must be repository-relative");
       const within = relative(workdir, join(workdir, path));
       if (within === ".." || within.startsWith(`..${sep}`)) throw new Error("File path escapes repository");
-      const result = await enqueue({ kind: "working-file", path, editable });
-      if (result.exitCode === 44) return undefined;
-      if (result.exitCode !== 0) throw new Error(result.stderr.trim() || "Couldn’t read workspace file");
-      const separator = result.stdout.indexOf(10);
-      if (separator !== 6) throw new Error("Invalid workspace file response");
-      return { mode: result.stdout.subarray(0, separator).toString(), contents: result.stdout.subarray(separator + 1) };
+      return decodeWorkingFile(await enqueue({ kind: "working-file", path, editable, maxBytes }));
     },
     async writeWorkingFile(path, expected, contents) {
       if (!path || path.startsWith("/") || path.split("/").some(part => part === ".." || part === ".git") || path.includes("\0")) throw new Error("Invalid editable repository path");

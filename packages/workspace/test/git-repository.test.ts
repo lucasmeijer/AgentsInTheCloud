@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWorkspaceRepository, git, type GitResult } from "../src/git-repository.ts";
+import { createWorkspaceRepository, git, readRepositoryBlob, type GitResult } from "../src/git-repository.ts";
 import type { WorkspaceCommandOptions } from "../src/index.ts";
 import { localRepository } from "./support/local-repository.ts";
 
@@ -55,8 +55,8 @@ test("independent Git, file and index reads share one workspace exec; dependent 
   expect(missing).toBeUndefined();
   await repo.gitResult(["rev-parse", "--git-dir"]);
   expect(calls).toHaveLength(3);
-  expect(calls[2]!.command[0]).toBe("git");
-  expect(calls[2]!.options.stdin).toBeUndefined();
+  expect(calls[2]!.command[0]).toBe("bun");
+  expect(calls[2]!.options.stdin).toBeString();
   expect(calls.every(call => call.options.user === "agents-in-the-cloud")).toBe(true);
 });
 
@@ -113,8 +113,35 @@ test("shared execution policy suppresses hostile hooks, fsmonitor, external diff
   await git(repo, ["add", "file"]);
   await git(repo, ["commit", "-m", "changed"]);
   expect(calls[0]!.command[0]).toBe("bun");
-  expect(calls.at(-1)!.command[0]).toBe("git");
+  expect(calls.at(-1)!.command[0]).toBe("bun");
   expect(await Bun.file(marker).exists()).toBe(false);
+});
+
+test("working-file limits include the exact boundary and preserve oversized size and mode", async () => {
+  const { root, repo } = await fixture();
+  await writeFile(join(root, "file"), "12345678");
+  await chmod(join(root, "file"), 0o755);
+  expect(await repo.workingFile("file", undefined, 8)).toEqual({ contents: Buffer.from("12345678"), size: 8, mode: "100755" });
+  expect(await repo.workingFile("file", undefined, 7)).toEqual({ contents: Buffer.alloc(0), size: 8, mode: "100755", oversized: true });
+  await writeFile(join(root, "empty"), "");
+  expect(await repo.workingFile("empty", undefined, 0)).toMatchObject({ contents: Buffer.alloc(0), size: 0 });
+});
+
+test("blob probes pin moving refs and ignore replacement changes between size and content", async () => {
+  const { root, setup, repo } = await fixture();
+  await writeFile(join(root, "file"), "before\n");
+  await git(setup, ["add", "file"]);
+  const oldHash = (await git(setup, ["rev-parse", ":file"])).toString().trim();
+  await writeFile(join(root, "file"), "x".repeat(64));
+  const replacement = (await git(setup, ["hash-object", "-w", "file"])).toString().trim();
+  const original = repo.gitResult;
+  repo.gitResult = async args => {
+    const result = await original(args);
+    if (args[0] === "rev-parse") await git(setup, ["add", "file"]);
+    if (args[0] === "cat-file" && args[1] === "-s") await git(setup, ["replace", oldHash, replacement]);
+    return result;
+  };
+  expect(await readRepositoryBlob(repo, ":file", 7)).toEqual({ contents: Buffer.from("before\n"), size: 7 });
 });
 
 test("workspace-owned conditional writes serialize conflicting saves and retain executable permissions", async () => {
