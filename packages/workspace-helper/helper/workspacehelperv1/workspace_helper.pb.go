@@ -447,7 +447,6 @@ type ExecResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Response:
 	//
-	//	*ExecResponse_Started
 	//	*ExecResponse_Stdout
 	//	*ExecResponse_Stderr
 	//	*ExecResponse_Exited
@@ -493,15 +492,6 @@ func (x *ExecResponse) GetResponse() isExecResponse_Response {
 	return nil
 }
 
-func (x *ExecResponse) GetStarted() *Started {
-	if x != nil {
-		if x, ok := x.Response.(*ExecResponse_Started); ok {
-			return x.Started
-		}
-	}
-	return nil
-}
-
 func (x *ExecResponse) GetStdout() []byte {
 	if x != nil {
 		if x, ok := x.Response.(*ExecResponse_Stdout); ok {
@@ -533,10 +523,6 @@ type isExecResponse_Response interface {
 	isExecResponse_Response()
 }
 
-type ExecResponse_Started struct {
-	Started *Started `protobuf:"bytes,1,opt,name=started,proto3,oneof"`
-}
-
 type ExecResponse_Stdout struct {
 	Stdout []byte `protobuf:"bytes,2,opt,name=stdout,proto3,oneof"`
 }
@@ -549,59 +535,11 @@ type ExecResponse_Exited struct {
 	Exited *Exited `protobuf:"bytes,4,opt,name=exited,proto3,oneof"`
 }
 
-func (*ExecResponse_Started) isExecResponse_Response() {}
-
 func (*ExecResponse_Stdout) isExecResponse_Response() {}
 
 func (*ExecResponse_Stderr) isExecResponse_Response() {}
 
 func (*ExecResponse_Exited) isExecResponse_Response() {}
-
-// Sent once the process is running. If it can't start, the call fails with a
-// gRPC error instead, e.g. NOT_FOUND for a missing executable.
-type Started struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Pid           uint32                 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Started) Reset() {
-	*x = Started{}
-	mi := &file_workspace_helper_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Started) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Started) ProtoMessage() {}
-
-func (x *Started) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_helper_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Started.ProtoReflect.Descriptor instead.
-func (*Started) Descriptor() ([]byte, []int) {
-	return file_workspace_helper_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *Started) GetPid() uint32 {
-	if x != nil {
-		return x.Pid
-	}
-	return 0
-}
 
 // Sent after all output.
 type Exited struct {
@@ -617,7 +555,7 @@ type Exited struct {
 
 func (x *Exited) Reset() {
 	*x = Exited{}
-	mi := &file_workspace_helper_proto_msgTypes[6]
+	mi := &file_workspace_helper_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -629,7 +567,7 @@ func (x *Exited) String() string {
 func (*Exited) ProtoMessage() {}
 
 func (x *Exited) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_helper_proto_msgTypes[6]
+	mi := &file_workspace_helper_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -642,7 +580,7 @@ func (x *Exited) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Exited.ProtoReflect.Descriptor instead.
 func (*Exited) Descriptor() ([]byte, []int) {
-	return file_workspace_helper_proto_rawDescGZIP(), []int{6}
+	return file_workspace_helper_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Exited) GetStatus() isExited_Status {
@@ -715,16 +653,13 @@ const file_workspace_helper_proto_rawDesc = "" +
 	"\x04cols\x18\x01 \x01(\rR\x04cols\x12\x12\n" +
 	"\x04rows\x18\x02 \x01(\rR\x04rows\"\f\n" +
 	"\n" +
-	"CloseStdin\"\xe7\x01\n" +
-	"\fExecResponse\x12L\n" +
-	"\astarted\x18\x01 \x01(\v20.agents_in_the_cloud.workspace_helper.v1.StartedH\x00R\astarted\x12\x18\n" +
+	"CloseStdin\"\x9f\x01\n" +
+	"\fExecResponse\x12\x18\n" +
 	"\x06stdout\x18\x02 \x01(\fH\x00R\x06stdout\x12\x18\n" +
 	"\x06stderr\x18\x03 \x01(\fH\x00R\x06stderr\x12I\n" +
 	"\x06exited\x18\x04 \x01(\v2/.agents_in_the_cloud.workspace_helper.v1.ExitedH\x00R\x06exitedB\n" +
 	"\n" +
-	"\bresponse\"\x1b\n" +
-	"\aStarted\x12\x10\n" +
-	"\x03pid\x18\x01 \x01(\rR\x03pid\"K\n" +
+	"\bresponseJ\x04\b\x01\x10\x02\"K\n" +
 	"\x06Exited\x12\x1d\n" +
 	"\texit_code\x18\x01 \x01(\x05H\x00R\bexitCode\x12\x18\n" +
 	"\x06signal\x18\x02 \x01(\x05H\x00R\x06signalB\b\n" +
@@ -758,7 +693,7 @@ func file_workspace_helper_proto_rawDescGZIP() []byte {
 }
 
 var file_workspace_helper_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_workspace_helper_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_workspace_helper_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_workspace_helper_proto_goTypes = []any{
 	(User)(0),            // 0: agents_in_the_cloud.workspace_helper.v1.User
 	(Signal)(0),          // 1: agents_in_the_cloud.workspace_helper.v1.Signal
@@ -767,27 +702,25 @@ var file_workspace_helper_proto_goTypes = []any{
 	(*TerminalSize)(nil), // 4: agents_in_the_cloud.workspace_helper.v1.TerminalSize
 	(*CloseStdin)(nil),   // 5: agents_in_the_cloud.workspace_helper.v1.CloseStdin
 	(*ExecResponse)(nil), // 6: agents_in_the_cloud.workspace_helper.v1.ExecResponse
-	(*Started)(nil),      // 7: agents_in_the_cloud.workspace_helper.v1.Started
-	(*Exited)(nil),       // 8: agents_in_the_cloud.workspace_helper.v1.Exited
-	nil,                  // 9: agents_in_the_cloud.workspace_helper.v1.ExecStart.EnvEntry
+	(*Exited)(nil),       // 7: agents_in_the_cloud.workspace_helper.v1.Exited
+	nil,                  // 8: agents_in_the_cloud.workspace_helper.v1.ExecStart.EnvEntry
 }
 var file_workspace_helper_proto_depIdxs = []int32{
-	3,  // 0: agents_in_the_cloud.workspace_helper.v1.ExecRequest.start:type_name -> agents_in_the_cloud.workspace_helper.v1.ExecStart
-	5,  // 1: agents_in_the_cloud.workspace_helper.v1.ExecRequest.close_stdin:type_name -> agents_in_the_cloud.workspace_helper.v1.CloseStdin
-	1,  // 2: agents_in_the_cloud.workspace_helper.v1.ExecRequest.signal:type_name -> agents_in_the_cloud.workspace_helper.v1.Signal
-	4,  // 3: agents_in_the_cloud.workspace_helper.v1.ExecRequest.resize:type_name -> agents_in_the_cloud.workspace_helper.v1.TerminalSize
-	0,  // 4: agents_in_the_cloud.workspace_helper.v1.ExecStart.user:type_name -> agents_in_the_cloud.workspace_helper.v1.User
-	9,  // 5: agents_in_the_cloud.workspace_helper.v1.ExecStart.env:type_name -> agents_in_the_cloud.workspace_helper.v1.ExecStart.EnvEntry
-	4,  // 6: agents_in_the_cloud.workspace_helper.v1.ExecStart.terminal:type_name -> agents_in_the_cloud.workspace_helper.v1.TerminalSize
-	7,  // 7: agents_in_the_cloud.workspace_helper.v1.ExecResponse.started:type_name -> agents_in_the_cloud.workspace_helper.v1.Started
-	8,  // 8: agents_in_the_cloud.workspace_helper.v1.ExecResponse.exited:type_name -> agents_in_the_cloud.workspace_helper.v1.Exited
-	2,  // 9: agents_in_the_cloud.workspace_helper.v1.WorkspaceHelper.Exec:input_type -> agents_in_the_cloud.workspace_helper.v1.ExecRequest
-	6,  // 10: agents_in_the_cloud.workspace_helper.v1.WorkspaceHelper.Exec:output_type -> agents_in_the_cloud.workspace_helper.v1.ExecResponse
-	10, // [10:11] is the sub-list for method output_type
-	9,  // [9:10] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	3, // 0: agents_in_the_cloud.workspace_helper.v1.ExecRequest.start:type_name -> agents_in_the_cloud.workspace_helper.v1.ExecStart
+	5, // 1: agents_in_the_cloud.workspace_helper.v1.ExecRequest.close_stdin:type_name -> agents_in_the_cloud.workspace_helper.v1.CloseStdin
+	1, // 2: agents_in_the_cloud.workspace_helper.v1.ExecRequest.signal:type_name -> agents_in_the_cloud.workspace_helper.v1.Signal
+	4, // 3: agents_in_the_cloud.workspace_helper.v1.ExecRequest.resize:type_name -> agents_in_the_cloud.workspace_helper.v1.TerminalSize
+	0, // 4: agents_in_the_cloud.workspace_helper.v1.ExecStart.user:type_name -> agents_in_the_cloud.workspace_helper.v1.User
+	8, // 5: agents_in_the_cloud.workspace_helper.v1.ExecStart.env:type_name -> agents_in_the_cloud.workspace_helper.v1.ExecStart.EnvEntry
+	4, // 6: agents_in_the_cloud.workspace_helper.v1.ExecStart.terminal:type_name -> agents_in_the_cloud.workspace_helper.v1.TerminalSize
+	7, // 7: agents_in_the_cloud.workspace_helper.v1.ExecResponse.exited:type_name -> agents_in_the_cloud.workspace_helper.v1.Exited
+	2, // 8: agents_in_the_cloud.workspace_helper.v1.WorkspaceHelper.Exec:input_type -> agents_in_the_cloud.workspace_helper.v1.ExecRequest
+	6, // 9: agents_in_the_cloud.workspace_helper.v1.WorkspaceHelper.Exec:output_type -> agents_in_the_cloud.workspace_helper.v1.ExecResponse
+	9, // [9:10] is the sub-list for method output_type
+	8, // [8:9] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_workspace_helper_proto_init() }
@@ -804,12 +737,11 @@ func file_workspace_helper_proto_init() {
 	}
 	file_workspace_helper_proto_msgTypes[1].OneofWrappers = []any{}
 	file_workspace_helper_proto_msgTypes[4].OneofWrappers = []any{
-		(*ExecResponse_Started)(nil),
 		(*ExecResponse_Stdout)(nil),
 		(*ExecResponse_Stderr)(nil),
 		(*ExecResponse_Exited)(nil),
 	}
-	file_workspace_helper_proto_msgTypes[6].OneofWrappers = []any{
+	file_workspace_helper_proto_msgTypes[5].OneofWrappers = []any{
 		(*Exited_ExitCode)(nil),
 		(*Exited_Signal)(nil),
 	}
@@ -819,7 +751,7 @@ func file_workspace_helper_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_workspace_helper_proto_rawDesc), len(file_workspace_helper_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   8,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

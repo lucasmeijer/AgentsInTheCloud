@@ -50,13 +50,6 @@ type result struct {
 func collect(t *testing.T, stream pb.WorkspaceHelper_ExecClient) (result, error) {
 	t.Helper()
 	var collected result
-	first, err := stream.Recv()
-	if err != nil {
-		return collected, err
-	}
-	if first.GetStarted() == nil {
-		t.Fatalf("expected started first, got %v", first)
-	}
 	for {
 		response, err := stream.Recv()
 		if err == io.EOF {

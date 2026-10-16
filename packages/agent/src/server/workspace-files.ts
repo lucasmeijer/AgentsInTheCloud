@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { shellQuote } from "@agents-in-the-cloud/core";
-import { startInWorkspace, workspaceExitStatus } from "@agents-in-the-cloud/workspace";
+import { runInWorkspace, startInWorkspace } from "@agents-in-the-cloud/workspace";
 import { extensionOf, imageMimeByExtension } from "@agents-in-the-cloud/shared/file-metadata";
 
 interface WorkspaceFileMimeRegistry {
@@ -41,10 +41,9 @@ export async function workspaceFileEndpoint(workspaceId: string, path: string, r
   if (!path.startsWith("/") || path.includes("..") || path.includes("\0")) return new Response("bad path", { status: 400 });
 
   const quoted = shellQuote(path);
-  const stat = startInWorkspace(workspaceId, { argv: ["sh", "-c", `stat -c %s ${quoted} 2>/dev/null || stat -f %z ${quoted}`], user: "root" });
-  const [statOutput, statExit] = await Promise.all([new Response(stat.stdout).text(), stat.exited]);
-  const size = Number(statOutput.trim());
-  if (workspaceExitStatus(statExit) !== 0 || !Number.isFinite(size)) return new Response("not found", { status: 404 });
+  const stat = await runInWorkspace(workspaceId, { argv: ["sh", "-c", `stat -c %s ${quoted} 2>/dev/null || stat -f %z ${quoted}`], user: "root" });
+  const size = Number(stat.stdout.toString().trim());
+  if (stat.exitCode !== 0 || !Number.isFinite(size)) return new Response("not found", { status: 404 });
 
   const range = parseRange(request.headers.get("range"), size);
   const command = range ? `tail -c +${range.start + 1} ${quoted} | head -c ${range.end - range.start + 1}` : `cat ${quoted}`;

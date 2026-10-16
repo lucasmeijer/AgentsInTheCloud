@@ -23,6 +23,11 @@ export interface WorkspaceExecStart {
 
 export type WorkspaceExit = { exitCode: number; signal?: undefined } | { exitCode?: undefined; signal: number };
 
+/** An exit status the way shells report it, e.g. 137 for SIGKILL. */
+export function exitStatus(exit: WorkspaceExit): number {
+  return exit.signal === undefined ? exit.exitCode : 128 + exit.signal;
+}
+
 /** A process running in a workspace through its helper. */
 export interface WorkspaceProcess {
   /** Applies backpressure to the process. Cancelling either stream cancels the call. */
@@ -50,13 +55,12 @@ export class WorkspaceHelperError extends Error {
 }
 
 type ExecRequest =
-  | { start: { argv: string[]; user: string; workdir?: string; env?: Record<string, string>; stdin?: boolean; terminal?: TerminalSize } }
+  | { start: Omit<WorkspaceExecStart, "user"> & { user: string } }
   | { stdin: Uint8Array }
   | { closeStdin: Record<string, never> }
   | { signal: string }
   | { resize: TerminalSize };
 type ExecResponse =
-  | { response: "started"; started: { pid: number } }
   | { response: "stdout"; stdout: Buffer }
   | { response: "stderr"; stderr: Buffer }
   | { response: "exited"; exited: { status: "exitCode"; exitCode: number } | { status: "signal"; signal: number } };
@@ -140,7 +144,6 @@ export function startWorkspaceProcess(socketPath: string, start: WorkspaceExecSt
     call.on("data", (response: ExecResponse) => {
       if (outputCancelled) return;
       switch (response.response) {
-        case "started": return;
         case "stdout":
           stdout.enqueue(new Uint8Array(response.stdout));
           if (stdout.desiredSize! <= 0) call.pause();
@@ -161,7 +164,7 @@ export function startWorkspaceProcess(socketPath: string, start: WorkspaceExecSt
   // Callers that only use the output streams still learn about failures there.
   exited.catch(() => {});
 
-  call.write({ start: { argv: start.argv, user: users[start.user], workdir: start.workdir, env: start.env, stdin: start.stdin, terminal: start.terminal } });
+  call.write({ start: { ...start, user: users[start.user] } });
   return {
     stdout: stdoutStream,
     stderr: stderrStream,
@@ -190,7 +193,7 @@ export function startWorkspaceProcess(socketPath: string, start: WorkspaceExecSt
 
 const stdinChunkBytes = 64 * 1024;
 
-export interface WorkspaceRunResult { exit: WorkspaceExit; stdout: Buffer; stderr: Buffer }
+export interface WorkspaceRunResult { exitCode: number; stdout: Buffer; stderr: Buffer }
 
 /** Runs a process to completion, collecting its output. */
 export async function runWorkspaceProcess(socketPath: string, start: Omit<WorkspaceExecStart, "stdin" | "terminal">, options: { stdin?: string | Uint8Array; signal?: AbortSignal; waitForReady?: boolean } = {}): Promise<WorkspaceRunResult> {
@@ -201,7 +204,7 @@ export async function runWorkspaceProcess(socketPath: string, start: Omit<Worksp
     process.closeStdin();
   }
   const [stdout, stderr, exit] = await Promise.all([new Response(process.stdout).arrayBuffer(), new Response(process.stderr).arrayBuffer(), process.exited]);
-  return { exit, stdout: Buffer.from(stdout), stderr: Buffer.from(stderr) };
+  return { exitCode: exitStatus(exit), stdout: Buffer.from(stdout), stderr: Buffer.from(stderr) };
 }
 
 export { status as WorkspaceHelperStatus } from "@grpc/grpc-js";

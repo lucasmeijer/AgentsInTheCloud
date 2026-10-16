@@ -3,7 +3,7 @@
  * Runs a workspace process from a host terminal, the way `docker exec -it` did.
  * Usage: cli.ts <socket> <user> <workdir> <argv...>
  */
-import { startWorkspaceProcess } from "./index.ts";
+import { exitStatus, startWorkspaceProcess } from "./index.ts";
 
 const [socket, user, workdir, ...argv] = process.argv.slice(2);
 function usage(): never {
@@ -30,8 +30,7 @@ const copy = async (stream: ReadableStream<Uint8Array>, target: NodeJS.WriteStre
 };
 await Promise.all([copy(child.stdout, process.stdout), copy(child.stderr, process.stderr)]).catch(() => {});
 try {
-  const exit = await child.exited;
-  process.exit(exit.signal === undefined ? exit.exitCode : 128 + exit.signal);
+  process.exit(exitStatus(await child.exited));
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(255);

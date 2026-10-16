@@ -1,5 +1,5 @@
 import { shellQuote } from "@agents-in-the-cloud/core";
-import type { StartWorkspaceProcess, WorkspaceExecStart, WorkspaceHelperUser } from "@agents-in-the-cloud/workspace-helper";
+import { exitStatus, type StartWorkspaceProcess, type WorkspaceExecStart, type WorkspaceHelperUser } from "@agents-in-the-cloud/workspace-helper";
 import { observableTerminalEnvironment } from "./constants.ts";
 
 export interface ObservableTerminalConnection {
@@ -119,8 +119,7 @@ export function attachObservableTerminal(options: ObservableTerminalAttachOption
     let exitCode: number;
     try {
       await output;
-      const exit = await client.exited;
-      exitCode = exit.signal === undefined ? exit.exitCode : 128 + exit.signal;
+      exitCode = exitStatus(await client.exited);
     } catch (error) {
       if (!closed) events.onData(new TextEncoder().encode(`\r\n${(error instanceof Error ? error.message : String(error)).replace(/\r?\n/g, "\r\n")}`));
       exitCode = 1;

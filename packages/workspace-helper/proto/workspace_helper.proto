@@ -15,7 +15,8 @@ service WorkspaceHelper {
   // always `exited`, sent once the process has exited and its output has
   // closed. Closing the request stream closes stdin. Cancelling the call or
   // exceeding its deadline kills the process's whole process group, so nothing
-  // outlives an abandoned call.
+  // outlives an abandoned call. A process that can't start fails the call
+  // instead, e.g. with NOT_FOUND for a missing executable.
   rpc Exec(stream ExecRequest) returns (stream ExecResponse);
 }
 
@@ -72,18 +73,12 @@ enum Signal {
 }
 
 message ExecResponse {
+  reserved 1;
   oneof response {
-    Started started = 1;
     bytes stdout = 2;
     bytes stderr = 3;
     Exited exited = 4;
   }
-}
-
-// Sent once the process is running. If it can't start, the call fails with a
-// gRPC error instead, e.g. NOT_FOUND for a missing executable.
-message Started {
-  uint32 pid = 1;
 }
 
 // Sent after all output.

@@ -7,32 +7,21 @@ export interface CommandResult {
   stderr: string;
 }
 
-export type CommandBufferResult = Omit<CommandResult, "stdout"> & { stdout: Buffer };
-
 export type CommandInput = string | Uint8Array;
 type CommandOptions = { stdin?: CommandInput };
 
 export async function runDocker(args: string[], options: CommandOptions = {}): Promise<CommandResult> {
-  const result = await runDockerBuffer(args, options);
-  return { ...result, stdout: result.stdout.toString() };
-}
-
-export async function runDockerBuffer(args: string[], options: CommandOptions = {}): Promise<CommandBufferResult> {
-  return withManagedDockerCommand(args, (command) => runCommand(["docker", ...command], options));
-}
-
-/** Also supports Docker commands running in an observable terminal. */
-export async function withManagedDockerCommand<T>(args: string[], execute: (args: string[]) => Promise<T>): Promise<T> {
   const signal = commandSignal();
   const execution = signal && args[0] === "exec" ? cancellableExec(args) : undefined;
   try {
-    return await execute(execution?.args ?? args);
+    const result = await runCommand(["docker", ...(execution?.args ?? args)], options);
+    return { ...result, stdout: result.stdout.toString() };
   } finally {
     if (execution && signal?.aborted) {
       // Killing a Docker CLI does not kill the process inside the container.
       await withCommandSignal(AbortSignal.timeout(10_000), async () => {
         const stopped = await runCommand(["docker", "exec", "--user", "root", execution.container, "sh", "-c", `touch ${execution.pidFile}.cancel; if test -f ${execution.pidFile}; then kill -9 -"$(cat ${execution.pidFile})" 2>/dev/null || true; rm -f ${execution.pidFile}; fi`]);
-        if (stopped.exitCode !== 0) throw new Error(`Could not stop cancelled workspace command: ${stopped.stderr}`);
+        if (stopped.exitCode !== 0) throw new Error(`Could not stop cancelled container command: ${stopped.stderr}`);
       });
     }
   }

@@ -143,11 +143,25 @@ func startError(err error) error {
 type process struct {
 	command *exec.Cmd
 	// Where `stdin` requests go: a pipe, the PTY, or nil without stdin.
-	input io.WriteCloser
+	input *os.File
 	// The PTY, which also takes resizes; nil without a terminal.
 	terminal *os.File
 	stdout   *os.File
-	stderr   *os.File
+	// Nil with a terminal.
+	stderr *os.File
+}
+
+// Closing a nil or already closed file is harmless.
+func (p *process) close() {
+	for _, file := range []*os.File{p.input, p.stdout, p.stderr} {
+		file.Close()
+	}
+}
+
+func (p *process) closeStdin() {
+	if p.terminal == nil {
+		p.input.Close()
+	}
 }
 
 func (p *process) signal(signal syscall.Signal) error {
@@ -183,43 +197,42 @@ func startProcess(start *pb.ExecStart, account identity, switchUser bool) (*proc
 	}
 	command.SysProcAttr.Setpgid = true
 	result := &process{command: command}
-	// Children are given the write ends; the helper keeps the read ends.
+	// Children get the other ends, which the helper closes once they have them.
 	var childEnds []*os.File
 	defer func() {
 		for _, file := range childEnds {
 			file.Close()
 		}
 	}()
-	if start.Stdin {
+	pipe := func() (*os.File, *os.File, error) {
 		reader, writer, err := os.Pipe()
+		if err != nil {
+			result.close()
+		}
+		return reader, writer, err
+	}
+	if start.Stdin {
+		reader, writer, err := pipe()
 		if err != nil {
 			return nil, err
 		}
-		command.Stdin = reader
+		command.Stdin, result.input = reader, writer
 		childEnds = append(childEnds, reader)
-		result.input = writer
 	}
-	stdout, stdoutWriter, err := os.Pipe()
+	stdout, stdoutWriter, err := pipe()
 	if err != nil {
 		return nil, err
 	}
+	command.Stdout, result.stdout = stdoutWriter, stdout
 	childEnds = append(childEnds, stdoutWriter)
-	stderr, stderrWriter, err := os.Pipe()
+	stderr, stderrWriter, err := pipe()
 	if err != nil {
-		stdout.Close()
 		return nil, err
 	}
+	command.Stderr, result.stderr = stderrWriter, stderr
 	childEnds = append(childEnds, stderrWriter)
-	command.Stdout = stdoutWriter
-	command.Stderr = stderrWriter
-	result.stdout = stdout
-	result.stderr = stderr
 	if err := command.Start(); err != nil {
-		stdout.Close()
-		stderr.Close()
-		if result.input != nil {
-			result.input.Close()
-		}
+		result.close()
 		return nil, startError(err)
 	}
 	return result, nil
@@ -301,10 +314,6 @@ func (s *helper) Exec(stream pb.WorkspaceHelper_ExecServer) error {
 		running.signal(syscall.SIGKILL)
 	}
 
-	if err := send(&pb.ExecResponse{Response: &pb.ExecResponse_Started{Started: &pb.Started{Pid: uint32(running.command.Process.Pid)}}}); err != nil {
-		fail(err)
-	}
-
 	go s.receive(stream, running, fail)
 
 	var output sync.WaitGroup
@@ -346,24 +355,14 @@ func (s *helper) Exec(stream pb.WorkspaceHelper_ExecServer) error {
 	}()
 	select {
 	case <-drained:
-		<-exited
 	case <-stream.Context().Done():
 		fail(stream.Context().Err())
-		<-exited
 		// Processes that left the group may still hold the output open.
-		running.stdout.Close()
-		if running.stderr != nil {
-			running.stderr.Close()
-		}
+		running.close()
 		<-drained
 	}
-	running.stdout.Close()
-	if running.stderr != nil {
-		running.stderr.Close()
-	}
-	if running.input != nil && running.terminal == nil {
-		running.input.Close()
-	}
+	<-exited
+	running.close()
 
 	failure.Lock()
 	err = failure.err
@@ -390,15 +389,10 @@ func (s *helper) Exec(stream pb.WorkspaceHelper_ExecServer) error {
 
 // Applies requests after start until the client closes its side or the call ends.
 func (s *helper) receive(stream pb.WorkspaceHelper_ExecServer, running *process, fail func(error)) {
-	closeStdin := func() {
-		if running.input != nil && running.terminal == nil {
-			running.input.Close()
-		}
-	}
 	for {
 		request, err := stream.Recv()
 		if err == io.EOF {
-			closeStdin()
+			running.closeStdin()
 			return
 		}
 		if err != nil {
@@ -420,7 +414,7 @@ func (s *helper) receive(stream pb.WorkspaceHelper_ExecServer, running *process,
 				fail(status.Error(codes.FailedPrecondition, "close_stdin is not allowed with a terminal"))
 				return
 			}
-			closeStdin()
+			running.closeStdin()
 		case *pb.ExecRequest_Signal:
 			signal, err := validSignal(request.Signal)
 			if err != nil {

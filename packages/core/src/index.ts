@@ -7,8 +7,6 @@ export {
 export {
   requireDocker,
   runDocker,
-  runDockerBuffer,
-  withManagedDockerCommand,
   type CommandInput,
   type CommandResult,
 } from "./docker.ts";

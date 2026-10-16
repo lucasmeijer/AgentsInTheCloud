@@ -10,7 +10,7 @@ import { runHostObservableCommand, stripTerminalControls, tailTerminalText } fro
 import { errorMessage, isWorkspaceAppPort, workspaceGatewayPort, type WorkspaceGateway, type WorkspaceHttpAppBackend, type WorkspaceServerProvisioningHook } from "@agents-in-the-cloud/shared";
 import { inspectWorkspaceImage, resolveWorkspaceImage } from "@agents-in-the-cloud/workspace-image";
 import { prepareWorkspaceSystemd } from "./systemd.ts";
-import { closeWorkspaceHelperConnection, runInWorkspace, startLegacyWorkspaceHelper, workspaceExitStatus, workspaceHelperSocketPath, workspaceParentSocketDirectory } from "./helper.ts";
+import { closeWorkspaceHelperConnection, requireRootInWorkspace, runInWorkspace, startLegacyWorkspaceHelper, workspaceHelperSocketPath, workspaceParentSocketDirectory } from "./helper.ts";
 import { workspaceHelperCliPath } from "@agents-in-the-cloud/workspace-helper";
 import { createWorkspaceContainerLifecycle, workspaceConfigurationLabel } from "./container-lifecycle.ts";
 import { Type } from "typebox";
@@ -19,7 +19,8 @@ import { applySeedConfigManifest } from "./seed-config.ts";
 import type { WorkspaceCreationContext, WorkspaceDockerMount, WorkspaceDockerPlan, WorkspaceInitInstruction } from "./types.ts";
 export type { WorkspaceCreationContext, WorkspaceDockerMount, WorkspaceDockerPlan, WorkspaceInitInstruction, WorkspaceInitInstructionMap } from "./types.ts";
 
-export { startInWorkspace, workspaceExitStatus } from "./helper.ts";
+export { runInWorkspace, startInWorkspace } from "./helper.ts";
+export { exitStatus as workspaceExitStatus } from "@agents-in-the-cloud/workspace-helper";
 export { createWorkspaceMetadataState, type WorkspaceMetadataState } from "./metadata-state.ts";
 export { ensureHostInotifyLimit } from "./host-inotify.ts";
 export { createWorkspaceProvisioning, type WorkspaceProvisioning, type WorkspaceProvisionRun } from "./provisioning.ts";
@@ -87,16 +88,16 @@ async function inspectLabels(id: string): Promise<Record<string, string>> {
 
 async function ensureWorkspaceFilesystem(id: string): Promise<void> {
   const result = await runInWorkspace(id, { argv: ["sh", "-c", `test -d ${shellQuote(workspaceRoot)} && test -d /.agents-in-the-cloud`], user: "root" });
-  if (workspaceExitStatus(result.exit) !== 0) throw new AgentsInTheCloudCoreError("workspace_repair_failed", result.stderr.toString().trim() || result.stdout.toString().trim() || `workspace filesystem is not ready for ${id}`);
+  if (result.exitCode !== 0) throw new AgentsInTheCloudCoreError("workspace_repair_failed", result.stderr.trim() || result.stdout.toString().trim() || `workspace filesystem is not ready for ${id}`);
 }
 
 async function waitForWorkspaceStartup(id: string): Promise<string> {
   const timeoutSeconds = Math.ceil(workspaceStartupTimeoutMs / 1000);
   // The helper starts with the container, so wait for it rather than failing at once.
-  const result = await runInWorkspace(id, { argv: ["sh", "-c", `deadline=$(( $(date +%s) + ${timeoutSeconds} )); while [ "$(date +%s)" -le "$deadline" ]; do if test -f /.agents-in-the-cloud/ready; then cat /.agents-in-the-cloud/startup.log; exit 0; fi; if test -S /run/systemd/private && systemctl is-failed --quiet agents-in-the-cloud-tmux.service agents-in-the-cloud-init.service agents-in-the-cloud-gateway.service agents-in-the-cloud-helper.service; then break; fi; sleep 0.05; done; tail -n 120 /.agents-in-the-cloud/startup.log; journalctl --no-pager -n 120 -u agents-in-the-cloud-tmux.service -u agents-in-the-cloud-init.service -u agents-in-the-cloud-gateway.service; exit 1`], user: "root" }, { waitForReady: true, signal: AbortSignal.timeout(workspaceStartupTimeoutMs + 30_000) });
+  const result = await runInWorkspace(id, { argv: ["sh", "-c", `deadline=$(( $(date +%s) + ${timeoutSeconds} )); while [ "$(date +%s)" -le "$deadline" ]; do if test -f /.agents-in-the-cloud/ready; then cat /.agents-in-the-cloud/startup.log; exit 0; fi; if test -S /run/systemd/private && systemctl is-failed --quiet agents-in-the-cloud-tmux.service agents-in-the-cloud-init.service agents-in-the-cloud-gateway.service; then break; fi; sleep 0.05; done; tail -n 120 /.agents-in-the-cloud/startup.log; journalctl --no-pager -n 120 -u agents-in-the-cloud-tmux.service -u agents-in-the-cloud-init.service -u agents-in-the-cloud-gateway.service; exit 1`], user: "root" }, { waitForReady: true, signal: AbortSignal.timeout(workspaceStartupTimeoutMs + 30_000) });
   const log = result.stdout.toString().trim();
-  if (workspaceExitStatus(result.exit) === 0) return log;
-  const output = result.stderr.toString().trim();
+  if (result.exitCode === 0) return log;
+  const output = result.stderr.trim();
   throw new AgentsInTheCloudCoreError("workspace_startup_timeout", `workspace did not finish startup: ${id}${output ? `\n${output}` : ""}${log ? `\n\nStartup log:\n${log}` : ""}`);
 }
 
@@ -278,7 +279,7 @@ export async function execWorkspaceCommandBuffer(id: string, command: string[], 
   const resolved = await resolveWorkspace(id);
   const startedAt = Date.now();
   const result = await runInWorkspace(resolved, { argv: command, user: options.user ?? "agents-in-the-cloud", workdir: options.workdir ?? workspaceRoot }, { stdin: options.stdin });
-  return { exitCode: workspaceExitStatus(result.exit), stdout: result.stdout, stderr: result.stderr.toString(), durationMs: Date.now() - startedAt };
+  return { ...result, durationMs: Date.now() - startedAt };
 }
 export async function execWorkspaceShell(id: string, script: string, options: WorkspaceCommandOptions = {}): Promise<WorkspaceExecResult> { return await execWorkspaceCommand(id, ["sh", "-lc", script], options); }
 
@@ -626,8 +627,7 @@ export async function ensureWorkspaceStarted(id: string): Promise<string> {
 async function checkWorkspaceGateway(id: string): Promise<void> {
   await workspaceGateway(id);
   const result = await runInWorkspace(id, { argv: ["sh", "-c", `deadline=$(( $(date +%s) + 15 )); while [ "$(date +%s)" -lt "$deadline" ]; do if test "$(curl --noproxy '*' --silent --max-time 1 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:${workspaceGatewayPort}/)" = 401; then exit 0; fi; sleep 0.05; done; exit 1`], user: "root" });
-  const stderr = result.stderr.toString().trim();
-  if (workspaceExitStatus(result.exit) !== 0) throw new AgentsInTheCloudCoreError("workspace_gateway_unavailable", `Workspace gateway did not become ready within 15 seconds.${stderr ? `\n${stderr}` : ""}`);
+  if (result.exitCode !== 0) throw new AgentsInTheCloudCoreError("workspace_gateway_unavailable", `Workspace gateway did not become ready within 15 seconds.${result.stderr.trim() ? `\n${result.stderr.trim()}` : ""}`);
 }
 
 export async function stopWorkspaceContainer(id: string): Promise<void> {
@@ -652,21 +652,16 @@ export async function setWorkspaceParked(id: string, parked: boolean): Promise<n
   return null;
 }
 
-async function requireWorkspaceCommand(id: string, argv: string[]): Promise<void> {
-  const result = await runInWorkspace(id, { argv, user: "root" });
-  if (workspaceExitStatus(result.exit) !== 0) throw new AgentsInTheCloudCoreError("workspace_command_failed", result.stderr.toString().trim() || `${argv[0]} failed in workspace ${id}`);
-}
-
 /** Repeated on resume and app recovery; the persisted list never rereads template settings. */
 export async function checkWorkspaceReadiness(id: string, report: (detail: string) => void = () => {}, activity: (progress: WorkspaceProvisionProgress) => void = () => {}): Promise<void> {
   report("Checking workspace gateway");
   await checkWorkspaceGateway(id);
   for (const socket of ["ingress", "egress"]) {
     report(`Checking ${socket} proxy`);
-    await requireWorkspaceCommand(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "--unix-socket", `${workspaceParentSocketDirectory}/${socket}.sock`, "http://localhost/health"]);
+    await requireRootInWorkspace(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "--unix-socket", `${workspaceParentSocketDirectory}/${socket}.sock`, "http://localhost/health"]);
   }
   report("Checking workspace image service");
-  await requireWorkspaceCommand(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "http://127.0.0.1:58124/health"]);
+  await requireRootInWorkspace(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "http://127.0.0.1:58124/health"]);
   report("Resolving required images");
   const images = await workspaceImagePreloader.load(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspaces", id), report);
   await workspaceImagePreloader.install(images, id, report, activity);

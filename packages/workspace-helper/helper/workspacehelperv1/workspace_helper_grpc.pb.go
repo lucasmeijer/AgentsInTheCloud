@@ -38,7 +38,8 @@ type WorkspaceHelperClient interface {
 	// always `exited`, sent once the process has exited and its output has
 	// closed. Closing the request stream closes stdin. Cancelling the call or
 	// exceeding its deadline kills the process's whole process group, so nothing
-	// outlives an abandoned call.
+	// outlives an abandoned call. A process that can't start fails the call
+	// instead, e.g. with NOT_FOUND for a missing executable.
 	Exec(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ExecRequest, ExecResponse], error)
 }
 
@@ -75,7 +76,8 @@ type WorkspaceHelperServer interface {
 	// always `exited`, sent once the process has exited and its output has
 	// closed. Closing the request stream closes stdin. Cancelling the call or
 	// exceeding its deadline kills the process's whole process group, so nothing
-	// outlives an abandoned call.
+	// outlives an abandoned call. A process that can't start fails the call
+	// instead, e.g. with NOT_FOUND for a missing executable.
 	Exec(grpc.BidiStreamingServer[ExecRequest, ExecResponse]) error
 	mustEmbedUnimplementedWorkspaceHelperServer()
 }

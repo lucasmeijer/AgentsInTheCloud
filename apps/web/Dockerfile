@@ -1,8 +1,8 @@
 ARG ATELIER_RUNTIME_IMAGE=ghcr.io/lucasmeijer/agents-in-the-cloud-docker@sha256:149efe3189255442091157921511b6c122b0254bb07e24d08d24408b4b79deda
 FROM oven/bun:1.4.0 AS bun-dist
 
-# Mirrors packages/workspace-helper/Dockerfile, which builds it for development.
-FROM --platform=$BUILDPLATFORM golang:1.26.0 AS workspace-helper
+# Built for the platform its workspaces run on; tests run natively.
+FROM --platform=$BUILDPLATFORM golang:1.26.0 AS workspace-helper-build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -11,6 +11,10 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY packages/workspace-helper/helper/ ./
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     go test ./... && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /aitc-workspace-helper .
+
+# Just the binary, which `bun run web` exports for development.
+FROM scratch AS workspace-helper
+COPY --from=workspace-helper-build /aitc-workspace-helper /aitc-workspace-helper
 
 FROM ubuntu:26.04 AS transcription-runtime
 ARG TARGETARCH

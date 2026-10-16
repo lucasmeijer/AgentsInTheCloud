@@ -5,7 +5,7 @@ import { ensureDefaultWorkspaceImage } from "@agents-in-the-cloud/workspace-imag
 
 import { runHostObservableCommand, stripTerminalControls, tailTerminalText } from "@agents-in-the-cloud/observable-terminal/server";
 import type { WorkspaceProvisionProgress } from "./provisioning.ts";
-import { runInWorkspace, workspaceExitStatus } from "./helper.ts";
+import { requireRootInWorkspace } from "./helper.ts";
 
 type Report = (progress: WorkspaceProvisionProgress) => void;
 interface CachePreparation {
@@ -35,14 +35,6 @@ async function command(args: string[]) {
   return { stdout, stderr };
 }
 
-/** Runs as root in a workspace and returns stdout. */
-type WorkspaceRootCommand = (workspaceId: string, argv: string[], stdin?: string | Uint8Array) => Promise<string>;
-async function workspaceRootCommand(workspaceId: string, argv: string[], stdin?: string | Uint8Array): Promise<string> {
-  const result = await runInWorkspace(workspaceId, { argv, user: "root" }, { stdin });
-  if (workspaceExitStatus(result.exit) !== 0) throw new Error(`${argv[0]} failed in workspace ${workspaceId}: ${result.stderr.toString().trim()}`);
-  return result.stdout.toString();
-}
-
 export function normalizeImageReference(input: string): string {
   if (!input || /\s|["'\\]/.test(input)) throw new Error(`Invalid image reference: ${input}`);
   let name = input;
@@ -55,7 +47,7 @@ export function normalizeImageReference(input: string): string {
 
 /** One app owns the shared directory. Image prep is deduplicated; mkfs commands
  * serialize so different manifests sharing a layer cannot replace each other's files. */
-export function createImagePreloader(run: Command = command, docker: typeof requireDocker = requireDocker, cacheDirectory = "/data/erofs-cache", defaultWorkspace: () => Promise<string> = ensureDefaultWorkspaceImage, build: (args: string[], report: Report) => Promise<void> = buildCacheCommand, inWorkspace: WorkspaceRootCommand = workspaceRootCommand) {
+export function createImagePreloader(run: Command = command, docker: typeof requireDocker = requireDocker, cacheDirectory = "/data/erofs-cache", defaultWorkspace: () => Promise<string> = ensureDefaultWorkspaceImage, build: (args: string[], report: Report) => Promise<void> = buildCacheCommand, inWorkspace: typeof requireRootInWorkspace = requireRootInWorkspace) {
   const resolving = new Map<string, Promise<string>>();
   const preparing = new Map<string, CachePreparation>();
   let cacheQueue = Promise.resolve();
