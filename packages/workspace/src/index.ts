@@ -10,8 +10,8 @@ import { runHostObservableCommand, stripTerminalControls, tailTerminalText } fro
 import { errorMessage, isWorkspaceAppPort, workspaceGatewayPort, type WorkspaceGateway, type WorkspaceHttpAppBackend, type WorkspaceServerProvisioningHook } from "@agents-in-the-cloud/shared";
 import { inspectWorkspaceImage, resolveWorkspaceImage } from "@agents-in-the-cloud/workspace-image";
 import { prepareWorkspaceSystemd } from "./systemd.ts";
-import { closeWorkspaceHelperConnection, runInWorkspace, workspaceExitStatus, workspaceHelperDirectory, workspaceHelperSocketPath } from "./helper.ts";
-import { workspaceHelperCliPath, workspaceHelperSocketDirectory } from "@agents-in-the-cloud/workspace-helper";
+import { closeWorkspaceHelperConnection, runInWorkspace, startLegacyWorkspaceHelper, workspaceExitStatus, workspaceHelperSocketPath, workspaceParentSocketDirectory } from "./helper.ts";
+import { workspaceHelperCliPath } from "@agents-in-the-cloud/workspace-helper";
 import { createWorkspaceContainerLifecycle, workspaceConfigurationLabel } from "./container-lifecycle.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
@@ -437,10 +437,8 @@ export async function createWorkspace(options: { id: string; events: AgentsInThe
       await mkdir(sockets, { recursive: true });
       activePlan.mounts.push({ type: "volume", target: "/data" });
       activePlan.mounts.push({ type: "bind", source: "/data/erofs-cache", target: "/data/erofs-cache", readonly: true });
-      activePlan.mounts.push({ type: "bind", source: dockerHostAgentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), target: "/run/agents-in-the-cloud-parent", readonly: true });
-      // The helper's socket is only for the app; it takes the owner of this directory.
-      await mkdir(workspaceHelperDirectory(id), { recursive: true, mode: 0o700 });
-      activePlan.mounts.push({ type: "bind", source: dockerHostAgentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-helper", id), target: workspaceHelperSocketDirectory });
+      // Writable so the workspace helper can listen here too.
+      activePlan.mounts.push({ type: "bind", source: dockerHostAgentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), target: workspaceParentSocketDirectory });
       await events.emit("workspace_plan_prepare", { workspaceId: id, init, context, workHostPath: source.worktreePath, workContainerPath: workspaceRoot, plan: activePlan });
       // Host modules authorize seeding before any repository-requested config is exported.
       await applyRepoWorkspaceManifest(id, source.worktreePath, activePlan);
@@ -484,7 +482,6 @@ export async function createWorkspace(options: { id: string; events: AgentsInThe
       await events.emit("workspace_deleted", { workspaceId: id });
       await rm(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), { recursive: true, force: true });
       closeWorkspaceHelperConnection(id);
-      await rm(workspaceHelperDirectory(id), { recursive: true, force: true });
       await Promise.all((plan?.cleanup ?? []).map((cleanup) => cleanup()));
       await deleteWorkspaceWorkDir(id);
     } catch (cleanupError) {
@@ -590,7 +587,6 @@ export async function deleteWorkspace(id: string, options: DeleteWorkspaceOption
   await options.events?.emit("workspace_deleted", { workspaceId: id });
   await rm(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), { recursive: true, force: true });
   closeWorkspaceHelperConnection(id);
-  await rm(workspaceHelperDirectory(id), { recursive: true, force: true });
   await deleteWorkspaceWorkDir(id);
   return null;
 }
@@ -612,6 +608,7 @@ function workspaceContainerLifecycle(id: string, checkpointRequired: boolean) {
   return createWorkspaceContainerLifecycle({
     directory: agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspaces", id, "configuration"),
     container: workspaceContainerName(id), checkpointRequired,
+    started: () => startLegacyWorkspaceHelper(id, workspaceContainerName(id)),
     waitForStartup: () => waitForWorkspaceStartup(id),
   });
 }
@@ -666,7 +663,7 @@ export async function checkWorkspaceReadiness(id: string, report: (detail: strin
   await checkWorkspaceGateway(id);
   for (const socket of ["ingress", "egress"]) {
     report(`Checking ${socket} proxy`);
-    await requireWorkspaceCommand(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "--unix-socket", `/run/agents-in-the-cloud-parent/${socket}.sock`, "http://localhost/health"]);
+    await requireWorkspaceCommand(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "--unix-socket", `${workspaceParentSocketDirectory}/${socket}.sock`, "http://localhost/health"]);
   }
   report("Checking workspace image service");
   await requireWorkspaceCommand(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "http://127.0.0.1:58124/health"]);

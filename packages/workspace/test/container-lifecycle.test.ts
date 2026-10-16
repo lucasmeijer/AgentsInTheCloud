@@ -16,6 +16,7 @@ async function fixture() {
   const lifecycle = (overrides: Partial<Parameters<typeof createWorkspaceContainerLifecycle>[0]> = {}) => createWorkspaceContainerLifecycle({
     directory, container: "workspace", checkpointRequired: true,
     async docker(args) { calls.push(args); return { stdout: "", stderr: "", exitCode: 0 }; },
+    async started() { calls.push(["started"]); },
     async waitForStartup() { calls.push(["ready"]); return "startup log"; },
     ...overrides,
   });
@@ -41,7 +42,7 @@ test("recovery uses frozen sources and copies everything before starting", async
     expect(checkpoint.files[1].source.endsWith("/agents-in-the-cloud")).toBe(true);
     expect(f.calls).toEqual([
       ["cp", checkpoint.files[0].source, "workspace:/.agents-in-the-cloud/init.sh"],
-      ["cp", checkpoint.files[1].source, "workspace:/etc"], ["start", "workspace"], ["ready"],
+      ["cp", checkpoint.files[1].source, "workspace:/etc"], ["start", "workspace"], ["started"], ["ready"],
     ]);
   } finally { await f.clean(); }
 });
@@ -60,7 +61,7 @@ test("an interrupted copy cannot start the container; recovery replays the whole
     expect(f.calls.every(([command]) => command === "cp")).toBe(true);
     f.calls.length = 0;
     await f.lifecycle().ensureStarted();
-    expect(f.calls.map(([command]) => command)).toEqual(["cp", "cp", "start", "ready"]);
+    expect(f.calls.map(([command]) => command)).toEqual(["cp", "cp", "start", "started", "ready"]);
   } finally { await f.clean(); }
 });
 
@@ -80,11 +81,11 @@ test("the configured checkpoint precedes start and startup failures never replay
     expect((await f.checkpoint()).phase).toBe("configured");
     f.calls.length = 0;
     await f.lifecycle().ensureStarted();
-    expect(f.calls).toEqual([["start", "workspace"], ["ready"]]);
+    expect(f.calls).toEqual([["start", "workspace"], ["started"], ["ready"]]);
     expect((await f.checkpoint()).phase).toBe("configured");
     f.calls.length = 0;
     await f.lifecycle().ensureStarted();
-    expect(f.calls).toEqual([["start", "workspace"], ["ready"]]);
+    expect(f.calls).toEqual([["start", "workspace"], ["started"], ["ready"]]);
   } finally { await f.clean(); }
 });
 
@@ -99,7 +100,7 @@ test("a failed Docker start retains configuration for a replacement process", as
     await expect(lifecycle.ensureStarted()).rejects.toThrow("start interrupted");
     expect((await f.checkpoint()).phase).toBe("configured");
     await f.lifecycle().ensureStarted();
-    expect(f.calls).toEqual([["start", "workspace"], ["ready"]]);
+    expect(f.calls).toEqual([["start", "workspace"], ["started"], ["ready"]]);
   } finally { await f.clean(); }
 });
 
@@ -118,7 +119,7 @@ test("existing containers without checkpoints retain their existing start path",
   const f = await fixture();
   try {
     await f.lifecycle({ checkpointRequired: false }).ensureStarted();
-    expect(f.calls).toEqual([["start", "workspace"]]);
+    expect(f.calls).toEqual([["start", "workspace"], ["started"]]);
   } finally { await f.clean(); }
 });
 
@@ -127,7 +128,7 @@ test("independent lifecycle instances share serialization and copy the snapshot 
   try {
     await f.lifecycle().snapshot(f.files);
     await Promise.all([f.lifecycle().ensureStarted(), f.lifecycle().ensureStarted()]);
-    expect(f.calls.map(([command]) => command)).toEqual(["cp", "cp", "start", "ready", "start", "ready"]);
+    expect(f.calls.map(([command]) => command)).toEqual(["cp", "cp", "start", "started", "ready", "start", "started", "ready"]);
   } finally { await f.clean(); }
 });
 
@@ -139,6 +140,6 @@ test("earlier running checkpoints remain configured without replaying file copie
     checkpoint.phase = "running";
     await writeFile(join(f.directory, "checkpoint.json"), JSON.stringify(checkpoint));
     await f.lifecycle().ensureStarted();
-    expect(f.calls).toEqual([["start", "workspace"], ["ready"]]);
+    expect(f.calls).toEqual([["start", "workspace"], ["started"], ["ready"]]);
   } finally { await f.clean(); }
 });

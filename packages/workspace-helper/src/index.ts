@@ -2,11 +2,6 @@ import { Client, credentials, Metadata, status, type ClientDuplexStream, type Se
 import { loadSync } from "@grpc/proto-loader";
 import { fileURLToPath } from "node:url";
 
-/** Where a workspace's helper listens, inside the workspace. */
-export const workspaceHelperSocketDirectory = "/run/agents-in-the-cloud-helper";
-/** The helper binary's name in the workspace tools directory. */
-export const workspaceHelperExecutable = "aitc-workspace-helper";
-
 /** Runs a workspace process from a host terminal: `bun <cli> <socket> <user> <workdir> <argv...>`. */
 export const workspaceHelperCliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
 

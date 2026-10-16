@@ -64,7 +64,7 @@ for (const remote of [false, true]) {
         const image = await resolveWorkspaceImage();
         const directory = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-terminal-test-"));
         socket = join(directory, "helper.sock");
-        await command(["docker", "run", "-d", "--init", "--name", container, "--user", "root", "-v", `${helper}:/helper:ro`, "-v", `${directory}:/run/agents-in-the-cloud-helper`, "--entrypoint", "/helper", image]);
+        await command(["docker", "run", "-d", "--init", "--name", container, "--user", "root", "-v", `${helper}:/helper:ro`, "-v", `${directory}:/run/agents-in-the-cloud-parent`, "--entrypoint", "/helper", image]);
         await until(async () => String(existsSync(socket)), "true");
       }
     }, 300_000);

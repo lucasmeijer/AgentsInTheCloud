@@ -35,13 +35,18 @@ class WorkspaceSpawnedProcess extends EventEmitter implements SpawnedProcess {
   exitCode: number | null = null;
   signalCode: NodeJS.Signals | null = null;
 
-  constructor(private readonly child: ReturnType<typeof startInWorkspace>) {
+  /** A lost workspace connection ends the process like a kill, as `docker exec` did; `lost` explains why. */
+  constructor(private readonly child: ReturnType<typeof startInWorkspace>, lost: (error: Error) => void) {
     super();
     this.stdin = new Writable({
       write(chunk: Buffer, _encoding, callback) { child.write(chunk); callback(); },
       final(callback) { child.closeStdin(); callback(); },
     });
-    this.stdout = Readable.from(child.stdout);
+    this.stdout = Readable.from((async function* () {
+      try { yield* child.stdout; }
+      // `exited` reports the failure; stdout just ends.
+      catch { return; }
+    })());
     void child.exited.then((exit) => {
       if (exit.signal === undefined) this.exitCode = exit.exitCode;
       else {
@@ -50,7 +55,11 @@ class WorkspaceSpawnedProcess extends EventEmitter implements SpawnedProcess {
         this.signalCode = names.find((name) => constants.signals[name] === exit.signal)!;
       }
       this.emit("exit", this.exitCode, this.signalCode);
-    }, (error: Error) => this.emit("error", error));
+    }, (error: Error) => {
+      lost(error);
+      this.signalCode = "SIGKILL";
+      this.emit("exit", null, this.signalCode);
+    });
   }
 
   kill(signal: NodeJS.Signals): boolean {
@@ -79,7 +88,7 @@ export async function openClaudeTransport(workspaceId: string, agentId: string, 
         const decoder = new TextDecoder();
         for await (const chunk of child.stderr) stderr = (stderr + decoder.decode(chunk, { stream: true })).slice(-16000);
       })().catch(() => {});
-      return new WorkspaceSpawnedProcess(child);
+      return new WorkspaceSpawnedProcess(child, (error) => { stderr = `${stderr}\n${error.message}`.slice(-16000); });
     },
     extraArgs: { "mcp-config": claudeMcpConfigPath(agentId) },
     settingSources: ["user", "project", "local"],

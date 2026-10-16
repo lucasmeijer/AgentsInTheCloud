@@ -42,7 +42,7 @@ func listen(path string) (net.Listener, error) {
 }
 
 func main() {
-	socket := flag.String("listen", "/run/agents-in-the-cloud-helper/helper.sock", "Unix socket to serve on")
+	socket := flag.String("listen", "/run/agents-in-the-cloud-parent/helper.sock", "Unix socket to serve on")
 	flag.Parse()
 	if os.Geteuid() != 0 {
 		log.Fatal("the workspace helper must run as root")
