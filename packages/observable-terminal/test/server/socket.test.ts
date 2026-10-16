@@ -14,7 +14,7 @@ async function scenario(script: string): Promise<void> {
     } }));
     const { createObservableTerminalSocket } = await import(${JSON.stringify(join(import.meta.dir, "../../src/server/socket.ts"))});
     const socket = { send: chunk => output.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)), close: () => output.push("closed") };
-    const options = { containerName: "workspace", session: "terminal", cols: 80, rows: 24 };
+    const options = { start: () => { throw new Error("unused"); }, session: "terminal", cols: 80, rows: 24 };
     ${script}
   `], { stdout: "pipe", stderr: "pipe" });
   const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);

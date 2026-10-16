@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildListSessionsCommand, buildObservableSessionCommand, normalizeCarriageReturns, observableTerminalCols, observableTerminalRows, stripObservablePaneFraming, stripTerminalControls } from "../../src/server/index.ts";
-import { buildAttachArgs } from "../../src/server/attach.ts";
+import { buildAttachStart } from "../../src/server/attach.ts";
 
 describe("observable terminal normalization", () => {
   test("collapses carriage-return progress repaints", () => {
@@ -28,10 +28,9 @@ describe("observable terminal normalization", () => {
   });
 
   test("interactive attachments configure tmux-owned scrollback before attaching", () => {
-    const args = buildAttachArgs({ containerName: "agents-in-the-cloud-ws", session: "s", cols: 80, rows: 24, socketName: "isolated" });
-    const bridge = JSON.parse(args.at(-1)!);
-    expect(bridge.args).toEqual([
-      "-L", "isolated",
+    const start = buildAttachStart({ session: "s", cols: 80, rows: 24, socketName: "isolated" });
+    expect(start.argv).toEqual([
+      "tmux", "-L", "isolated",
       "set-option", "-t", "s", "mouse", "on", ";",
       "set-option", "-t", "s", "set-clipboard", "on", ";",
       "bind-key", "-n", "S-PPage", "copy-mode -e ; send-keys -X page-up", ";",
@@ -44,8 +43,8 @@ describe("observable terminal normalization", () => {
   });
 
   test("read-only attachments do not configure scrollback", () => {
-    const args = buildAttachArgs({ containerName: "agents-in-the-cloud-ws", session: "s", cols: 80, rows: 24, readonly: true });
-    expect(JSON.parse(args.at(-1)!).args).toEqual(["attach-session", "-r", "-t", "s"]);
+    const start = buildAttachStart({ session: "s", cols: 80, rows: 24, readonly: true });
+    expect(start.argv).toEqual(["tmux", "attach-session", "-r", "-t", "s"]);
   });
 
   test("builds fixed-size observable sessions", () => {
@@ -64,15 +63,12 @@ describe("observable terminal normalization", () => {
   });
 
   test("builds readonly fixed-size attach arguments", () => {
-    const args = buildAttachArgs({ containerName: "agents-in-the-cloud-ws", session: "s", cols: 120, rows: 30, readonly: true, fixedSize: true });
-    expect(args).toContain("-i");
-    expect(args).not.toContain("-it");
-    const bridge = JSON.parse(args.at(-1)!);
-    expect(bridge.args).toContain("resize-window");
-    expect(bridge.args).toContain("attach-session");
-    expect(bridge.args).toContain("-r");
-    expect(bridge.cols).toBe(120);
-    expect(bridge.rows).toBe(30);
+    const start = buildAttachStart({ session: "s", cols: 120, rows: 30, readonly: true, fixedSize: true });
+    expect(start.argv).toContain("resize-window");
+    expect(start.argv).toContain("attach-session");
+    expect(start.argv).toContain("-r");
+    expect(start.terminal).toEqual({ cols: 120, rows: 30 });
+    expect(start.stdin).toBeUndefined();
   });
 });
 
@@ -85,8 +81,7 @@ test("receipt UUID sessions attach read-only to an existing server using a windo
   };
   expect((await run(["new-session", "-d", "-s", session, "sleep 30"])).code).toBe(0);
   try {
-    const args = buildAttachArgs({ containerName: "unused", session, cols: 120, rows: 30, readonly: true, fixedSize: true, requireExistingServer: true });
-    const bridge = JSON.parse(args.at(-1)!);
+    const bridge = { args: buildAttachStart({ session, cols: 120, rows: 30, readonly: true, fixedSize: true, requireExistingServer: true }).argv.slice(1) };
     expect(bridge.args[0]).toBe("-N");
     expect(bridge.args).not.toContain("-L");
     // Execute the actual attach prelude against tmux. The old bare session

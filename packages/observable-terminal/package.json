@@ -12,6 +12,7 @@
     "@agents-in-the-cloud/core": "workspace:*",
     "@agents-in-the-cloud/design-system": "workspace:*",
     "@agents-in-the-cloud/shared": "workspace:*",
-    "@gespenst/core": "catalog:"
+    "@gespenst/core": "catalog:",
+    "@agents-in-the-cloud/workspace-helper": "workspace:*"
   }
 }

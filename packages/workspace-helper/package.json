@@ -1,0 +1,16 @@
+{
+  "name": "@agents-in-the-cloud/workspace-helper",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agents-in-the-cloud/core": "workspace:*",
+    "@grpc/grpc-js": "1.14.6",
+    "@grpc/proto-loader": "0.8.1"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts"
+  }
+}

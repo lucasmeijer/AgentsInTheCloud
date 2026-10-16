@@ -1,5 +1,5 @@
 import type { WorkspaceServerSocketSession } from "@agents-in-the-cloud/shared";
-import { workspaceContainerName } from "@agents-in-the-cloud/workspace";
+import { startInWorkspace } from "@agents-in-the-cloud/workspace";
 import {
   createObservableTerminalSocket,
   normalizeCarriageReturns,
@@ -105,7 +105,7 @@ export function createAgentTermSocketSession(url: URL): WorkspaceServerSocketSes
   const session = decodeURIComponent(match[2]);
   if (!/^agents-in-the-cloud-agent-(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(session)) return undefined;
   return createObservableTerminalSocket({
-    containerName: workspaceContainerName(workspaceId),
+    start: (start) => startInWorkspace(workspaceId, start),
     session,
     // The receipt supervisor uses the default workspace server.
     requireExistingServer: true,

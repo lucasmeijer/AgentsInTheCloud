@@ -10,3 +10,6 @@ node_modules
 apps/web/public/assets
 apps/web/public/assets-manifest.json
 apps/web/public/workspace.js.map
+
+# Built by its own stage of the app image.
+packages/workspace-helper/workspace_tools

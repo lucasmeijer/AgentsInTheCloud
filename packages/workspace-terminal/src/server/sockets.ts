@@ -1,7 +1,7 @@
 import { AgentsInTheCloudCoreError } from "@agents-in-the-cloud/core";
 import { createObservableTerminalSocket, terminalSocketDimensions } from "@agents-in-the-cloud/observable-terminal/server";
 import type { WorkspaceServerSocketHandler } from "@agents-in-the-cloud/shared";
-import { workspaceContainerName, workspaceRoot } from "@agents-in-the-cloud/workspace";
+import { startInWorkspace, workspaceRoot } from "@agents-in-the-cloud/workspace";
 import { terminalIdFromViewKey } from "../shared.ts";
 import { listWorkspaceTerminals, tmuxSessionExists } from "./workspace-terminals.ts";
 
@@ -15,7 +15,7 @@ export function createTerminalSocketHandler(): WorkspaceServerSocketHandler {
     const terminal = (await listWorkspaceTerminals(workspaceId)).find((item) => item.id === terminalId);
     if (!terminal) throw new AgentsInTheCloudCoreError("terminal_not_found", `terminal not found: ${terminalId}`);
     return createObservableTerminalSocket({
-      containerName: workspaceContainerName(workspaceId),
+      start: (start) => startInWorkspace(workspaceId, start),
       session: terminal.tmuxSession,
       ...terminalSocketDimensions(url),
       user: "agents-in-the-cloud",

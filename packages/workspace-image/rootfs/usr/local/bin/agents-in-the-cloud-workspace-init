@@ -27,5 +27,6 @@ case "$docker_support" in
         ;;
     *) echo "Invalid Docker support configuration: $docker_support" >&2; exit 1 ;;
 esac
+systemctl enable agents-in-the-cloud-helper.service
 if [ -f /usr/lib/systemd/system/agents-in-the-cloud-gateway.service ]; then systemctl enable agents-in-the-cloud-gateway.service; fi
 exec /sbin/init

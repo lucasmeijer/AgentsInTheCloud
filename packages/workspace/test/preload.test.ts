@@ -56,16 +56,21 @@ function fixture(cacheDirectory?: string) {
     calls.push(["docker", ...args]);
     await dockerBefore?.(args);
     if (args[0] === "image" && args[1] === "inspect") return { exitCode: 0, stdout: JSON.stringify([digestA]), stderr: "" };
-    if (args.includes("import")) {
-      imports.push({ container: args[4]!, bytes: Buffer.from(options!.stdin!) });
-      return { exitCode: 0, stdout: `${postgres}@${digestB}\n`, stderr: "" };
+    throw new Error(`Unexpected docker command: ${args.join(" ")}`);
+  };
+  const inWorkspace = async (workspaceId: string, argv: string[], stdin?: string | Uint8Array) => {
+    calls.push(["workspace", workspaceId, ...argv]);
+    await dockerBefore?.(argv);
+    if (argv.includes("import")) {
+      imports.push({ container: workspaceId, bytes: Buffer.from(stdin!) });
+      return `${postgres}@${digestB}\n`;
     }
-    if (args.includes("tee")) installedReferences.push(String(options!.stdin));
-    return { exitCode: 0, stdout: "", stderr: "" };
+    if (argv.includes("tee")) installedReferences.push(String(stdin));
+    return "";
   };
   const build = async (args: string[]) => { await run(args); };
   return {
-    build, preloader: createImagePreloader(run, docker, cacheDirectory, undefined, build), run, docker, calls, images, registry, imports, installedReferences,
+    build, preloader: createImagePreloader(run, docker, cacheDirectory, undefined, build, inWorkspace), run, docker, inWorkspace, calls, images, registry, imports, installedReferences,
     before(fn: (args: string[]) => Promise<void>) { before = fn; },
     dockerBefore(fn: (args: string[]) => Promise<void>) { dockerBefore = fn; },
     builds: () => calls.filter((args) => args.includes("build-erofs-cache")),
@@ -95,7 +100,7 @@ test("snapshots requested settings and persists each exact reference before reso
   f.registry.set(postgres, digestB);
   f.images.set(postgres, digestB);
   f.registry.set(redis, digestB);
-  const restarted = createImagePreloader(f.run, f.docker, undefined, undefined, f.build);
+  const restarted = createImagePreloader(f.run, f.docker, undefined, undefined, f.build, f.inWorkspace);
   expect(await restarted.load(path)).toEqual([
     { requested: "postgres:17", reference: `${postgres}@${digestA}` },
     { requested: "redis:8", reference: `${redis}@${digestB}` },
@@ -138,8 +143,8 @@ test("concurrent workspaces share cache preparation and import metadata independ
   expect(f.imports.map((entry) => entry.container).sort()).toEqual(["one", "two"]);
   for (const imported of f.imports) expect(imported.bytes).toEqual(Buffer.from([0, 255, 127, 42]));
   expect(f.calls.filter((args) => args.includes("systemctl"))).toEqual([
-    ["docker", "exec", "--user", "root", "one", "systemctl", "start", "containerd.service"],
-    ["docker", "exec", "--user", "root", "two", "systemctl", "start", "containerd.service"],
+    ["workspace", "one", "systemctl", "start", "containerd.service"],
+    ["workspace", "two", "systemctl", "start", "containerd.service"],
   ]);
   expect(f.calls.some((args) => args.includes("dockerd") || args.includes("docker.service"))).toBe(false);
 });
@@ -201,7 +206,7 @@ test("complete cache files survive app restart without repeated conversion", asy
   const f = fixture(cache);
   const images = [{ requested: postgres, reference: `${postgres}@${digestA}` }];
   await f.preloader.install(images, "one");
-  await createImagePreloader(f.run, f.docker, cache, undefined, f.build).install(images, "two");
+  await createImagePreloader(f.run, f.docker, cache, undefined, f.build, f.inWorkspace).install(images, "two");
   expect(f.builds()).toHaveLength(0);
   expect(f.imports.map((entry) => entry.container)).toEqual(["one", "two"]);
 });
@@ -241,7 +246,7 @@ test("default workspace alias is pinned at creation and survives a changed app d
   f.images.set(postgres, digestA);
   let selected = postgres;
   let resolutions = 0;
-  const preloader = createImagePreloader(f.run, f.docker, await directory(), async () => { resolutions++; return selected; }, f.build);
+  const preloader = createImagePreloader(f.run, f.docker, await directory(), async () => { resolutions++; return selected; }, f.build, f.inWorkspace);
   const path = await directory();
   const referenceFile = await preloader.snapshot([defaultWorkspacePreload, defaultWorkspacePreload], path);
   expect(await readFile(referenceFile!, "utf8")).toBe(`${postgres}@${digestA}\n`);
@@ -255,13 +260,13 @@ test("default workspace alias is pinned at creation and survives a changed app d
   expect(f.installedReferences).toEqual([`${postgres}@${digestB}\n`]);
   expect(resolutions).toBe(1);
   expect(f.calls.some(args => args.includes("fetch"))).toBe(false);
-  const restarted = createImagePreloader(f.run, f.docker, undefined, undefined, f.build);
+  const restarted = createImagePreloader(f.run, f.docker, undefined, undefined, f.build, f.inWorkspace);
   expect(await restarted.load(path)).toEqual(images);
 });
 
 test("ordinary preloads do not resolve or expose the default workspace", async () => {
   const f = fixture();
-  const preloader = createImagePreloader(f.run, f.docker, await directory(), async () => { throw new Error("must not resolve default"); }, f.build);
+  const preloader = createImagePreloader(f.run, f.docker, await directory(), async () => { throw new Error("must not resolve default"); }, f.build, f.inWorkspace);
   const path = await directory();
   expect(await preloader.snapshot(["postgres:17"], path)).toBeUndefined();
   await expect(readFile(join(path, "agents-in-the-cloud", "default-workspace-image"))).rejects.toThrow();
@@ -298,7 +303,7 @@ test("cache waiters receive shared progress and cancellation detaches their repo
     started.resolve();
     await release.promise;
     report({ terminalSession: undefined, output: "Built 1 layer" });
-  });
+  }, f.inWorkspace);
   const images = [{ requested: postgres, reference: `${postgres}@${digestA}` }];
   const firstProgress: unknown[] = [];
   const secondProgress: unknown[] = [];

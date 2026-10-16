@@ -14,6 +14,7 @@ let buildPromise: Promise<void> | undefined;
 let timer: Timer | undefined;
 let serverRestartTimer: Timer | undefined;
 let workspaceImageTimer: Timer | undefined;
+let workspaceHelperTimer: Timer | undefined;
 let browserReloadTimer: Timer | undefined;
 let browserReloadRevision = 0;
 let workspaceImageEnsuring = false;
@@ -165,6 +166,21 @@ function scheduleWorkspaceImageEnsure(): void {
   workspaceImageTimer = setTimeout(() => void ensureWorkspaceImage(), 250);
 }
 
+function isWorkspaceHelperChange(path: string): boolean {
+  const rel = packageRelativePath(path);
+  return rel !== undefined && (rel.startsWith(`workspace-helper${sep}helper${sep}`) || rel.startsWith(`workspace-helper${sep}proto${sep}`));
+}
+
+async function buildWorkspaceHelper(): Promise<boolean> {
+  console.log("[workspace-helper] building…");
+  const build = Bun.spawn(["bun", join(packagesDir, "workspace-helper/scripts/build.ts")], { cwd, stdout: "pipe", stderr: "pipe" });
+  prefixed("[workspace-helper]", build.stdout);
+  prefixed("[workspace-helper]", build.stderr);
+  const code = await build.exited;
+  console.log(code === 0 ? "[workspace-helper] ready" : `[workspace-helper] failed (${code})`);
+  return code === 0;
+}
+
 function watchRecursive(path: string, onChange: (changed: string) => void): void {
   watch(path, { recursive: true }, (_event, filename) => {
     const changed = filename ? resolve(path, filename.toString()) : path;
@@ -206,6 +222,15 @@ async function restartServer(): Promise<void> {
   scheduleBrowserReload();
 }
 
+function scheduleWorkspaceHelperBuild(changed: string): void {
+  rememberRestartReason("workspace helper changed", changed);
+  if (workspaceHelperTimer) clearTimeout(workspaceHelperTimer);
+  // Workspaces get the new tools directory when the server starts.
+  workspaceHelperTimer = setTimeout(() => void (async () => {
+    if (await buildWorkspaceHelper()) await restartServer();
+  })(), 250);
+}
+
 function scheduleServerRestart(reason: string, changed: string): void {
   rememberRestartReason(reason, changed);
   if (serverRestartTimer) clearTimeout(serverRestartTimer);
@@ -227,6 +252,7 @@ process.on("SIGTERM", shutdown);
 
 await Bun.write(devReloadFile, `${JSON.stringify({ revision: browserReloadRevision })}\n`);
 await runBuild(true);
+if (!await buildWorkspaceHelper()) throw new Error("workspace helper build failed");
 await ensureWorkspaceImage();
 
 watchRecursive(resolve(cwd, "src/client"), () => scheduleBuild(false));
@@ -237,6 +263,7 @@ watchRecursive(resolve(cwd, "src/server"), (changed) => {
 });
 watchRecursive(resolve(repoRoot, "packages"), (changed) => {
   if (isWorkspaceImageInputChange(changed)) scheduleWorkspaceImageEnsure();
+  if (isWorkspaceHelperChange(changed)) scheduleWorkspaceHelperBuild(changed);
   if (isPackageRuntimeChange(changed)) scheduleBuildThenServerRestart("shared package runtime changed", changed);
 });
 

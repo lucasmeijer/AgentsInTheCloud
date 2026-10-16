@@ -5,11 +5,13 @@ import type { WorkspaceImageConfigureEvent } from "./events.ts";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { gitCredentialHelperShellBody } from "@agents-in-the-cloud/git-hosting";
-import { AgentsInTheCloudCoreError, agentsInTheCloudDataPath, createProcessFileLock, dockerHostAgentsInTheCloudDataPath, getAgentsInTheCloudRuntimeContext, invalidArguments, isJsonObject, readTextIfExists, requireDocker, runDocker, runDockerBuffer, withManagedDockerCommand, withCommandSignal, waitForCommand, shellQuote, writeJsonAtomic, type AgentsInTheCloudEventBus, type CommandInput, type JsonObject } from "@agents-in-the-cloud/core";
+import { AgentsInTheCloudCoreError, agentsInTheCloudDataPath, createProcessFileLock, dockerHostAgentsInTheCloudDataPath, getAgentsInTheCloudRuntimeContext, invalidArguments, isJsonObject, readTextIfExists, requireDocker, runDocker, withCommandSignal, waitForCommand, shellQuote, writeJsonAtomic, type AgentsInTheCloudEventBus, type CommandInput, type JsonObject } from "@agents-in-the-cloud/core";
 import { runHostObservableCommand, stripTerminalControls, tailTerminalText } from "@agents-in-the-cloud/observable-terminal/server";
 import { errorMessage, isWorkspaceAppPort, workspaceGatewayPort, type WorkspaceGateway, type WorkspaceHttpAppBackend, type WorkspaceServerProvisioningHook } from "@agents-in-the-cloud/shared";
 import { inspectWorkspaceImage, resolveWorkspaceImage } from "@agents-in-the-cloud/workspace-image";
 import { prepareWorkspaceSystemd } from "./systemd.ts";
+import { closeWorkspaceHelperConnection, runInWorkspace, workspaceExitStatus, workspaceHelperDirectory, workspaceHelperSocketPath } from "./helper.ts";
+import { workspaceHelperCliPath, workspaceHelperSocketDirectory } from "@agents-in-the-cloud/workspace-helper";
 import { createWorkspaceContainerLifecycle, workspaceConfigurationLabel } from "./container-lifecycle.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
@@ -17,6 +19,7 @@ import { applySeedConfigManifest } from "./seed-config.ts";
 import type { WorkspaceCreationContext, WorkspaceDockerMount, WorkspaceDockerPlan, WorkspaceInitInstruction } from "./types.ts";
 export type { WorkspaceCreationContext, WorkspaceDockerMount, WorkspaceDockerPlan, WorkspaceInitInstruction, WorkspaceInitInstructionMap } from "./types.ts";
 
+export { startInWorkspace, workspaceExitStatus } from "./helper.ts";
 export { createWorkspaceMetadataState, type WorkspaceMetadataState } from "./metadata-state.ts";
 export { ensureHostInotifyLimit } from "./host-inotify.ts";
 export { createWorkspaceProvisioning, type WorkspaceProvisioning, type WorkspaceProvisionRun } from "./provisioning.ts";
@@ -83,16 +86,17 @@ async function inspectLabels(id: string): Promise<Record<string, string>> {
 }
 
 async function ensureWorkspaceFilesystem(id: string): Promise<void> {
-  const result = await runDocker(["exec", "--user", "root", workspaceContainerName(id), "sh", "-lc", `test -d ${shellQuote(workspaceRoot)} && test -d /.agents-in-the-cloud`]);
-  if (result.exitCode !== 0) throw new AgentsInTheCloudCoreError("workspace_repair_failed", result.stderr.trim() || result.stdout.trim() || `workspace filesystem is not ready for ${id}`);
+  const result = await runInWorkspace(id, { argv: ["sh", "-c", `test -d ${shellQuote(workspaceRoot)} && test -d /.agents-in-the-cloud`], user: "root" });
+  if (workspaceExitStatus(result.exit) !== 0) throw new AgentsInTheCloudCoreError("workspace_repair_failed", result.stderr.toString().trim() || result.stdout.toString().trim() || `workspace filesystem is not ready for ${id}`);
 }
 
 async function waitForWorkspaceStartup(id: string): Promise<string> {
   const timeoutSeconds = Math.ceil(workspaceStartupTimeoutMs / 1000);
-  const result = await runDocker(["exec", "--user", "root", workspaceContainerName(id), "sh", "-lc", `deadline=$(( $(date +%s) + ${timeoutSeconds} )); while [ "$(date +%s)" -le "$deadline" ]; do if test -f /.agents-in-the-cloud/ready; then cat /.agents-in-the-cloud/startup.log; exit 0; fi; if test -S /run/systemd/private && systemctl is-failed --quiet agents-in-the-cloud-tmux.service agents-in-the-cloud-init.service agents-in-the-cloud-gateway.service; then break; fi; sleep 0.05; done; tail -n 120 /.agents-in-the-cloud/startup.log; journalctl --no-pager -n 120 -u agents-in-the-cloud-tmux.service -u agents-in-the-cloud-init.service -u agents-in-the-cloud-gateway.service; exit 1`]);
-  const log = result.stdout.trim();
-  if (result.exitCode === 0) return log;
-  const output = result.stderr.trim();
+  // The helper starts with the container, so wait for it rather than failing at once.
+  const result = await runInWorkspace(id, { argv: ["sh", "-c", `deadline=$(( $(date +%s) + ${timeoutSeconds} )); while [ "$(date +%s)" -le "$deadline" ]; do if test -f /.agents-in-the-cloud/ready; then cat /.agents-in-the-cloud/startup.log; exit 0; fi; if test -S /run/systemd/private && systemctl is-failed --quiet agents-in-the-cloud-tmux.service agents-in-the-cloud-init.service agents-in-the-cloud-gateway.service agents-in-the-cloud-helper.service; then break; fi; sleep 0.05; done; tail -n 120 /.agents-in-the-cloud/startup.log; journalctl --no-pager -n 120 -u agents-in-the-cloud-tmux.service -u agents-in-the-cloud-init.service -u agents-in-the-cloud-gateway.service; exit 1`], user: "root" }, { waitForReady: true, signal: AbortSignal.timeout(workspaceStartupTimeoutMs + 30_000) });
+  const log = result.stdout.toString().trim();
+  if (workspaceExitStatus(result.exit) === 0) return log;
+  const output = result.stderr.toString().trim();
   throw new AgentsInTheCloudCoreError("workspace_startup_timeout", `workspace did not finish startup: ${id}${output ? `\n${output}` : ""}${log ? `\n\nStartup log:\n${log}` : ""}`);
 }
 
@@ -265,23 +269,16 @@ async function applyRepoWorkspaceManifest(workspaceId: string, sourcePath: strin
   plan.initScripts.push(...(manifest.initScripts ?? []));
 }
 
-function workspaceExecDockerArgs(resolved: string, command: string[], options: WorkspaceCommandOptions, terminal = false): string[] {
-  return ["exec", ...(terminal ? ["--interactive", "--tty"] : options.stdin !== undefined ? ["-i"] : []), "--user", options.user ?? "agents-in-the-cloud", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8", "--workdir", options.workdir ?? workspaceRoot, workspaceContainerName(resolved), ...command];
-}
-
 export async function execWorkspaceCommand(id: string, command: string[], options: WorkspaceCommandOptions = {}): Promise<WorkspaceExecResult> {
-  if (command.length === 0) throw invalidArguments("command is required");
-  const resolved = await resolveWorkspace(id);
-  const startedAt = Date.now();
-  const result = await runDocker(workspaceExecDockerArgs(resolved, command, options), { stdin: options.stdin });
-  return { ...result, durationMs: Date.now() - startedAt };
+  const result = await execWorkspaceCommandBuffer(id, command, options);
+  return { ...result, stdout: result.stdout.toString() };
 }
 export async function execWorkspaceCommandBuffer(id: string, command: string[], options: WorkspaceCommandOptions = {}): Promise<WorkspaceExecBufferResult> {
   if (command.length === 0) throw invalidArguments("command is required");
   const resolved = await resolveWorkspace(id);
   const startedAt = Date.now();
-  const result = await runDockerBuffer(workspaceExecDockerArgs(resolved, command, options), { stdin: options.stdin });
-  return { ...result, durationMs: Date.now() - startedAt };
+  const result = await runInWorkspace(resolved, { argv: command, user: options.user ?? "agents-in-the-cloud", workdir: options.workdir ?? workspaceRoot }, { stdin: options.stdin });
+  return { exitCode: workspaceExitStatus(result.exit), stdout: result.stdout, stderr: result.stderr.toString(), durationMs: Date.now() - startedAt };
 }
 export async function execWorkspaceShell(id: string, script: string, options: WorkspaceCommandOptions = {}): Promise<WorkspaceExecResult> { return await execWorkspaceCommand(id, ["sh", "-lc", script], options); }
 
@@ -297,14 +294,14 @@ export const workspaceSetupProvisioningHook: WorkspaceServerProvisioningHook = {
     }
 
     const session = `agents-in-the-cloud-provision-setup-${crypto.randomUUID().slice(0, 8)}`;
-    const result = await withManagedDockerCommand(workspaceExecDockerArgs(id, ["sh", workspaceSetupScript], {}, true), (args) => runHostObservableCommand({
+    const result = await runHostObservableCommand({
       session,
       cwd: "/",
-      command: ["docker", ...args].map(shellQuote).join(" "),
+      command: [process.execPath, workspaceHelperCliPath, workspaceHelperSocketPath(id), "agents-in-the-cloud", workspaceRoot, "sh", workspaceSetupScript].map(shellQuote).join(" "),
       onSessionStarted: async () => {
         await events?.emit("workspace_provision_progress", { workspaceId: id, terminalSession: session });
       },
-    }));
+    });
     const output = tailTerminalText(stripTerminalControls(result.output));
     await events?.emit("workspace_provision_progress", { workspaceId: id, output });
     if (result.exitCode !== 0) throw new AgentsInTheCloudCoreError("workspace_setup_failed", output || `${workspaceSetupScript} failed with exit code ${result.exitCode}`);
@@ -441,6 +438,9 @@ export async function createWorkspace(options: { id: string; events: AgentsInThe
       activePlan.mounts.push({ type: "volume", target: "/data" });
       activePlan.mounts.push({ type: "bind", source: "/data/erofs-cache", target: "/data/erofs-cache", readonly: true });
       activePlan.mounts.push({ type: "bind", source: dockerHostAgentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), target: "/run/agents-in-the-cloud-parent", readonly: true });
+      // The helper's socket is only for the app; it takes the owner of this directory.
+      await mkdir(workspaceHelperDirectory(id), { recursive: true, mode: 0o700 });
+      activePlan.mounts.push({ type: "bind", source: dockerHostAgentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-helper", id), target: workspaceHelperSocketDirectory });
       await events.emit("workspace_plan_prepare", { workspaceId: id, init, context, workHostPath: source.worktreePath, workContainerPath: workspaceRoot, plan: activePlan });
       // Host modules authorize seeding before any repository-requested config is exported.
       await applyRepoWorkspaceManifest(id, source.worktreePath, activePlan);
@@ -483,6 +483,8 @@ export async function createWorkspace(options: { id: string; events: AgentsInThe
       if (networks.stdout.trim()) await requireDocker(["network", "rm", workspaceNetworkName(id)]);
       await events.emit("workspace_deleted", { workspaceId: id });
       await rm(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), { recursive: true, force: true });
+      closeWorkspaceHelperConnection(id);
+      await rm(workspaceHelperDirectory(id), { recursive: true, force: true });
       await Promise.all((plan?.cleanup ?? []).map((cleanup) => cleanup()));
       await deleteWorkspaceWorkDir(id);
     } catch (cleanupError) {
@@ -587,6 +589,8 @@ export async function deleteWorkspace(id: string, options: DeleteWorkspaceOption
   workspaceGatewayCache.delete(workspaceGatewayCacheKey(id));
   await options.events?.emit("workspace_deleted", { workspaceId: id });
   await rm(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), { recursive: true, force: true });
+  closeWorkspaceHelperConnection(id);
+  await rm(workspaceHelperDirectory(id), { recursive: true, force: true });
   await deleteWorkspaceWorkDir(id);
   return null;
 }
@@ -624,13 +628,15 @@ export async function ensureWorkspaceStarted(id: string): Promise<string> {
 /** Give the gateway 15 seconds to boot before reporting a recoverable startup failure. */
 async function checkWorkspaceGateway(id: string): Promise<void> {
   await workspaceGateway(id);
-  const result = await runDocker(["exec", "--user", "root", workspaceContainerName(id), "sh", "-lc", `deadline=$(( $(date +%s) + 15 )); while [ "$(date +%s)" -lt "$deadline" ]; do if test "$(curl --noproxy '*' --silent --max-time 1 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:${workspaceGatewayPort}/)" = 401; then exit 0; fi; sleep 0.05; done; exit 1`]);
-  if (result.exitCode !== 0) throw new AgentsInTheCloudCoreError("workspace_gateway_unavailable", `Workspace gateway did not become ready within 15 seconds.${result.stderr.trim() ? `\n${result.stderr.trim()}` : ""}`);
+  const result = await runInWorkspace(id, { argv: ["sh", "-c", `deadline=$(( $(date +%s) + 15 )); while [ "$(date +%s)" -lt "$deadline" ]; do if test "$(curl --noproxy '*' --silent --max-time 1 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:${workspaceGatewayPort}/)" = 401; then exit 0; fi; sleep 0.05; done; exit 1`], user: "root" });
+  const stderr = result.stderr.toString().trim();
+  if (workspaceExitStatus(result.exit) !== 0) throw new AgentsInTheCloudCoreError("workspace_gateway_unavailable", `Workspace gateway did not become ready within 15 seconds.${stderr ? `\n${stderr}` : ""}`);
 }
 
 export async function stopWorkspaceContainer(id: string): Promise<void> {
   await validateWorkspaceContainer(id);
   await requireDocker(["stop", "--time", "10", workspaceContainerName(id)]);
+  closeWorkspaceHelperConnection(id);
   workspaceGatewayCache.delete(workspaceGatewayCacheKey(id));
 }
 
@@ -649,17 +655,22 @@ export async function setWorkspaceParked(id: string, parked: boolean): Promise<n
   return null;
 }
 
+async function requireWorkspaceCommand(id: string, argv: string[]): Promise<void> {
+  const result = await runInWorkspace(id, { argv, user: "root" });
+  if (workspaceExitStatus(result.exit) !== 0) throw new AgentsInTheCloudCoreError("workspace_command_failed", result.stderr.toString().trim() || `${argv[0]} failed in workspace ${id}`);
+}
+
 /** Repeated on resume and app recovery; the persisted list never rereads template settings. */
 export async function checkWorkspaceReadiness(id: string, report: (detail: string) => void = () => {}, activity: (progress: WorkspaceProvisionProgress) => void = () => {}): Promise<void> {
   report("Checking workspace gateway");
   await checkWorkspaceGateway(id);
   for (const socket of ["ingress", "egress"]) {
     report(`Checking ${socket} proxy`);
-    await requireDocker(["exec", "--user", "root", workspaceContainerName(id), "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "--unix-socket", `/run/agents-in-the-cloud-parent/${socket}.sock`, "http://localhost/health"]);
+    await requireWorkspaceCommand(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "--unix-socket", `/run/agents-in-the-cloud-parent/${socket}.sock`, "http://localhost/health"]);
   }
   report("Checking workspace image service");
-  await requireDocker(["exec", "--user", "root", workspaceContainerName(id), "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "http://127.0.0.1:58124/health"]);
+  await requireWorkspaceCommand(id, ["curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "5", "http://127.0.0.1:58124/health"]);
   report("Resolving required images");
   const images = await workspaceImagePreloader.load(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspaces", id), report);
-  await workspaceImagePreloader.install(images, workspaceContainerName(id), report, activity);
+  await workspaceImagePreloader.install(images, id, report, activity);
 }

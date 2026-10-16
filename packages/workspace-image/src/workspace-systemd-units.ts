@@ -52,6 +52,21 @@ TimeoutStopSec=30s
 [Install]
 WantedBy=multi-user.target
 `,
+    "agents-in-the-cloud-helper.service": `[Unit]
+Description=AgentsInTheCloud workspace helper
+[Service]
+# The helper passes this environment on to the processes it runs.
+EnvironmentFile=/.agents-in-the-cloud/environment
+WorkingDirectory=/work
+# Comes from the tools mount, so it matches the app rather than the image.
+ExecStart=/opt/agents-in-the-cloud/bin/aitc-workspace-helper
+Restart=always
+RestartSec=1s
+# Processes the app started, such as servers, outlive a helper restart.
+KillMode=process
+[Install]
+WantedBy=multi-user.target
+`,
     "docker.socket": `[Unit]
 Description=AgentsInTheCloud Docker API socket
 [Socket]

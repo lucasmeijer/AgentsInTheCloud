@@ -1,0 +1,96 @@
+// Regenerate helper/workspacehelperv1 after changes, from packages/workspace-helper:
+// protoc -I proto --go_out=helper --go_opt=module=agents-in-the-cloud/workspace-helper \
+//   --go-grpc_out=helper --go-grpc_opt=module=agents-in-the-cloud/workspace-helper proto/workspace_helper.proto
+syntax = "proto3";
+
+package agents_in_the_cloud.workspace_helper.v1;
+
+option go_package = "agents-in-the-cloud/workspace-helper/workspacehelperv1";
+
+// Runs inside a workspace and does the work the app used to do with `docker exec`.
+// The helper listens; the app is the client. The connection identifies the
+// workspace, so requests never name one.
+service WorkspaceHelper {
+  // Runs one process. The first request must be `start`; the last response is
+  // always `exited`, sent once the process has exited and its output has
+  // closed. Closing the request stream closes stdin. Cancelling the call or
+  // exceeding its deadline kills the process's whole process group, so nothing
+  // outlives an abandoned call.
+  rpc Exec(stream ExecRequest) returns (stream ExecResponse);
+}
+
+message ExecRequest {
+  oneof request {
+    ExecStart start = 1;
+    // Written to the process's stdin, or typed into its terminal.
+    bytes stdin = 2;
+    // Closes stdin, so the process sees EOF. Not allowed with a terminal; send
+    // `signal` HUP to hang one up.
+    CloseStdin close_stdin = 3;
+    // Delivered to the process group.
+    Signal signal = 4;
+    // Only allowed with a terminal.
+    TerminalSize resize = 5;
+  }
+}
+
+message ExecStart {
+  // argv[0] is resolved through PATH, as `docker exec` does. Must not be empty.
+  repeated string argv = 1;
+  User user = 2;
+  // Absolute path. Empty means /work.
+  string workdir = 3;
+  // Added to the workspace's environment. The helper sets HOME, USER and LOGNAME for `user`.
+  map<string, string> env = 4;
+  // Gives the process a stdin pipe; without one it reads /dev/null. Must be
+  // unset with a terminal, which always takes input.
+  bool stdin = 5;
+  // Runs the process in a new session on a PTY. Output then arrives only as `stdout`.
+  optional TerminalSize terminal = 6;
+}
+
+enum User {
+  USER_UNSPECIFIED = 0;
+  // The workspace's regular user, agents-in-the-cloud.
+  USER_AGENT = 1;
+  USER_ROOT = 2;
+}
+
+message TerminalSize {
+  uint32 cols = 1;
+  uint32 rows = 2;
+}
+
+message CloseStdin {}
+
+enum Signal {
+  SIGNAL_UNSPECIFIED = 0;
+  SIGNAL_HUP = 1;
+  SIGNAL_INT = 2;
+  SIGNAL_TERM = 3;
+  SIGNAL_KILL = 4;
+}
+
+message ExecResponse {
+  oneof response {
+    Started started = 1;
+    bytes stdout = 2;
+    bytes stderr = 3;
+    Exited exited = 4;
+  }
+}
+
+// Sent once the process is running. If it can't start, the call fails with a
+// gRPC error instead, e.g. NOT_FOUND for a missing executable.
+message Started {
+  uint32 pid = 1;
+}
+
+// Sent after all output.
+message Exited {
+  oneof status {
+    int32 exit_code = 1;
+    // Linux number of the signal that terminated the process, e.g. 9 for SIGKILL.
+    int32 signal = 2;
+  }
+}

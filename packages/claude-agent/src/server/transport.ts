@@ -1,6 +1,8 @@
-import { spawn } from "node:child_process";
-import { query, type EffortLevel, type Options, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { resolveWorkspace, workspaceContainerName, workspaceRoot } from "@agents-in-the-cloud/workspace";
+import { EventEmitter } from "node:events";
+import { constants } from "node:os";
+import { Readable, Writable } from "node:stream";
+import { query, type EffortLevel, type Options, type SDKMessage, type SDKUserMessage, type SpawnedProcess } from "@anthropic-ai/claude-agent-sdk";
+import { resolveWorkspace, startInWorkspace, workspaceRoot } from "@agents-in-the-cloud/workspace";
 import { claudeConfigDirectory, claudeExecutable, claudeMcpConfigPath } from "./setup.ts";
 
 /** Which native conversation the process continues. A fork resumes `resume` into the new `sessionId`. */
@@ -25,9 +27,42 @@ function inputQueue() {
   };
 }
 
+/** The SDK drives a child process; this one runs in the workspace. */
+class WorkspaceSpawnedProcess extends EventEmitter implements SpawnedProcess {
+  readonly stdin: Writable;
+  readonly stdout: Readable;
+  killed = false;
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
+
+  constructor(private readonly child: ReturnType<typeof startInWorkspace>) {
+    super();
+    this.stdin = new Writable({
+      write(chunk: Buffer, _encoding, callback) { child.write(chunk); callback(); },
+      final(callback) { child.closeStdin(); callback(); },
+    });
+    this.stdout = Readable.from(child.stdout);
+    void child.exited.then((exit) => {
+      if (exit.signal === undefined) this.exitCode = exit.exitCode;
+      else {
+        // SAFETY: os.constants.signals is keyed by signal name.
+        const names = Object.keys(constants.signals) as NodeJS.Signals[];
+        this.signalCode = names.find((name) => constants.signals[name] === exit.signal)!;
+      }
+      this.emit("exit", this.exitCode, this.signalCode);
+    }, (error: Error) => this.emit("error", error));
+  }
+
+  kill(signal: NodeJS.Signals): boolean {
+    if (signal !== "SIGTERM" && signal !== "SIGKILL" && signal !== "SIGINT" && signal !== "SIGHUP") throw new Error(`Unsupported signal for a workspace process: ${signal}`);
+    this.child.signal(signal);
+    this.killed = true;
+    return true;
+  }
+}
+
 /** Stdio stays private: no listening port or raw provider credential in a workspace. */
 export async function openClaudeTransport(workspaceId: string, agentId: string, start: ClaudeSessionStart & { instructions: string; model?: string; effort?: EffortLevel }, message: (message: SDKMessage) => void, failed: (error: Error) => void) {
-  const container = workspaceContainerName(workspaceId);
   await resolveWorkspace(workspaceId);
   const input = inputQueue();
   let stderr = "";
@@ -38,11 +73,13 @@ export async function openClaudeTransport(workspaceId: string, agentId: string, 
     cwd: workspaceRoot,
     pathToClaudeCodeExecutable: claudeExecutable,
     spawnClaudeCodeProcess(options) {
-      const environment = Object.entries(options.env).flatMap(([name, value]) => value === undefined ? [] : ["--env", `${name}=${value}`]);
-      const child = spawn("docker", ["exec", "-i", "--user", "agents-in-the-cloud", "--workdir", workspaceRoot, "--env", "HOME=/home/agents-in-the-cloud", ...environment, container, claudeExecutable, ...options.args], { stdio: ["pipe", "pipe", "pipe"], signal: options.signal });
-      child.stderr.setEncoding("utf8");
-      child.stderr.on("data", (chunk: string) => { stderr = (stderr + chunk).slice(-16000); });
-      return child;
+      const env = Object.fromEntries(Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+      const child = startInWorkspace(workspaceId, { argv: [claudeExecutable, ...options.args], user: "agents-in-the-cloud", workdir: workspaceRoot, env, stdin: true }, { signal: options.signal });
+      void (async () => {
+        const decoder = new TextDecoder();
+        for await (const chunk of child.stderr) stderr = (stderr + decoder.decode(chunk, { stream: true })).slice(-16000);
+      })().catch(() => {});
+      return new WorkspaceSpawnedProcess(child);
     },
     extraArgs: { "mcp-config": claudeMcpConfigPath(agentId) },
     settingSources: ["user", "project", "local"],

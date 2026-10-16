@@ -1,7 +1,7 @@
 import { AgentsInTheCloudCoreError } from "@agents-in-the-cloud/core";
 import { createObservableTerminalSocket, terminalSocketDimensions } from "@agents-in-the-cloud/observable-terminal/server";
 import type { WorkspaceServerSocketHandler } from "@agents-in-the-cloud/shared";
-import { workspaceContainerName, workspaceRoot } from "@agents-in-the-cloud/workspace";
+import { startInWorkspace, workspaceRoot } from "@agents-in-the-cloud/workspace";
 import type { CliAgents } from "./agents.ts";
 
 export function cliSocketHandler(providerId: string, agents: CliAgents): WorkspaceServerSocketHandler {
@@ -12,7 +12,7 @@ export function cliSocketHandler(providerId: string, agents: CliAgents): Workspa
     const session = await agents.ready(workspaceId, decodeURIComponent(match[3]!));
     if (session.error) throw new AgentsInTheCloudCoreError("agent_session_failed", session.error);
     return createObservableTerminalSocket({
-      containerName: workspaceContainerName(workspaceId), session: session.tmuxSession,
+      start: (start) => startInWorkspace(workspaceId, start), session: session.tmuxSession,
       ...terminalSocketDimensions(url),
       user: "agents-in-the-cloud", workdir: workspaceRoot, readonly: false,
     });

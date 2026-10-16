@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { shellQuote } from "@agents-in-the-cloud/core";
-import { workspaceContainerName } from "@agents-in-the-cloud/workspace";
+import { startInWorkspace, workspaceExitStatus } from "@agents-in-the-cloud/workspace";
 import { extensionOf, imageMimeByExtension } from "@agents-in-the-cloud/shared/file-metadata";
 
 interface WorkspaceFileMimeRegistry {
@@ -40,15 +40,16 @@ function parseRange(header: string | null, size: number): { start: number; end: 
 export async function workspaceFileEndpoint(workspaceId: string, path: string, request: Request): Promise<Response> {
   if (!path.startsWith("/") || path.includes("..") || path.includes("\0")) return new Response("bad path", { status: 400 });
 
-  const container = workspaceContainerName(workspaceId);
   const quoted = shellQuote(path);
-  const stat = Bun.spawnSync(["docker", "exec", container, "sh", "-c", `stat -c %s ${quoted} 2>/dev/null || stat -f %z ${quoted}`]);
-  const size = Number(new TextDecoder().decode(stat.stdout).trim());
-  if (stat.exitCode !== 0 || !Number.isFinite(size)) return new Response("not found", { status: 404 });
+  const stat = startInWorkspace(workspaceId, { argv: ["sh", "-c", `stat -c %s ${quoted} 2>/dev/null || stat -f %z ${quoted}`], user: "root" });
+  const [statOutput, statExit] = await Promise.all([new Response(stat.stdout).text(), stat.exited]);
+  const size = Number(statOutput.trim());
+  if (workspaceExitStatus(statExit) !== 0 || !Number.isFinite(size)) return new Response("not found", { status: 404 });
 
   const range = parseRange(request.headers.get("range"), size);
   const command = range ? `tail -c +${range.start + 1} ${quoted} | head -c ${range.end - range.start + 1}` : `cat ${quoted}`;
-  const proc = Bun.spawn(["docker", "exec", container, "sh", "-c", command], { stdout: "pipe", stderr: "ignore" });
+  // A disconnecting client cancels the response body, which stops the read.
+  const proc = startInWorkspace(workspaceId, { argv: ["sh", "-c", command], user: "root" });
   const contentType = mimeByExtension[extensionOf(path)] ?? Bun.file(path).type;
   const headers = new Headers({ "content-type": contentType, "accept-ranges": "bytes", "x-content-type-options": "nosniff" });
   if (new URL(request.url).searchParams.get("download") === "1") {

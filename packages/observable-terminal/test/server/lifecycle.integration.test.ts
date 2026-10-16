@@ -1,5 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { shellQuote } from "@agents-in-the-cloud/core";
+import { startWorkspaceProcess } from "@agents-in-the-cloud/workspace-helper";
 import { resolveWorkspaceImage } from "@agents-in-the-cloud/workspace-image";
 import { attachHostObservableTerminal, buildObservableSessionCommand, type ObservableTerminalConnection } from "../../src/server/index.ts";
 import { attachObservableTerminal } from "../../src/server/attach.ts";
@@ -7,6 +12,9 @@ import { attachObservableTerminal } from "../../src/server/attach.ts";
 for (const remote of [false, true]) {
   describe.skip(`${remote ? "Docker" : "host"} terminal lifecycle`, () => {
     const container = `agents-in-the-cloud-terminal-test-${crypto.randomUUID()}`;
+    // Built by `bun run --cwd packages/workspace-helper build`.
+    const helper = new URL("../../../workspace-helper/workspace_tools/aitc-workspace-helper", import.meta.url).pathname;
+    let socket = "";
     const sessions: string[] = [];
     const connections: ObservableTerminalConnection[] = [];
 
@@ -43,7 +51,7 @@ for (const remote of [false, true]) {
         onExit: exited.resolve,
       };
       const options = { session, cols: 80, rows: 24, readonly };
-      const connection = remote ? attachObservableTerminal({ ...options, containerName: container }, events) : attachHostObservableTerminal(options, events);
+      const connection = remote ? attachObservableTerminal({ ...options, start: (start) => startWorkspaceProcess(socket, start) }, events) : attachHostObservableTerminal(options, events);
       connections.push(connection);
       return { connection, exited: exited.promise, output: () => output };
     }
@@ -54,7 +62,10 @@ for (const remote of [false, true]) {
     beforeAll(async () => {
       if (remote) {
         const image = await resolveWorkspaceImage();
-        await command(["docker", "run", "-d", "--init", "--name", container, "--entrypoint", "sleep", image, "infinity"]);
+        const directory = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-terminal-test-"));
+        socket = join(directory, "helper.sock");
+        await command(["docker", "run", "-d", "--init", "--name", container, "--user", "root", "-v", `${helper}:/helper:ro`, "-v", `${directory}:/run/agents-in-the-cloud-helper`, "--entrypoint", "/helper", image]);
+        await until(async () => String(existsSync(socket)), "true");
       }
     }, 300_000);
     afterEach(async () => {
@@ -179,9 +190,13 @@ for (const remote of [false, true]) {
     test("an abruptly terminated attachment owner leaves no stale client", async () => {
       const session = await create();
       const modulePath = new URL("../../src/server/attach.ts", import.meta.url).pathname;
-      const options = { session, cols: 80, rows: 24, containerName: container };
+      const helperModulePath = new URL("../../../workspace-helper/src/index.ts", import.meta.url).pathname;
+      const options = { session, cols: 80, rows: 24 };
       const owner = Bun.spawn(["bun", "-e", `import { attachObservableTerminal, attachHostObservableTerminal } from ${JSON.stringify(modulePath)};
-        ${remote ? "attachObservableTerminal" : "attachHostObservableTerminal"}(${JSON.stringify(options)}, { onData() {}, onExit() {} });`],
+        import { startWorkspaceProcess } from ${JSON.stringify(helperModulePath)};
+        ${remote
+          ? `attachObservableTerminal({ ...${JSON.stringify(options)}, start: (start) => startWorkspaceProcess(${JSON.stringify(socket)}, start) }, { onData() {}, onExit() {} });`
+          : `attachHostObservableTerminal(${JSON.stringify(options)}, { onData() {}, onExit() {} });`}`],
         { stdout: "pipe", stderr: "pipe" });
       try {
         await until(() => count(session), "1");
@@ -200,10 +215,7 @@ for (const remote of [false, true]) {
         const viewer = attach(session);
         await until(() => count(session), "1");
         const clientPid = await clients(session);
-        // In Docker, exercise the bridge's signal handler; on the host the
-        // attachment process is the tmux client itself.
-        const pid = remote ? await run(`ps -o ppid= -p ${clientPid}`) : clientPid;
-        await run(`kill -${signal} ${pid}`);
+        await run(`kill -${signal} ${clientPid}`);
         await viewer.exited;
         expect(await count(session)).toBe("0");
         expect(await run(`tmux display-message -p -t ${session} '#{pane_dead}'`)).toBe("0");
@@ -221,16 +233,16 @@ for (const remote of [false, true]) {
     }, 10_000);
 
     if (remote) {
-      test("Docker startup failures deliver diagnostics before exit", async () => {
+      test("an unreachable helper delivers diagnostics before exit", async () => {
         const exited = Promise.withResolvers<number>();
         const decoder = new TextDecoder();
         let output = "";
-        attachObservableTerminal({ containerName: `${container}-missing`, session: "missing", cols: 80, rows: 24 }, {
+        attachObservableTerminal({ start: (start) => startWorkspaceProcess(`${socket}-missing`, start), session: "missing", cols: 80, rows: 24 }, {
           onData: (chunk) => { output += decoder.decode(chunk, { stream: true }); },
           onExit: exited.resolve,
         });
         expect(await exited.promise).not.toBe(0);
-        expect(output).toContain("No such container");
+        expect(output).toContain("No connection established");
       });
     }
 
