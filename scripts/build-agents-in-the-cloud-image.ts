@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { workloadCgroupArgs } from "@agents-in-the-cloud/core";
+import { buildGoProgram, workloadCgroupArgs } from "@agents-in-the-cloud/core";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
@@ -304,6 +304,11 @@ const systemCompatibility = Value.Parse(
   Type.Object({ requiredSystemVersion: Type.Integer({ minimum: 0 }), requiredSystemVersionLabel: Type.String() }),
   await import(join(process.cwd(), "packages/shared/src/system-version.ts")),
 );
+
+// The app image copies each platform's helper from the checkout being built.
+for (const platform of requestedPlatforms(options)) {
+  await buildGoProgram(join(process.cwd(), "packages/workspace-helper/helper"), join(process.cwd(), "packages/workspace-helper/dist", platform.replace("/", "-"), "aitc-workspace-helper"), platform);
+}
 
 await buildImage(imageRefs, [
   ...allBuildArgs.flatMap((buildArg) => ["--build-arg", buildArg]),

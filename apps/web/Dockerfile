@@ -1,21 +1,6 @@
 ARG ATELIER_RUNTIME_IMAGE=ghcr.io/lucasmeijer/agents-in-the-cloud-docker@sha256:149efe3189255442091157921511b6c122b0254bb07e24d08d24408b4b79deda
 FROM oven/bun:1.4.0 AS bun-dist
 
-# Built for the platform its workspaces run on; tests run natively.
-FROM --platform=$BUILDPLATFORM golang:1.26.0 AS workspace-helper-build
-ARG TARGETOS
-ARG TARGETARCH
-WORKDIR /src
-COPY packages/workspace-helper/helper/go.mod packages/workspace-helper/helper/go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
-COPY packages/workspace-helper/helper/ ./
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    go test ./... && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /aitc-workspace-helper .
-
-# Just the binary, which `bun run web` exports for development.
-FROM scratch AS workspace-helper
-COPY --from=workspace-helper-build /aitc-workspace-helper /aitc-workspace-helper
-
 FROM ubuntu:26.04 AS transcription-runtime
 ARG TARGETARCH
 ARG NEMO_SPEECH_VERSION=0.1.0
@@ -32,7 +17,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
  && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /app
 
-COPY . .
+# Each platform's workspace helper is copied separately below.
+COPY --exclude=packages/workspace-helper/dist . .
 
 # Claude Code runs in workspaces; the Agent SDK's bundled platform binaries are never used here.
 RUN --mount=type=cache,target=/root/.bun/install/cache \
@@ -76,7 +62,9 @@ ENV ATELIER_DATA_DIR=/data/app
 
 COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=build --exclude=node_modules /app /app
-COPY --from=workspace-helper /aitc-workspace-helper /app/packages/workspace-helper/workspace_tools/aitc-workspace-helper
+# Built beforehand with local Go by scripts/build-agents-in-the-cloud-image.ts.
+ARG TARGETARCH
+COPY packages/workspace-helper/dist/linux-${TARGETARCH}/aitc-workspace-helper /app/packages/workspace-helper/workspace_tools/aitc-workspace-helper
 RUN printf '%s\n' '#!/usr/bin/env sh' 'exec /usr/local/bin/bun /app/packages/proxy-ingress/src/ingress/tailscale-serve-helper.ts "$@"' > /usr/local/bin/agents-in-the-cloud-tailscale-serve-helper \
  && chmod 755 /usr/local/bin/agents-in-the-cloud-tailscale-serve-helper /app/apps/web/docker-entrypoint.sh
 

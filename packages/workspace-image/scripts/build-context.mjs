@@ -5,6 +5,7 @@ import { cp, lstat, mkdir, readFile, readdir, readlink, rm, writeFile } from "no
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildGoProgram } from "../../core/src/go.ts";
 import { workspaceRuntimeUnits } from "../src/workspace-systemd-units.ts";
 
 const outDir = process.argv[2];
@@ -84,15 +85,18 @@ for (const { path, dir, name, manifest, hashPath } of manifests) {
   modules.push({ name, aptPackageGroups, copyInstructions: moduleCopyInstructions, runInstructions: manifest.run ?? [] });
 }
 
-// The gateway is built separately so Go never enters the runtime image.
+// Local Go builds the gateway for every published platform; the image copies its own.
+// Identity covers the gateway's source, not binaries that vary with the Go version.
 const gatewaySource = join(packagesDir, "workspace-image", "workspace-image", "gateway");
-await cp(gatewaySource, join(outDir, "gateway"), { recursive: true });
 for (const name of (await readdir(gatewaySource)).sort()) {
   hash.update(`gateway/${name}\0`);
   hash.update(await readFile(join(gatewaySource, name)));
 }
+for (const platform of ["linux/amd64", "linux/arm64"]) {
+  await buildGoProgram(gatewaySource, join(outDir, "gateway", platform.replace("/", "-"), "agents-in-the-cloud-workspace-gateway"), platform);
+}
 
-let dockerfile = `FROM golang:1.26.0 AS gateway-build\nWORKDIR /src\nCOPY gateway/ ./\nRUN go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /agents-in-the-cloud-workspace-gateway .\n\nFROM oven/bun:1.4.0 AS bun-dist\n\nFROM ${runtimeImage}\n\nARG DEBIAN_FRONTEND=noninteractive\nLABEL com.agents-in-the-cloud.workspace-image.modules=${quote(moduleNames.join(","))}\n\nRUN mkdir -p /opt/agents-in-the-cloud/home-defaults && cp -a /etc/skel/. /opt/agents-in-the-cloud/home-defaults/\n\n`;
+let dockerfile = `FROM oven/bun:1.4.0 AS bun-dist\n\nFROM ${runtimeImage}\n\nARG DEBIAN_FRONTEND=noninteractive\nLABEL com.agents-in-the-cloud.workspace-image.modules=${quote(moduleNames.join(","))}\n\nRUN mkdir -p /opt/agents-in-the-cloud/home-defaults && cp -a /etc/skel/. /opt/agents-in-the-cloud/home-defaults/\n\n`;
 dockerfile += `COPY --from=bun-dist /usr/local/bin/bun /usr/local/bin/bun\nCOPY --from=bun-dist /usr/local/bin/bunx /usr/local/bin/bunx\nRUN bun --version\n\n`;
 function appendCopies(copies) {
   for (const copy of copies) {
@@ -117,7 +121,7 @@ dockerfile += `RUN diff -r --no-dereference /opt/agents-in-the-cloud/home-defaul
 if (finalCopies.length) dockerfile += "# Files independent of module setup\n";
 appendCopies(finalCopies);
 if (Object.keys(env).length) dockerfile += `ENV ${Object.entries(env).map(([key, value]) => `${key}=${quote(value)}`).join(" \\\n    ")}\n\n`;
-dockerfile += `COPY --from=gateway-build /agents-in-the-cloud-workspace-gateway /usr/local/bin/agents-in-the-cloud-workspace-gateway\n\n`;
+dockerfile += `ARG TARGETARCH\nCOPY gateway/linux-\${TARGETARCH}/agents-in-the-cloud-workspace-gateway /usr/local/bin/agents-in-the-cloud-workspace-gateway\n\n`;
 await mkdir(join(outDir, "runtime-units"));
 for (const [name, content] of Object.entries(workspaceRuntimeUnits())) {
   await writeFile(join(outDir, "runtime-units", name), content);
@@ -131,10 +135,12 @@ dockerfile += `RUN systemctl mask systemd-binfmt.service\n`;
 dockerfile += `ENTRYPOINT ["/usr/local/bin/agents-in-the-cloud-workspace-init"]\nCMD []\nWORKDIR /work\n`;
 await writeFile(join(outDir, "Dockerfile"), dockerfile);
 // Identity covers the Docker build context, including generated instructions,
-// file modes and symlinks, excluding the self-referential signature label added below.
+// file modes and symlinks, excluding the self-referential signature label added below
+// and the gateway binaries, whose source is hashed above.
 // Timestamps and the checkout's absolute path do not count.
 async function hashContext(directory, prefix = "") {
   for (const name of (await readdir(directory)).sort()) {
+    if (prefix === "" && name === "gateway") continue;
     const path = join(directory, name);
     const stat = await lstat(path);
     hash.update(`${prefix}${name}\0${stat.mode & 0o7777}\0`);

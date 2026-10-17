@@ -11,6 +11,8 @@ export {
   type CommandResult,
 } from "./docker.ts";
 
+export { buildGoProgram, runGoTests } from "./go.ts";
+
 export {
   AgentsInTheCloudCoreError,
   invalidArguments,
