@@ -163,6 +163,8 @@ export function workingCommentaryItems(section: WorkingTranscriptItem): Transcri
 /** Live renderers pass the commentary collection's islands so morphing the turn keeps its rows mounted. */
 export function renderWorkingSection(ctx: AgentRenderContext, section: WorkingTranscriptItem, commentaryHtml?: string): string {
   if (section.completedAt !== undefined && section.items.length === 0 && !section.timing) return "";
+  // A live commentary collection is its own region: the turn's summary ticking along must not resend it.
+  const commentaryIsland = commentaryHtml !== undefined ? " data-turbo-permanent" : "";
   const summary = workingSummary(ctx, section);
   const commentary = commentaryContext(ctx);
   commentaryHtml ??= workingCommentaryItems(section).map((item) => renderTranscriptItem(commentary, item)).join("");
@@ -179,7 +181,7 @@ export function renderWorkingSection(ctx: AgentRenderContext, section: WorkingTr
     element: { attributesHtml: attributes }, summary,
     bodyAttributesHtml: lazy ? undefined : `id="${ids.workingItems(ctx, section.key)}"${builtinLazy ? ' data-agent-turn-target="items" data-turbo-permanent' : ""}`,
     bodyHtml: items,
-  })}<div class="disclosure-content agent-working-commentary" id="${ids.workingItems(commentary, section.key)}">${commentaryHtml}</div></div>`;
+  })}<div class="disclosure-content agent-working-commentary" id="${ids.workingItems(commentary, section.key)}"${commentaryIsland}>${commentaryHtml}</div></div>`;
 }
 
 function workingSummary(ctx: AgentRenderContext, section: WorkingTranscriptItem): DisclosureSummary {
