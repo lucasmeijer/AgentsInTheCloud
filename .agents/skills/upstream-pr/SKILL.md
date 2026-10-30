@@ -29,7 +29,7 @@ In this order:
    code changes that when I apply them in my product, solves the problem for me
    a video of the repro case working with the patch applied.
    I'm not claiming the fix is done in the best possible way, I'm merely adding it as a data point that in this shape it solves the problem for me. You probably have better ideas on how to solve it.
-   Everything above here is me talking, everything below here is AI generated description. the patch is ai generated, the videos are screen recordings my agent made. I hope you find this a useful shape of a bug fix / contribution. Thanks for Diffs! Bye, Lucas.
+   Everything above here is me talking, everything below here is AI generated description. the patch is ai generated, the videos are screen recordings my agent made. I hope you find this a useful shape of a bug fix / contribution. Bye, Lucas.
    ```
 
 2. A short description of the bug from the user's point of view.
