@@ -16,7 +16,22 @@ Optimize everything in the PR for the upstream maintainers' convenience.
 
 In this order:
 
-1. **Human intro.** Never write it. Leave it empty for a human to fill in.
+1. **Human intro.** Use this default intro verbatim in the draft PR. Don't change or add to it; a human edits it before the PR goes upstream.
+
+   ```markdown
+   Hi, human Lucas here,
+
+   Please consider this pull request a bug report that contains:
+
+   description of the problem i have as a user
+   a small repro case
+   a video of said repro case
+   code changes that when I apply them in my product, solves the problem for me
+   a video of the repro case working with the patch applied.
+   I'm not claiming the fix is done in the best possible way, I'm merely adding it as a data point that in this shape it solves the problem for me. You probably have better ideas on how to solve it.
+   Everything above here is me talking, everything below here is AI generated description. the patch is ai generated, the videos are screen recordings my agent made. I hope you find this a useful shape of a bug fix / contribution. Thanks for Diffs! Bye, Lucas.
+   ```
+
 2. A short description of the bug from the user's point of view.
 3. The videos, if any. Reference each one in the body file as `![](./before.mp4)` and pass `--attach ./before.mp4` to `gh pr create` or `gh pr edit`. gh uploads the file and replaces the reference with the video's URL, which GitHub shows as a player.
 4. As much detail as is useful for the maintainer and their coding agent.
@@ -25,4 +40,4 @@ If it's true, say that we're running with this patch and it's working for us.
 
 ## Where the PR goes
 
-Open the PR on the user's own GitHub fork first (within the fork, against its default branch), so a human can review it and add the intro. Never open anything against the upstream repository without an explicit request.
+Open the PR on the user's own GitHub fork first (within the fork, against its default branch), so a human can review it and edit the intro. Never open anything against the upstream repository without an explicit request.
