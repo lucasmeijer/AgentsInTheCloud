@@ -40,11 +40,15 @@ const conversation = await workspace.agent({ agentId: "crash-tab", label: "Agent
 await conversation.submit({ type: "input", content: "Run the operation", requestId: "crash-request" }, BACKGROUND_CONTEXT);
 if (replay === "generation") {
   const watch = await conversation.watch(BACKGROUND_CONTEXT);
+  let reported = false;
   const report = async (value: typeof watch.value) => {
-    if (JSON.stringify(value.docs["pi.live"]?.generation ?? null).includes("Committed")) process.stdout.write("partial-committed\n");
+    if (reported || !JSON.stringify(value.docs["pi.live"]?.generation ?? null).includes("Committed")) return;
+    reported = true;
+    // Watches show a partial at once; storage gets it within a second (pi-durable's default persistWithinMs).
+    setTimeout(() => process.stdout.write("partial-committed\n"), 1_500);
   };
   await report(watch.value);
-  watch.start(report);
+  watch.start(async call => { if (call.kind === "failed") throw call.error; await report(call.value); });
 }
 // Keep the fixture alive even if the provider has no more active I/O.
 setInterval(() => {}, 60_000);

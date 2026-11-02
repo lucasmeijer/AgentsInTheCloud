@@ -4,7 +4,7 @@ import { createReadTool, createWriteTool, createEditTool, type ReadToolOptions }
 import { defineTool, type ToolRegistration } from "@earendil-works/pi-durable";
 import type { Models } from "@earendil-works/pi-ai";
 import { workspaceRoot } from "@agents-in-the-cloud/workspace";
-import type { TSchema } from "typebox";
+import type { Static, TSchema } from "typebox";
 import { createAgentsInTheCloudControlTools, type WorkspaceAgentToolOptions } from "@agents-in-the-cloud/agent/server/tools";
 import { workspaceFileToolOptions } from "@agents-in-the-cloud/agent/server/workspace-file-tools";
 import type { WorkspaceTool } from "@agents-in-the-cloud/agent/server/workspace-tool";
@@ -21,7 +21,8 @@ export function durableWorkspaceTool<TParams extends TSchema>(
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
-    prepareArguments: tool.prepareArguments,
+    // SAFETY: TypeBox's Static and pi-schema's (which types Durable tool arguments) describe the same JSON values.
+    prepareArguments: tool.prepareArguments as ToolRegistration<TParams>["prepareArguments"],
     executionMode: tool.executionMode,
     replay,
     async execute(args, api, context) {
@@ -30,7 +31,8 @@ export function durableWorkspaceTool<TParams extends TSchema>(
       let updates = Promise.resolve();
       const failures: unknown[] = [];
       try {
-        const operation = Promise.resolve(tool.execute(api.callId, args, context.abortSignal, (partial) => {
+        // SAFETY: The Harness validated `args` against `tool.parameters`; only the typing of the two schema libraries differs.
+        const operation = Promise.resolve(tool.execute(api.callId, args as Static<TParams>, context.abortSignal, (partial) => {
           if (context.abortSignal?.aborted) return;
           const snapshot = copyJson(partial, { omitUndefinedProperties: true });
           updates = updates.then(() => api.details(snapshot, context)).catch((error) => {

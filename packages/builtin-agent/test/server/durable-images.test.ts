@@ -166,9 +166,10 @@ test("queued image identities survive passive reopen, remain scoped, and retire 
   // Observe placement as one committed frame: queue removal and entry creation
   // must not require stitching independent reads or event-based optimistic rows.
   const placed = Promise.withResolvers<void>();
-  frame.start(async next => {
-    if (!JSON.stringify(next.docs["pi.inbox"]).includes("Queued image")) {
-      expect(JSON.stringify(next.entries)).toContain("Queued image");
+  frame.start(async call => {
+    if (call.kind === "failed") throw call.error;
+    if (!JSON.stringify(call.value.docs["pi.inbox"]).includes("Queued image")) {
+      expect(JSON.stringify(call.value.entries)).toContain("Queued image");
       placed.resolve();
     }
   });

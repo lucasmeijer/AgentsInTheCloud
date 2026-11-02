@@ -27,6 +27,17 @@ export function durableViewState(view: ConversationView) {
   };
 }
 
+/**
+ * The active context of a view over the transcript, as the model sees it: the newest head marker (a compaction or
+ * reset), then the entries from its head on. The view shows the history, with head markers where they were written.
+ */
+export function activeConversationView(view: ConversationView): ConversationView {
+  const marker = view.entries.findLast(entry => entry.head !== undefined);
+  const head = marker?.head;
+  if (head === undefined) return view;
+  return { ...view, entries: [marker!, ...view.entries.filter(entry => entry.head === undefined && entry.id >= head)] };
+}
+
 const textBlockSchema = Type.Object({ type: Type.Literal("text"), text: Type.String() });
 
 /** What a running tool published: its output and details, shown until its result replaces them. */

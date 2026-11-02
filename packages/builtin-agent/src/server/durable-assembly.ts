@@ -45,8 +45,8 @@ export async function createDurableHarnessOptions(workspaceId: string, options: 
     models: templates.models(delegation?.models ?? models),
     registry,
     settings: { compaction: { enabled: true, keepRecentTokens: 6000 } },
-    // Faulted, parked and unmigratable tasks, and failing extension code, are otherwise invisible.
-    onReport: (error, info) => console.error(`Agent work report (${info.type})`, error),
+    // Faulted, interrupted and unmigratable tasks, and failing extension code, are otherwise invisible.
+    onReport: ({ error, ...info }) => console.error(`Agent work report (${info.kind})`, error, info),
   };
 }
 
