@@ -1,7 +1,7 @@
 import { mkdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentsInTheCloudCoreError, agentsInTheCloudDataPath, commandSignal, getAgentsInTheCloudRuntimeContext, requireDocker, runCommand, type CommandInput } from "@agents-in-the-cloud/core";
-import { closeWorkspaceHelper, readWorkspaceFile, readWorkspaceFileStream, runWorkspaceProcess, startWorkspaceProcess, statWorkspaceFiles, WorkspaceHelperError, WorkspaceHelperStatus, writeWorkspaceFile, type WorkspaceExecStart, type WorkspaceFile, type WorkspaceFileStat, type WorkspaceProcess } from "@agents-in-the-cloud/workspace-helper";
+import { closeWorkspaceHelper, openWorkspaceFile, readWorkspaceFile, readWorkspaceFileStream, runWorkspaceProcess, startWorkspaceProcess, statWorkspaceFiles, WorkspaceHelperError, WorkspaceHelperStatus, writeWorkspaceFile, type WorkspaceExecStart, type WorkspaceFile, type WorkspaceFileStat, type WorkspaceOpenFile, type WorkspaceProcess } from "@agents-in-the-cloud/workspace-helper";
 
 /** Shared with the app's ingress and egress sockets; the helper listens here as well. */
 export const workspaceParentSocketDirectory = "/run/agents-in-the-cloud-parent";
@@ -120,4 +120,9 @@ export async function existingFilesInWorkspace(id: string, user: WorkspaceFile["
 /** Replaces or creates a file atomically, along with any missing folders. */
 export function writeFileInWorkspace(id: string, file: WorkspaceFile, content: string | Uint8Array): Promise<void> {
   return describingFailure(id, writeWorkspaceFile(workspaceHelperSocketPath(id), file, content, { signal: commandSignal() }));
+}
+
+/** Opens a regular file for reads of parts of it, all from the one open file; the signal, or else the ambient command signal, closes it. */
+export function openFileInWorkspace(id: string, file: WorkspaceFile, options: { signal?: AbortSignal } = {}): Promise<WorkspaceOpenFile> {
+  return describingFailure(id, openWorkspaceFile(workspaceHelperSocketPath(id), file, { signal: options.signal ?? commandSignal() }));
 }

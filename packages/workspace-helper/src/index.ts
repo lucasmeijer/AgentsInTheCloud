@@ -113,6 +113,7 @@ const attachMethod = service.Attach!;
 const readFileMethod = service.ReadFile!;
 const writeFileMethod = service.WriteFile!;
 const statFilesMethod = service.StatFiles!;
+const openFileMethod = service.OpenFile!;
 
 const users = { "agents-in-the-cloud": "USER_AGENT", root: "USER_ROOT" } satisfies Record<WorkspaceHelperUser, string>;
 const signals = { SIGHUP: "SIGNAL_HUP", SIGINT: "SIGNAL_INT", SIGTERM: "SIGNAL_TERM", SIGKILL: "SIGNAL_KILL" } satisfies Record<WorkspaceHelperSignal, string>;
@@ -392,6 +393,8 @@ export type WorkspaceFileStat = { path: string } & (
     modified: Date;
     /** Opening it for reading succeeds. Always false for `other`, which is never opened. */
     readable: boolean;
+    /** The absolute path without symlinks, `.` or `..`; absent for a file removed since it was described. */
+    canonicalPath?: string;
   }
 );
 
@@ -402,13 +405,15 @@ const fileKinds = {
   FILE_KIND_DIRECTORY: "directory",
   FILE_KIND_OTHER: "other",
 } satisfies Record<string, WorkspaceFileStat["kind"]>;
-type FileStat = { kind: keyof typeof fileKinds; symlink?: boolean; size?: number; modifiedUnixMs?: number; readable?: boolean };
+type FileStat = { kind: keyof typeof fileKinds; symlink?: boolean; size?: number; modifiedUnixMs?: number; readable?: boolean; canonicalPath?: string };
 
 function workspaceFileStat(path: string, stat: FileStat): WorkspaceFileStat {
   const kind = fileKinds[stat.kind];
   if (kind === "missing" || kind === "inaccessible") return { path, kind };
   // Proto3 leaves zero values off the wire.
-  return { path, kind, symlink: stat.symlink ?? false, size: stat.size ?? 0, modified: new Date(stat.modifiedUnixMs ?? 0), readable: stat.readable ?? false };
+  const described: WorkspaceFileStat = { path, kind, symlink: stat.symlink ?? false, size: stat.size ?? 0, modified: new Date(stat.modifiedUnixMs ?? 0), readable: stat.readable ?? false };
+  if (stat.canonicalPath) described.canonicalPath = stat.canonicalPath;
+  return described;
 }
 
 /** Describes each of `paths`, all absolute, as `user` sees them, without reading them; in request order. */
@@ -424,6 +429,84 @@ export async function statWorkspaceFiles(socketPath: string, user: WorkspaceHelp
     options.signal?.addEventListener("abort", abort, { once: true });
   });
   return paths.map((path, index) => workspaceFileStat(path, stats[index]!));
+}
+
+/** A regular file opened in a workspace; see `openWorkspaceFile`. */
+export interface WorkspaceOpenFile {
+  /** What the open file is now, even when its path names another file meanwhile. */
+  stat(): Promise<{ size: number; modified: Date }>;
+  /** Up to `length` bytes at `offset`; fewer only at the end of the file. */
+  read(offset: number, length: number): Promise<Uint8Array>;
+  /** Closes the file. */
+  close(): void;
+}
+
+type OpenFileRequest = { open: { user: string; path: string } } | { read: { offset: number; length: number } } | { stat: Record<string, never> };
+type OpenFileResponse = { response: "stat"; stat: FileStat } | { response: "data"; data: Buffer };
+
+/** The most the helper reads at once; longer reads take several. */
+const maxFileRangeBytes = 1024 * 1024;
+
+/**
+ * Opens a regular file, following symlinks, for reads of parts of it, all from the one open file. Fails like
+ * `readWorkspaceFileStream`, e.g. with NOT_FOUND, or FAILED_PRECONDITION for a folder. The signal closes it.
+ */
+export async function openWorkspaceFile(socketPath: string, file: WorkspaceFile, options: { signal?: AbortSignal } = {}): Promise<WorkspaceOpenFile> {
+  options.signal?.throwIfAborted();
+  const call: ClientDuplexStream<OpenFileRequest, OpenFileResponse> = client(socketPath).makeBidiStreamRequest(openFileMethod.path, openFileMethod.requestSerialize, openFileMethod.responseDeserialize, new Metadata(), {});
+  // Each request gets one response, in order.
+  const pending: { resolve: (response: OpenFileResponse) => void; reject: (error: Error) => void }[] = [];
+  let failure: Error | undefined;
+  const fail = (error: Error) => {
+    failure ??= error;
+    for (const waiter of pending.splice(0)) waiter.reject(failure);
+  };
+  const abort = () => call.cancel();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  call.on("data", (response: OpenFileResponse) => pending.shift()?.resolve(response));
+  call.on("error", (error: ServiceError) => fail(callError(error, options.signal)));
+  call.on("end", () => {
+    options.signal?.removeEventListener("abort", abort);
+    fail(new WorkspaceHelperError(status.CANCELLED, `${file.path} is closed`));
+  });
+  const request = (message: OpenFileRequest) => new Promise<OpenFileResponse>((resolve, reject) => {
+    if (failure) { reject(failure); return; }
+    pending.push({ resolve, reject });
+    call.write(message);
+  });
+  const stat = (response: OpenFileResponse) => {
+    if (response.response !== "stat") throw new WorkspaceHelperError(status.INTERNAL, "The workspace helper answered a stat with data");
+    return { size: response.stat.size ?? 0, modified: new Date(response.stat.modifiedUnixMs ?? 0) };
+  };
+  try {
+    stat(await request({ open: { user: users[file.user], path: file.path } }));
+  } catch (error) {
+    call.cancel();
+    throw error;
+  }
+  return {
+    async stat() { return stat(await request({ stat: {} })); },
+    async read(offset, length) {
+      const chunks: Uint8Array[] = [];
+      let read = 0;
+      while (read < length) {
+        const wanted = Math.min(maxFileRangeBytes, length - read);
+        const response = await request({ read: { offset: offset + read, length: wanted } });
+        if (response.response !== "data") throw new WorkspaceHelperError(status.INTERNAL, "The workspace helper answered a read with a stat");
+        // Proto3 leaves empty bytes off the wire.
+        const data = new Uint8Array(response.data ?? []);
+        chunks.push(data);
+        read += data.byteLength;
+        // The end of the file.
+        if (data.byteLength < wanted) break;
+      }
+      return chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks);
+    },
+    close() {
+      if (failure) return;
+      call.end();
+    },
+  };
 }
 
 export { status as WorkspaceHelperStatus } from "@grpc/grpc-js";

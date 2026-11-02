@@ -20,7 +20,8 @@ import { applySeedConfigManifest } from "./seed-config.ts";
 import type { WorkspaceCreationContext, WorkspaceDockerMount, WorkspaceDockerPlan, WorkspaceInitInstruction } from "./types.ts";
 export type { WorkspaceCreationContext, WorkspaceDockerMount, WorkspaceDockerPlan, WorkspaceInitInstruction, WorkspaceInitInstructionMap } from "./types.ts";
 
-export { checkFileInWorkspace, existingFilesInWorkspace, readFileInWorkspace, runInWorkspace, startInWorkspace, statFilesInWorkspace, writeFileInWorkspace } from "./helper.ts";
+export { closeWorkspaceHelperConnection, workspaceHelperSocketPath } from "./helper.ts";
+export { checkFileInWorkspace, existingFilesInWorkspace, openFileInWorkspace, readFileInWorkspace, runInWorkspace, startInWorkspace, statFilesInWorkspace, writeFileInWorkspace } from "./helper.ts";
 export { WorkspaceHelperError, WorkspaceHelperStatus } from "@agents-in-the-cloud/workspace-helper";
 export { exitStatus as workspaceExitStatus } from "@agents-in-the-cloud/workspace-helper";
 export { workspaceTerminalProcesses } from "./terminal-processes.ts";
