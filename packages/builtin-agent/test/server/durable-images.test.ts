@@ -6,7 +6,8 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "typebox";
-import { createDurableReadTool } from "../../src/server/durable-tools.ts";
+import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
+import { createDurableFileTools, workspaceImages } from "../../src/server/durable-tools.ts";
 import { durableEntryContent, durableImageEndpoint } from "../../src/server/durable-images.ts";
 import { openDurableWorkspace, type DurableWorkspace } from "../../src/server/durable-workspace.ts";
 
@@ -30,7 +31,7 @@ async function setup() {
   ] });
   models.setProvider(faux.provider);
   const registry = createRegistry();
-  registry.install(defineExtension({ name: "files", tools: [createDurableReadTool(path, models)] }));
+  registry.install(defineExtension({ name: "files", tools: createDurableFileTools(new NodeExecutionEnv({ cwd: path }), workspaceImages).slice(0, 1) }));
   const open = async () => {
     const workspace = await openDurableWorkspace(join(path, "journal"), "images-workspace", { models, registry });
     workspaces.push(workspace);

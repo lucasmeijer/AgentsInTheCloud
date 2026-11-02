@@ -5,7 +5,7 @@ import { durableTimingEntry, DurableTurnTiming } from "./durable-timing.ts";
 import { durableStopEntry } from "./durable-lifecycle.ts";
 import { historyNote } from "@agents-in-the-cloud/legacy-converter/entries";
 import { contentText, type Message } from "@earendil-works/pi-ai";
-import { AgentDoc, CompactionEntry, InboxDoc, LiveDoc, ResetEntry, ToolResultEntry, UsageDoc, type AgentState, type ConversationView, type InboxState, type LiveState, type ToolSlot, type UsageState } from "@earendil-works/pi-durable";
+import { AgentDoc, CompactionEntry, InboxDoc, LiveDoc, ResetEntry, ToolResultEntry, UsageDoc, type AgentState, type ConversationView, type InboxState, type LiveState, type ToolDiagnostic, type ToolSlot, type UsageState } from "@earendil-works/pi-durable";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { isJsonObject } from "@agents-in-the-cloud/core";
@@ -57,6 +57,18 @@ function applySlotProgress(tool: ToolView, slot: Pick<ToolSlot, "output" | "deta
   }
 }
 
+/**
+ * A tool result's text as people read it: the Harness's remarks, such as where to continue reading, as plain
+ * paragraphs instead of the `<harness>` block the model gets them in at the end of the content.
+ */
+function toolResultText(content: Message["content"], diagnostics: readonly ToolDiagnostic[]): string {
+  if (!diagnostics.length || !Array.isArray(content)) return contentText(content);
+  const remarks = `<harness>\n${diagnostics.map(diagnostic => `[${diagnostic.severity}] ${diagnostic.message}`).join("\n")}\n</harness>`;
+  const last = content.at(-1);
+  const own = last?.type === "text" && last.text === remarks ? content.slice(0, -1) : content;
+  return [contentText(own), ...diagnostics.map(diagnostic => diagnostic.message)].filter(Boolean).join("\n\n");
+}
+
 function images(content: Message["content"], entryId: string, offset = 0): SessionImageRef[] {
   return !Array.isArray(content) ? [] : content.flatMap((part, index) => part.type === "image"
     ? [{ entryId, contentIndex: offset + index, mimeType: part.mimeType }] : []);
@@ -91,7 +103,7 @@ export function projectDurableTranscript(view: ConversationView): TranscriptItem
   // Code mode template calls that ended their run, as recorded when they finished.
   const runEndingCalls = new Set<string>();
 
-  function appendMessage(message: Message, key: string, imageEntryId: string, offset: number, partial = false, aborted = false) {
+  function appendMessage(message: Message, key: string, imageEntryId: string, offset: number, partial = false, diagnostics: readonly ToolDiagnostic[] = []) {
     if (message.role === "system") return;
     if (message.role === "user") {
       const startsRun = pendingBoundary || !turn;
@@ -118,9 +130,10 @@ export function projectDurableTranscript(view: ConversationView): TranscriptItem
       }
     } else {
       completedTools.add(message.toolCallId);
+      const aborted = diagnostics.some(diagnostic => diagnostic.code === "aborted");
       let details = isToolViewDetails(message.details) ? message.details : undefined;
       if (aborted) details = isJsonObject(details) ? { ...details, aborted: true } : { aborted: true };
-      records.push({ kind: "toolResult", callId: message.toolCallId, text: contentText(message.content), images: images(message.content, imageEntryId, offset), timestamp: message.timestamp, isError: message.isError, details });
+      records.push({ kind: "toolResult", callId: message.toolCallId, text: toolResultText(message.content, diagnostics), images: images(message.content, imageEntryId, offset), timestamp: message.timestamp, isError: message.isError, details });
       if (turn && runEndingCalls.has(message.toolCallId) && !aborted) {
         turnEnds.set(turn, { timestamp: message.timestamp, completed: true });
         pendingBoundary = true;
@@ -172,9 +185,9 @@ export function projectDurableTranscript(view: ConversationView): TranscriptItem
     }
     let offset = 0;
     // Imported legacy tool results can contain only model messages, without native diagnostics.
-    const aborted = ToolResultEntry.is(entry) && entry.data?.diagnostics?.some(diagnostic => diagnostic.code === "aborted") === true;
+    const diagnostics = ToolResultEntry.is(entry) ? entry.data?.diagnostics ?? [] : [];
     for (const [index, message] of (entry.model ?? []).entries()) {
-      appendMessage(message, index === 0 ? String(entry.id) : `${entry.id}:message:${index}`, String(entry.id), offset, false, aborted);
+      appendMessage(message, index === 0 ? String(entry.id) : `${entry.id}:message:${index}`, String(entry.id), offset, false, diagnostics);
       offset += Array.isArray(message.content) ? message.content.length : 1;
     }
   }

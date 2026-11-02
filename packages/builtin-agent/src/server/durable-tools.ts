@@ -1,12 +1,12 @@
 import { awaitWithContext } from "@earendil-works/chord/context";
 import { copyJson } from "@earendil-works/chord";
-import { createReadTool, createWriteTool, createEditTool, type ReadToolOptions } from "@earendil-works/pi-coding-agent";
 import { defineTool, type ToolRegistration } from "@earendil-works/pi-durable";
-import type { Models } from "@earendil-works/pi-ai";
-import { workspaceRoot } from "@agents-in-the-cloud/workspace";
+import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
+import { createEditTool, createReadTool, createWriteTool, type ImageProcessor } from "@earendil-works/pi-durable/tools";
+import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import type { Static, TSchema } from "typebox";
 import { createAgentsInTheCloudControlTools, type WorkspaceAgentToolOptions } from "@agents-in-the-cloud/agent/server/tools";
-import { workspaceFileToolOptions } from "@agents-in-the-cloud/agent/server/workspace-file-tools";
+import { WorkspaceFileSystem } from "./durable-workspace-files.ts";
 import type { WorkspaceTool } from "@agents-in-the-cloud/agent/server/workspace-tool";
 
 /**
@@ -62,39 +62,30 @@ export function durableWorkspaceTool<TParams extends TSchema>(
   });
 }
 
-/** Resolve per invocation: one registry serves conversations with different models. */
-export function createDurableReadTool(cwd: string, models: Pick<Models, "getModel">, options: ReadToolOptions = {}) {
-  const read = durableWorkspaceTool(createReadTool(cwd, options), "safe");
-  return defineTool({
-    ...read,
-    async execute(args, api, context) {
-      const agent = await api.agent(context);
-      const model = agent.model ? models.getModel(agent.model.provider, agent.model.modelId) : undefined;
-      if (agent.model && !model) throw new Error(`Model not found: ${agent.model.provider}/${agent.model.modelId}`);
-      const tool = durableWorkspaceTool(createReadTool(cwd, {
-        ...options,
-        resizeOptions: model?.inputLimits?.images?.resize ?? options.resizeOptions,
-      }), "safe");
-      const result = await tool.execute(args, api, context);
-      if (model && !model.input.includes("image") && result.output?.some((part) => part.type === "image")) {
-        // Retain the image in history for viewing and future vision models. Pi AI
-        // omits it from non-vision requests; make that limitation model-visible.
-        api.diagnostic({ severity: "info", code: "non_vision_model", message: "Current model does not support images. The image will be omitted from this request." });
-      }
-      return result;
-    },
-  });
+let photon: Promise<ImageProcessor> | undefined;
+/** Resizes and converts images for the model, in a worker that starts with the first image `read` meets. */
+export const workspaceImages: ImageProcessor = {
+  async prepare(bytes, mimeType, limits) { return (await (photon ??= createNodePhotonImages())).prepare(bytes, mimeType, limits); },
+};
+
+/** `tool`, run on the files `env` reaches. */
+function onFiles<TParams extends object>(tool: ToolRegistration<TParams>, env: ExecutionEnv): ToolRegistration<TParams> {
+  return { ...tool, execute: (args, api, context) => tool.execute(args, { ...api, env }, context) };
+}
+
+/** pi-durable's read, write and edit on the files `env` reaches. Only the observational read reruns after a crash. */
+export function createDurableFileTools(env: ExecutionEnv, images: ImageProcessor): ToolRegistration<any>[] {
+  return [
+    { ...onFiles(createReadTool({ images }), env), replay: "safe" },
+    { ...onFiles(createWriteTool(), env), replay: "unsafe" },
+    { ...onFiles(createEditTool(), env), replay: "unsafe" },
+  ];
 }
 
 /** File/image and presentation capabilities ready for the native Durable registry. */
-export function createDurableWorkspaceTools(workspaceId: string, models: Pick<Models, "getModel">, options: WorkspaceAgentToolOptions = {}): ToolRegistration<any>[] {
-  const operations = workspaceFileToolOptions(workspaceId);
+export function createDurableWorkspaceTools(workspaceId: string, options: WorkspaceAgentToolOptions = {}): ToolRegistration<any>[] {
   return [
-    // Durable 1.0's built-in read rejects images. Use the SDK's context-free
-    // executor with the calling conversation's resize profile, not AgentSession.
-    createDurableReadTool(workspaceRoot, models, operations.read),
-    durableWorkspaceTool(createWriteTool(workspaceRoot, operations.write)),
-    durableWorkspaceTool(createEditTool(workspaceRoot, operations.edit)),
+    ...createDurableFileTools(new WorkspaceFileSystem(workspaceId), workspaceImages),
     ...createAgentsInTheCloudControlTools(workspaceId, { ...options, embeds: true }).map((tool) => durableWorkspaceTool(tool)),
     // Install createDurableBashExtension alongside these tools; it owns both
     // the bash task, backed by a terminal process, and its tool registration.

@@ -5,10 +5,10 @@ import { join } from "node:path";
 import type { JsonValue } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { createReadTool, createWriteTool, createEditTool } from "@earendil-works/pi-coding-agent";
-import { createRegistry, defineExtension } from "@earendil-works/pi-durable";
+import { createRegistry, defineExtension, type ToolRegistration } from "@earendil-works/pi-durable";
+import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { Type } from "typebox";
-import { createDurableWorkspaceTools, durableWorkspaceTool } from "../../src/server/durable-tools.ts";
+import { createDurableFileTools, createDurableWorkspaceTools, durableWorkspaceTool, workspaceImages } from "../../src/server/durable-tools.ts";
 import { openDurableWorkspace, type DurableWorkspace } from "../../src/server/durable-workspace.ts";
 import { defineWorkspaceTool, type WorkspaceTool } from "@agents-in-the-cloud/agent/server/workspace-tool";
 import { registerWorkspacePresenter } from "@agents-in-the-cloud/agent/server/tools";
@@ -27,7 +27,7 @@ async function directory() {
   return path;
 }
 
-async function runTool(tool: WorkspaceTool<any, any>, args: Record<string, JsonValue>) {
+async function runTool(tool: WorkspaceTool<any, any> | ToolRegistration<any>, args: Record<string, JsonValue>) {
   const path = await directory();
   const models = createModels();
   const faux = fauxProvider({ tokensPerSecond: 100_000 });
@@ -37,7 +37,7 @@ async function runTool(tool: WorkspaceTool<any, any>, args: Record<string, JsonV
     fauxAssistantMessage("Done"),
   ]);
   const registry = createRegistry();
-  registry.install(defineExtension({ name: "workspace-tools", tools: [durableWorkspaceTool(tool)] }));
+  registry.install(defineExtension({ name: "workspace-tools", tools: ["label" in tool ? durableWorkspaceTool(tool) : tool] }));
   const workspace = await openDurableWorkspace(path, "test-workspace", { models, registry });
   workspaces.push(workspace);
   const conversation = await workspace.agent({ agentId: "tab", label: "Agent 1", title: "Tools" }, {
@@ -64,7 +64,7 @@ test("assembly opts only the observational read into replay and excludes legacy 
     execute: async () => ({ content: [{ type: "text", text: "Presented" }], details: {} }),
   }));
   try {
-    const tools = createDurableWorkspaceTools("workspace", createModels());
+    const tools = createDurableWorkspaceTools("workspace");
     expect(tools.map((tool) => [tool.name, tool.replay])).toEqual([
       ["read", "safe"], ["write", "unsafe"], ["edit", "unsafe"], ["present", "unsafe"],
     ]);
@@ -79,28 +79,31 @@ test("assembly opts only the observational read into replay and excludes legacy 
   })).replay).toBe("unsafe");
 });
 
-test("native Harness executes SDK file mutations and retains searchable read output", async () => {
+test("native Harness executes file mutations and retains searchable read output", async () => {
   const cwd = await directory();
   const path = join(cwd, "example.txt");
-  const write = await runTool(createWriteTool(cwd), { path, content: "before\nsecond\n" });
-  expect(write.result.isError).toBe(false);
+  const [read, write, edit] = createDurableFileTools(new NodeExecutionEnv({ cwd }), workspaceImages);
+  const written = await runTool(write!, { path, content: "before\nsecond\n" });
+  expect(written.result.isError).toBe(false);
   expect(await readFile(path, "utf8")).toBe("before\nsecond\n");
-  const edit = await runTool(createEditTool(cwd), { path, edits: [{ oldText: "before", newText: "after" }] });
-  expect(edit.result.isError).toBe(false);
-  expect(edit.journal).toContain("firstChangedLine");
+  const edited = await runTool(edit!, { path, edits: [{ oldText: "before", newText: "after" }] });
+  expect(edited.result.isError).toBe(false);
+  expect(edited.journal).toContain("firstChangedLine");
   expect(await readFile(path, "utf8")).toBe("after\nsecond\n");
-  const read = await runTool(createReadTool(cwd), { path, offset: 2, limit: 1 });
-  expect(read.result.isError).toBe(false);
-  expect(read.result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("second") });
-  expect(read.journal).toContain("second");
+  const shown = await runTool(read!, { path, offset: 2, limit: 1 });
+  expect(shown.result.isError).toBe(false);
+  expect(shown.result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("second") });
+  expect(shown.journal).toContain("second");
 });
 
 test("images survive the native Harness tool result and fsynced journal", async () => {
   const cwd = await directory();
   const path = join(cwd, "pixel.png");
-  const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=";
+  // A 16×16 red PNG, within every limit, so it is sent as it is.
+  const base64 = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=";
   await writeFile(path, Buffer.from(base64, "base64"));
-  const { result, journal } = await runTool(createReadTool(cwd, { autoResizeImages: false }), { path });
+  const [read] = createDurableFileTools(new NodeExecutionEnv({ cwd }), workspaceImages);
+  const { result, journal } = await runTool(read!, { path });
   expect(result.isError).toBe(false);
   expect(result.content).toContainEqual({ type: "image", mimeType: "image/png", data: base64 });
   expect(journal).toContain(base64);
