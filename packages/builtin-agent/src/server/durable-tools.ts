@@ -64,7 +64,7 @@ export function durableWorkspaceTool<TParams extends TSchema>(
 
 let photon: Promise<ImageProcessor> | undefined;
 /** Resizes and converts images for the model, in a worker that starts with the first image `read` meets. */
-export const workspaceImages: ImageProcessor = {
+const images: ImageProcessor = {
   async prepare(bytes, mimeType, limits) { return (await (photon ??= createNodePhotonImages())).prepare(bytes, mimeType, limits); },
 };
 
@@ -74,7 +74,7 @@ function onFiles<TParams extends object>(tool: ToolRegistration<TParams>, env: E
 }
 
 /** pi-durable's read, write and edit on the files `env` reaches. Only the observational read reruns after a crash. */
-export function createDurableFileTools(env: ExecutionEnv, images: ImageProcessor): ToolRegistration<any>[] {
+export function createDurableFileTools(env: ExecutionEnv): ToolRegistration<any>[] {
   return [
     { ...onFiles(createReadTool({ images }), env), replay: "safe" },
     { ...onFiles(createWriteTool(), env), replay: "unsafe" },
@@ -85,7 +85,7 @@ export function createDurableFileTools(env: ExecutionEnv, images: ImageProcessor
 /** File/image and presentation capabilities ready for the native Durable registry. */
 export function createDurableWorkspaceTools(workspaceId: string, options: WorkspaceAgentToolOptions = {}): ToolRegistration<any>[] {
   return [
-    ...createDurableFileTools(new WorkspaceFileSystem(workspaceId), workspaceImages),
+    ...createDurableFileTools(new WorkspaceFileSystem(workspaceId)),
     ...createAgentsInTheCloudControlTools(workspaceId, { ...options, embeds: true }).map((tool) => durableWorkspaceTool(tool)),
     // Install createDurableBashExtension alongside these tools; it owns both
     // the bash task, backed by a terminal process, and its tool registration.

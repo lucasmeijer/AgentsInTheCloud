@@ -321,8 +321,9 @@ func (s *helper) StatFiles(ctx context.Context, request *pb.StatFilesRequest) (*
 
 const maxFileRangeBytes = 1024 * 1024
 
-func openFileStat(info os.FileInfo) *pb.FileStat {
-	return &pb.FileStat{Kind: pb.FileKind_FILE_KIND_REGULAR, Size: uint64(info.Size()), ModifiedUnixMs: info.ModTime().UnixMilli(), Readable: true}
+func sendOpenFileStat(stream pb.WorkspaceHelper_OpenFileServer, info os.FileInfo) error {
+	stat := &pb.FileStat{Kind: pb.FileKind_FILE_KIND_REGULAR, Size: uint64(info.Size()), ModifiedUnixMs: info.ModTime().UnixMilli(), Readable: true}
+	return stream.Send(&pb.OpenFileResponse{Response: &pb.OpenFileResponse_Stat{Stat: stat}})
 }
 
 func (s *helper) OpenFile(stream pb.WorkspaceHelper_OpenFileServer) error {
@@ -339,7 +340,7 @@ func (s *helper) OpenFile(stream pb.WorkspaceHelper_OpenFileServer) error {
 		return err
 	}
 	defer file.Close()
-	if err := stream.Send(&pb.OpenFileResponse{Response: &pb.OpenFileResponse_Stat{Stat: openFileStat(info)}}); err != nil {
+	if err := sendOpenFileStat(stream, info); err != nil {
 		return err
 	}
 	for {
@@ -368,7 +369,7 @@ func (s *helper) OpenFile(stream pb.WorkspaceHelper_OpenFileServer) error {
 			if err != nil {
 				return fileError(err)
 			}
-			if err := stream.Send(&pb.OpenFileResponse{Response: &pb.OpenFileResponse_Stat{Stat: openFileStat(info)}}); err != nil {
+			if err := sendOpenFileStat(stream, info); err != nil {
 				return err
 			}
 		default:

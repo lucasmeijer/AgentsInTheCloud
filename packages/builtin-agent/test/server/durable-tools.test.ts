@@ -8,9 +8,9 @@ import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "
 import { createRegistry, defineExtension, type ToolRegistration } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { Type } from "typebox";
-import { createDurableFileTools, createDurableWorkspaceTools, durableWorkspaceTool, workspaceImages } from "../../src/server/durable-tools.ts";
+import { createDurableFileTools, createDurableWorkspaceTools, durableWorkspaceTool } from "../../src/server/durable-tools.ts";
 import { openDurableWorkspace, type DurableWorkspace } from "../../src/server/durable-workspace.ts";
-import { defineWorkspaceTool, type WorkspaceTool } from "@agents-in-the-cloud/agent/server/workspace-tool";
+import { defineWorkspaceTool } from "@agents-in-the-cloud/agent/server/workspace-tool";
 import { registerWorkspacePresenter } from "@agents-in-the-cloud/agent/server/tools";
 
 const context = BACKGROUND_CONTEXT;
@@ -27,7 +27,7 @@ async function directory() {
   return path;
 }
 
-async function runTool(tool: WorkspaceTool<any, any> | ToolRegistration<any>, args: Record<string, JsonValue>) {
+async function runTool(tool: ToolRegistration<any>, args: Record<string, JsonValue>) {
   const path = await directory();
   const models = createModels();
   const faux = fauxProvider({ tokensPerSecond: 100_000 });
@@ -37,7 +37,7 @@ async function runTool(tool: WorkspaceTool<any, any> | ToolRegistration<any>, ar
     fauxAssistantMessage("Done"),
   ]);
   const registry = createRegistry();
-  registry.install(defineExtension({ name: "workspace-tools", tools: ["label" in tool ? durableWorkspaceTool(tool) : tool] }));
+  registry.install(defineExtension({ name: "workspace-tools", tools: [tool] }));
   const workspace = await openDurableWorkspace(path, "test-workspace", { models, registry });
   workspaces.push(workspace);
   const conversation = await workspace.agent({ agentId: "tab", label: "Agent 1", title: "Tools" }, {
@@ -79,30 +79,13 @@ test("assembly opts only the observational read into replay and excludes legacy 
   })).replay).toBe("unsafe");
 });
 
-test("native Harness executes file mutations and retains searchable read output", async () => {
-  const cwd = await directory();
-  const path = join(cwd, "example.txt");
-  const [read, write, edit] = createDurableFileTools(new NodeExecutionEnv({ cwd }), workspaceImages);
-  const written = await runTool(write!, { path, content: "before\nsecond\n" });
-  expect(written.result.isError).toBe(false);
-  expect(await readFile(path, "utf8")).toBe("before\nsecond\n");
-  const edited = await runTool(edit!, { path, edits: [{ oldText: "before", newText: "after" }] });
-  expect(edited.result.isError).toBe(false);
-  expect(edited.journal).toContain("firstChangedLine");
-  expect(await readFile(path, "utf8")).toBe("after\nsecond\n");
-  const shown = await runTool(read!, { path, offset: 2, limit: 1 });
-  expect(shown.result.isError).toBe(false);
-  expect(shown.result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("second") });
-  expect(shown.journal).toContain("second");
-});
-
 test("images survive the native Harness tool result and fsynced journal", async () => {
   const cwd = await directory();
   const path = join(cwd, "pixel.png");
   // A 16×16 red PNG, within every limit, so it is sent as it is.
   const base64 = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=";
   await writeFile(path, Buffer.from(base64, "base64"));
-  const [read] = createDurableFileTools(new NodeExecutionEnv({ cwd }), workspaceImages);
+  const [read] = createDurableFileTools(new NodeExecutionEnv({ cwd }));
   const { result, journal } = await runTool(read!, { path });
   expect(result.isError).toBe(false);
   expect(result.content).toContainEqual({ type: "image", mimeType: "image/png", data: base64 });
@@ -115,17 +98,17 @@ test("invalid tool input and execution failures become durable errors, not effec
     name: "effect", label: "Effect", description: "Test", parameters: Type.Object({ value: Type.String() }),
     async execute() { executed = true; throw new Error("workspace unavailable"); },
   });
-  const invalid = await runTool(tool, {});
+  const invalid = await runTool(durableWorkspaceTool(tool), {});
   expect(invalid.result.isError).toBe(true);
   expect(executed).toBe(false);
-  const failed = await runTool(tool, { value: "valid" });
+  const failed = await runTool(durableWorkspaceTool(tool), { value: "valid" });
   expect(executed).toBe(true);
   expect(failed.result.isError).toBe(true);
   expect(failed.journal).toContain("workspace unavailable");
 });
 
 test("SDK snapshot updates and final details are committed without repeating output", async () => {
-  const { result, journal } = await runTool(defineWorkspaceTool({
+  const { result, journal } = await runTool(durableWorkspaceTool(defineWorkspaceTool({
     name: "progress", label: "Progress", description: "Test", parameters: Type.Object({}),
     async execute(callId, _args, signal, update) {
       expect(callId.length).toBeGreaterThan(0);
@@ -134,7 +117,7 @@ test("SDK snapshot updates and final details are committed without repeating out
       update?.({ content: [{ type: "text", text: "working more" }], details: { step: 2 } });
       return { content: [{ type: "text", text: "finished" }], details: { step: 3 } };
     },
-  }), {});
+  })), {});
   expect(result.content).toEqual([{ type: "text", text: "finished" }]);
   expect(journal).toContain('"step":3');
 });

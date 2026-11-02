@@ -9,8 +9,12 @@ import { renderModelContextDetailFrame, renderTranscriptItemDetailFrame, type Ag
 import type { AgentLivePresentationListener, AgentLivePresentationSubscription } from "./runtime-types.ts";
 import { findTranscriptItem, isTranscriptTarget, type TranscriptItem } from "@agents-in-the-cloud/agent/server/transcript";
 import { activeConversationView, durableViewState, projectDurableTranscript } from "./durable-transcript.ts";
+import { onValues } from "./durable-watch.ts";
 
-/** A window that never drops entries: the transcript shows the whole active context, not only its newest entries. */
+/**
+ * A window that never drops entries: the transcript shows the whole active context, not only its newest entries.
+ * Durable scans one entry more than the window holds, which must stay a safe integer.
+ */
 const wholeWindow = Number.MAX_SAFE_INTEGER - 1;
 
 /**
@@ -49,14 +53,12 @@ export class DurableAgentPresentation {
       return cached;
     } };
     this.update(this.frame);
-    watch.start(async call => {
-      // Durable ends a failed watch instead of calling it with a failure.
-      if (call.kind === "failed") throw call.error;
+    watch.start(onValues(async value => {
       if (this.disposed) return;
-      const view = activeConversationView(call.value);
+      const view = activeConversationView(value);
       this.update(view);
       await this.onCommit?.(view);
-    });
+    }));
     // A failed observer must be visible to the production owner, not mistaken
     // for an idle agent. `closed` returns the native terminal reason to callers.
     void watch.closed.then(() => this.release());

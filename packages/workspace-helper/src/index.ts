@@ -383,8 +383,10 @@ export async function writeWorkspaceFile(socketPath: string, file: WorkspaceFile
 
 /** What is at a path, as a user sees it, following symlinks. */
 export type WorkspaceFileStat = { path: string } & (
-  /** Nothing there, a dangling symlink, or a symlink loop; or the user may not look into a folder on the way. */
-  | { kind: "missing" | "inaccessible" }
+  /** Nothing there, a dangling symlink, or a symlink loop. */
+  | { kind: "missing" }
+  /** The user may not look into a folder on the way. */
+  | { kind: "inaccessible" }
   | {
     kind: "regular" | "directory" | "other";
     /** The path itself is a symlink; the rest describes its target. */
@@ -442,7 +444,8 @@ export interface WorkspaceOpenFile {
 }
 
 type OpenFileRequest = { open: { user: string; path: string } } | { read: { offset: number; length: number } } | { stat: Record<string, never> };
-type OpenFileResponse = { response: "stat"; stat: FileStat } | { response: "data"; data: Buffer };
+// Proto3 leaves empty bytes off the wire.
+type OpenFileResponse = { response: "stat"; stat: FileStat } | { response: "data"; data?: Buffer };
 
 /** The most the helper reads at once; longer reads take several. */
 const maxFileRangeBytes = 1024 * 1024;
@@ -457,18 +460,16 @@ export async function openWorkspaceFile(socketPath: string, file: WorkspaceFile,
   // Each request gets one response, in order.
   const pending: { resolve: (response: OpenFileResponse) => void; reject: (error: Error) => void }[] = [];
   let failure: Error | undefined;
+  const abort = () => call.cancel();
+  options.signal?.addEventListener("abort", abort, { once: true });
   const fail = (error: Error) => {
+    options.signal?.removeEventListener("abort", abort);
     failure ??= error;
     for (const waiter of pending.splice(0)) waiter.reject(failure);
   };
-  const abort = () => call.cancel();
-  options.signal?.addEventListener("abort", abort, { once: true });
   call.on("data", (response: OpenFileResponse) => pending.shift()?.resolve(response));
   call.on("error", (error: ServiceError) => fail(callError(error, options.signal)));
-  call.on("end", () => {
-    options.signal?.removeEventListener("abort", abort);
-    fail(new WorkspaceHelperError(status.CANCELLED, `${file.path} is closed`));
-  });
+  call.on("end", () => fail(new WorkspaceHelperError(status.CANCELLED, `${file.path} is closed`)));
   const request = (message: OpenFileRequest) => new Promise<OpenFileResponse>((resolve, reject) => {
     if (failure) { reject(failure); return; }
     pending.push({ resolve, reject });
@@ -493,7 +494,6 @@ export async function openWorkspaceFile(socketPath: string, file: WorkspaceFile,
         const wanted = Math.min(maxFileRangeBytes, length - read);
         const response = await request({ read: { offset: offset + read, length: wanted } });
         if (response.response !== "data") throw new WorkspaceHelperError(status.INTERNAL, "The workspace helper answered a read with a stat");
-        // Proto3 leaves empty bytes off the wire.
         const data = new Uint8Array(response.data ?? []);
         chunks.push(data);
         read += data.byteLength;
@@ -504,6 +504,7 @@ export async function openWorkspaceFile(socketPath: string, file: WorkspaceFile,
     },
     close() {
       if (failure) return;
+      fail(new WorkspaceHelperError(status.CANCELLED, `${file.path} is closed`));
       call.end();
     },
   };

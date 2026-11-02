@@ -5,7 +5,7 @@ import { durableTimingEntry, DurableTurnTiming } from "./durable-timing.ts";
 import { durableStopEntry } from "./durable-lifecycle.ts";
 import { historyNote } from "@agents-in-the-cloud/legacy-converter/entries";
 import { contentText, type Message } from "@earendil-works/pi-ai";
-import { AgentDoc, CompactionEntry, InboxDoc, LiveDoc, ResetEntry, ToolResultEntry, UsageDoc, type AgentState, type ConversationView, type InboxState, type LiveState, type ToolDiagnostic, type ToolSlot, type UsageState } from "@earendil-works/pi-durable";
+import { AgentDoc, CompactionEntry, InboxDoc, LiveDoc, ResetEntry, ToolResultEntry, UsageDoc, type AgentState, type ConversationView, type InboxState, type LiveState, type ToolDiagnostic, type ToolSlot, type UsageState, type EntryId, type EntryRecord } from "@earendil-works/pi-durable";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { isJsonObject } from "@agents-in-the-cloud/core";
@@ -32,10 +32,9 @@ export function durableViewState(view: ConversationView) {
  * reset), then the entries from its head on. The view shows the history, with head markers where they were written.
  */
 export function activeConversationView(view: ConversationView): ConversationView {
-  const marker = view.entries.findLast(entry => entry.head !== undefined);
-  const head = marker?.head;
-  if (head === undefined) return view;
-  return { ...view, entries: [marker!, ...view.entries.filter(entry => entry.head === undefined && entry.id >= head)] };
+  const marker = view.entries.findLast((entry): entry is EntryRecord & { head: EntryId } => entry.head !== undefined);
+  if (!marker) return view;
+  return { ...view, entries: [marker, ...view.entries.filter(entry => entry.head === undefined && entry.id >= marker.head)] };
 }
 
 const textBlockSchema = Type.Object({ type: Type.Literal("text"), text: Type.String() });
@@ -59,14 +58,11 @@ function applySlotProgress(tool: ToolView, slot: Pick<ToolSlot, "output" | "deta
 
 /**
  * A tool result's text as people read it: the Harness's remarks, such as where to continue reading, as plain
- * paragraphs instead of the `<harness>` block the model gets them in at the end of the content.
+ * paragraphs instead of the block the model gets them in, which the Harness puts last in the content.
  */
 function toolResultText(content: Message["content"], diagnostics: readonly ToolDiagnostic[]): string {
   if (!diagnostics.length || !Array.isArray(content)) return contentText(content);
-  const remarks = `<harness>\n${diagnostics.map(diagnostic => `[${diagnostic.severity}] ${diagnostic.message}`).join("\n")}\n</harness>`;
-  const last = content.at(-1);
-  const own = last?.type === "text" && last.text === remarks ? content.slice(0, -1) : content;
-  return [contentText(own), ...diagnostics.map(diagnostic => diagnostic.message)].filter(Boolean).join("\n\n");
+  return [contentText(content.slice(0, -1)), ...diagnostics.map(diagnostic => diagnostic.message)].filter(Boolean).join("\n\n");
 }
 
 function images(content: Message["content"], entryId: string, offset = 0): SessionImageRef[] {
@@ -141,8 +137,8 @@ export function projectDurableTranscript(view: ConversationView): TranscriptItem
     }
   }
 
-  // ConversationView is already in context order: head marker first, then
-  // oldest-to-newest entries. Sorting by ID would misplace compaction summaries.
+  // Entries are shown in the order given: an active context (activeConversationView)
+  // starts with its head marker, which sorting by ID would move after the entries it keeps.
   for (const entry of view.entries) {
     if (codemodeTemplateRunEndEntry.is(entry)) {
       runEndingCalls.add(entry.data.callId);

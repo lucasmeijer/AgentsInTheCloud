@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,10 +7,12 @@ import type { JsonValue } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRegistry, defineExtension, type ToolRegistration } from "@earendil-works/pi-durable";
+import { getOrThrow, ok, type ExecutionEnv } from "@earendil-works/pi-durable/env";
+import { createEnvConformance, createExpectAssertions } from "@earendil-works/pi-durable/testing";
 import { buildGoProgram } from "@agents-in-the-cloud/core";
 import { closeWorkspaceHelperConnection, workspaceHelperSocketPath } from "@agents-in-the-cloud/workspace";
-import { createDurableFileTools, workspaceImages } from "../../src/server/durable-tools.ts";
-import { WorkspaceFileSystem, workspaceAbsolutePath } from "../../src/server/durable-workspace-files.ts";
+import { createDurableFileTools } from "../../src/server/durable-tools.ts";
+import { WorkspaceFileSystem } from "../../src/server/durable-workspace-files.ts";
 import { openDurableWorkspace, type DurableWorkspace } from "../../src/server/durable-workspace.ts";
 import { projectDurableTranscript } from "../../src/server/durable-transcript.ts";
 import type { TranscriptItem } from "@agents-in-the-cloud/agent/server/transcript";
@@ -50,9 +52,11 @@ afterAll(async () => {
   await Bun.spawn(["sudo", "-n", "rm", "-rf", directory]).exited;
 });
 
+/** A fresh folder, and the environment and tools that resolve relative paths in it. */
 async function files() {
   const path = await mkdtemp(join(directory, "files-"));
-  return { path, env: new WorkspaceFileSystem(workspaceId), tools: createDurableFileTools(new WorkspaceFileSystem(workspaceId), workspaceImages) };
+  const env = new WorkspaceFileSystem(workspaceId, path);
+  return { path, env, tools: createDurableFileTools(env) };
 }
 
 /** Runs one call of `tool` through a Harness, as the agent would, and returns its result message. */
@@ -82,15 +86,31 @@ async function call(tool: ToolRegistration<any>, args: Record<string, JsonValue>
   };
 }
 
-test("paths resolve in the workspace: relative to /work, ~ to the agent's home", () => {
-  expect(workspaceAbsolutePath("foo.ts")).toBe("/work/foo.ts");
-  expect(workspaceAbsolutePath("nested/../foo.ts")).toBe("/work/foo.ts");
-  expect(workspaceAbsolutePath("../foo.ts")).toBe("/foo.ts");
-  expect(workspaceAbsolutePath("/etc/passwd")).toBe("/etc/passwd");
-  expect(workspaceAbsolutePath("~")).toBe("/home/agents-in-the-cloud");
-  expect(workspaceAbsolutePath("~/notes.md")).toBe("/home/agents-in-the-cloud/notes.md");
-  expect(workspaceAbsolutePath("file:///work/a%20b.md")).toBe("/work/a b.md");
+test("paths resolve in the workspace: relative to /work, ~ to the agent's home", async () => {
+  const env = new WorkspaceFileSystem(workspaceId);
+  const resolved = async (path: string) => getOrThrow(await env.absolutePath(path, context));
+  expect(await resolved("foo.ts")).toBe("/work/foo.ts");
+  expect(await resolved("nested/../foo.ts")).toBe("/work/foo.ts");
+  expect(await resolved("../foo.ts")).toBe("/foo.ts");
+  expect(await resolved("/etc/passwd")).toBe("/etc/passwd");
+  expect(await resolved("~")).toBe("/home/agents-in-the-cloud");
+  expect(await resolved("~/notes.md")).toBe("/home/agents-in-the-cloud/notes.md");
+  expect(await resolved("file:///work/a%20b.md")).toBe("/work/a b.md");
+  expect(await resolved("file://elsewhere/a.md")).toBe("/work/file:/elsewhere/a.md");
 });
+
+/** What read needs of an environment, held to pi-durable's own conformance cases. */
+class ConformingFiles extends WorkspaceFileSystem {
+  // The cases set up folders and renames, which no tool asks of the workspace; the files are local here.
+  override readonly createDir: ExecutionEnv["createDir"] = async (path) => ok(await mkdir(join(this.cwd, path)));
+  override readonly renameFile: ExecutionEnv["renameFile"] = async (source, destination) => ok(await rename(join(this.cwd, source), join(this.cwd, destination)));
+}
+for (const conformance of createEnvConformance({
+  assertions: createExpectAssertions(expect),
+  withEnv: async (use) => use(new ConformingFiles(workspaceId, await mkdtemp(join(directory, "conformance-")))),
+}).filter((conformance) => conformance.name.startsWith("binary reader") && !conformance.name.includes("noFollow"))) {
+  test(conformance.name, () => conformance.run());
+}
 
 test("write creates folders, edit keeps a byte-order mark and line endings, read pages with offset and limit", async () => {
   const { path, tools: [read, write, edit] } = await files();
@@ -119,19 +139,25 @@ test("images are read for the model", async () => {
   const { path, tools: [read] } = await files();
   const png = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=";
   await writeFile(join(path, "red.png"), Buffer.from(png, "base64"));
-  const shown = await call(read!, { path: join(path, "red.png") });
+  const shown = await call(read!, { path: "red.png" });
   expect(shown.isError).toBe(false);
   expect(shown.content).toContainEqual({ type: "image", mimeType: "image/png", data: png });
+  // A huge image is refused before it is read into the app's memory.
+  await writeFile(join(path, "huge.png"), Buffer.from(png, "base64"));
+  await truncate(join(path, "huge.png"), 65 * 1024 * 1024);
+  const huge = await call(read!, { path: "huge.png" });
+  expect(huge.isError).toBe(true);
+  expect(huge.text).toContain("too large to read at once");
 });
 
 test("missing files, folders and failed edits are errors the agent can read", async () => {
   const { path, tools: [read, , edit] } = await files();
-  expect((await call(read!, { path: join(path, "missing.txt") })).text).toContain("no such file or directory");
+  expect((await call(read!, { path: "missing.txt" })).text).toContain("no such file or directory");
   await mkdir(join(path, "folder"));
-  expect((await call(read!, { path: join(path, "folder") })).text).toContain("EISDIR");
-  expect((await call(edit!, { path: join(path, "folder"), edits: [{ oldText: "a", newText: "b" }] })).text).toContain("Path is not a file");
+  expect((await call(read!, { path: "folder" })).text).toContain("is a folder");
+  expect((await call(edit!, { path: "folder", edits: [{ oldText: "a", newText: "b" }] })).text).toContain("Path is not a file");
   await writeFile(join(path, "same.txt"), "same\nsame\n");
-  expect((await call(edit!, { path: join(path, "same.txt"), edits: [{ oldText: "same", newText: "other" }] })).isError).toBe(true);
+  expect((await call(edit!, { path: "same.txt", edits: [{ oldText: "same", newText: "other" }] })).isError).toBe(true);
   expect(await readFile(join(path, "same.txt"), "utf8")).toBe("same\nsame\n");
 });
 
@@ -139,14 +165,13 @@ test("the environment describes files as the Node environment would", async () =
   const { path, env } = await files();
   await writeFile(join(path, "file.txt"), "hello");
   await symlink(join(path, "file.txt"), join(path, "link.txt"));
-  expect(await env.exists(join(path, "file.txt"), context)).toEqual({ ok: true, value: true });
-  expect(await env.exists(join(path, "missing.txt"), context)).toEqual({ ok: true, value: false });
-  expect(await env.fileInfo(join(path, "link.txt"), context)).toMatchObject({ ok: true, value: { kind: "symlink", size: 5 } });
-  expect(await env.fileInfo(path, context)).toMatchObject({ ok: true, value: { kind: "directory" } });
-  expect(await env.canonicalPath(join(path, "link.txt"), context)).toEqual({ ok: true, value: await realpath(join(path, "file.txt")) });
-  expect(await env.canonicalPath(join(path, "missing.txt"), context)).toMatchObject({ ok: false, error: { code: "not_found" } });
-  const temporary = await env.createTempDir("files-test-", context);
-  if (!temporary.ok) throw temporary.error;
-  expect(temporary.value).toStartWith("/tmp/files-test-");
-  await rm(temporary.value, { recursive: true });
+  expect(await env.exists("file.txt", context)).toEqual({ ok: true, value: true });
+  expect(await env.exists("missing.txt", context)).toEqual({ ok: true, value: false });
+  expect(await env.fileInfo("link.txt", context)).toMatchObject({ ok: true, value: { kind: "symlink", size: 5 } });
+  expect(await env.fileInfo(".", context)).toMatchObject({ ok: true, value: { kind: "directory" } });
+  expect(await env.canonicalPath("link.txt", context)).toEqual({ ok: true, value: await realpath(join(path, "file.txt")) });
+  expect(await env.canonicalPath("missing.txt", context)).toMatchObject({ ok: false, error: { code: "not_found" } });
+  const temporary = getOrThrow(await env.createTempDir("files-test-", context));
+  expect(temporary).toStartWith("/tmp/files-test-");
+  await rm(temporary, { recursive: true });
 });

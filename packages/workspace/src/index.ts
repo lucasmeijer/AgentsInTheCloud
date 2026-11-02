@@ -22,7 +22,7 @@ export type { WorkspaceCreationContext, WorkspaceDockerMount, WorkspaceDockerPla
 
 export { closeWorkspaceHelperConnection, workspaceHelperSocketPath } from "./helper.ts";
 export { checkFileInWorkspace, existingFilesInWorkspace, openFileInWorkspace, readFileInWorkspace, runInWorkspace, startInWorkspace, statFilesInWorkspace, writeFileInWorkspace } from "./helper.ts";
-export { WorkspaceHelperError, WorkspaceHelperStatus } from "@agents-in-the-cloud/workspace-helper";
+export { WorkspaceHelperError, WorkspaceHelperStatus, type WorkspaceFileStat } from "@agents-in-the-cloud/workspace-helper";
 export { exitStatus as workspaceExitStatus } from "@agents-in-the-cloud/workspace-helper";
 export { workspaceTerminalProcesses } from "./terminal-processes.ts";
 export { createWorkspaceMetadataState, type WorkspaceMetadataState } from "./metadata-state.ts";

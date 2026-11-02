@@ -7,9 +7,10 @@ import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "
 import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "typebox";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { createDurableFileTools, workspaceImages } from "../../src/server/durable-tools.ts";
+import { createDurableFileTools } from "../../src/server/durable-tools.ts";
 import { durableEntryContent, durableImageEndpoint } from "../../src/server/durable-images.ts";
 import { openDurableWorkspace, type DurableWorkspace } from "../../src/server/durable-workspace.ts";
+import { onValues } from "../../src/server/durable-watch.ts";
 
 const context = BACKGROUND_CONTEXT;
 // A valid 16×16 red PNG, deliberately larger than the test model's resize profile.
@@ -31,7 +32,7 @@ async function setup() {
   ] });
   models.setProvider(faux.provider);
   const registry = createRegistry();
-  registry.install(defineExtension({ name: "files", tools: createDurableFileTools(new NodeExecutionEnv({ cwd: path }), workspaceImages).slice(0, 1) }));
+  registry.install(defineExtension({ name: "files", tools: createDurableFileTools(new NodeExecutionEnv({ cwd: path })).slice(0, 1) }));
   const open = async () => {
     const workspace = await openDurableWorkspace(join(path, "journal"), "images-workspace", { models, registry });
     workspaces.push(workspace);
@@ -167,13 +168,12 @@ test("queued image identities survive passive reopen, remain scoped, and retire 
   // Observe placement as one committed frame: queue removal and entry creation
   // must not require stitching independent reads or event-based optimistic rows.
   const placed = Promise.withResolvers<void>();
-  frame.start(async call => {
-    if (call.kind === "failed") throw call.error;
-    if (!JSON.stringify(call.value.docs["pi.inbox"]).includes("Queued image")) {
-      expect(JSON.stringify(call.value.entries)).toContain("Queued image");
+  frame.start(onValues(async next => {
+    if (!JSON.stringify(next.docs["pi.inbox"]).includes("Queued image")) {
+      expect(JSON.stringify(next.entries)).toContain("Queued image");
       placed.resolve();
     }
-  });
+  }));
   const resumed = await reopened.harness.submission(queued.id, context);
   expect((await resumed!.wait(context)).status).toBe("done");
   await placed.promise;

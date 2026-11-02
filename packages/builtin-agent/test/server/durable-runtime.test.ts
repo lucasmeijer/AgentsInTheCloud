@@ -13,6 +13,7 @@ import { currentNotificationTurn } from "../../src/server/turn-notifications.ts"
 import { openDurableAgentRuntime, type DurableAgentRuntime } from "../../src/server/durable-runtime.ts";
 import { durableEntryContent } from "../../src/server/durable-images.ts";
 import { activeConversationView, projectDurableTranscript } from "../../src/server/durable-transcript.ts";
+import { onValues } from "../../src/server/durable-watch.ts";
 
 const context = BACKGROUND_CONTEXT;
 const paths: string[] = [];
@@ -240,7 +241,7 @@ test("committed watches reconnect with complete state; disconnecting a viewer do
   const agent = await runtime.agent(record);
   const viewer = await agent.watch(context);
   const sawRun = Promise.withResolvers<void>();
-  viewer.start(async call => { if (call.kind === "failed") throw call.error; if (call.value.docs["pi.live"]?.run) sawRun.resolve(); });
+  viewer.start(onValues(value => { if (value.docs["pi.live"]?.run) sawRun.resolve(); }));
   const admitted = await agent.submit({ requestId: "watched", text: "Watch committed state" });
   await sawRun.promise;
   await started.promise;
@@ -342,7 +343,7 @@ test.each(["close", "delete"] as const)("recovery after %s gate commit marks wor
   const restored = await reopened.agent(record);
   const watch = await restored.watch(context);
   const idle = Promise.withResolvers<void>();
-  watch.start(async call => { if (call.kind === "failed") throw call.error; if (!call.value.docs["pi.live"]?.run) idle.resolve(); });
+  watch.start(onValues(value => { if (!value.docs["pi.live"]?.run) idle.resolve(); }));
   expect(executions).toBe(1);
   expect(faux.state.callCount).toBe(1);
   await reopened.resume();

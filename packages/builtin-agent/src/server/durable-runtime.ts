@@ -20,6 +20,7 @@ import type { WorkspaceAgentToolOptions } from "@agents-in-the-cloud/agent/serve
 import { readPromptSuggestionsEnabled } from "@agents-in-the-cloud/agent/server/prompt-suggestions";
 import { agentDelegation } from "./delegation.ts";
 import { acceptablePromptSuggestion, addModelUsage, promptSuggestionDue, promptSuggestionEligible, promptSuggestionCacheMissLimit, promptSuggestionMissedCache, promptSuggestionProviders, promptSuggestionRequest, providerNearUsageLimit } from "./prompt-suggestion.ts";
+import { onValues } from "./durable-watch.ts";
 
 const context = BACKGROUND_CONTEXT;
 const DurableHistoryLabels = defineDoc<{ labels: Record<string, string[]> }>({
@@ -206,12 +207,12 @@ export async function openDurableAgentRuntime(
       observation = undefined;
       await previous?.stop();
       assertOpen();
-      const watch = await conversation.watch(context);
+      // Only the documents matter here, not the transcript.
+      const watch = await conversation.watch(context, { min: 1 });
       if (suspended) { await watch.stop(); assertOpen(); }
       observation = watch;
       await committed(watch.value);
-      // Durable ends a failed watch instead of calling it with a failure.
-      watch.start(async call => { if (call.kind === "failed") throw call.error; await committed(call.value); });
+      watch.start(onValues(committed));
       void watch.closed.then(result => {
         if (observation !== watch || suspended) return;
         console.error("Agent execution observation ended", result);
@@ -566,17 +567,16 @@ export async function openDurableAgentRuntime(
   }
 
   const catalogWatch = await harness.watchDoc(WorkspaceAgents, context);
-  catalogWatch!.start(async call => {
-    if (call.kind === "failed") throw call.error;
+  catalogWatch!.start(onValues(async value => {
     if (suspended) return;
     for (const listener of workListeners) listener();
-    for (const record of call.value.agents) {
+    for (const record of value.agents) {
       if (!record.parentId || record.readOnly || agents.has(record.agentId)) continue;
       const pending = (async () => controller((await harness.conversation(record.durableId, context))!, record))();
       agents.set(record.agentId, pending);
       await pending;
     }
-  });
+  }));
   observers.add(async () => { await catalogWatch!.stop(); });
 
   return {

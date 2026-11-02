@@ -1,23 +1,18 @@
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Context } from "@earendil-works/chord";
+import { awaitWithContext } from "@earendil-works/chord/context";
 import { err, ExecutionError, FileError, LineScanner, ok, type BinaryReader, type ExecutionEnv, type FileErrorCode, type FileInfo, type Result } from "@earendil-works/pi-durable/env";
-import { openFileInWorkspace, readFileInWorkspace, runInWorkspace, statFilesInWorkspace, workspaceRoot, WorkspaceHelperError, WorkspaceHelperStatus, writeFileInWorkspace } from "@agents-in-the-cloud/workspace";
+import { openFileInWorkspace, readFileInWorkspace, runInWorkspace, statFilesInWorkspace, workspaceRoot, WorkspaceHelperError, WorkspaceHelperStatus, writeFileInWorkspace, type WorkspaceFileStat } from "@agents-in-the-cloud/workspace";
 
 const user = "agents-in-the-cloud";
 const home = "/home/agents-in-the-cloud";
-/** Larger files fail to read whole; `read` pages through any size, and the agent can use bash. */
+/**
+ * The most one read takes into the app's memory, such as a whole file to edit or an image to show: larger ones fail,
+ * and the agent can use bash. `read` pages through text of any size.
+ */
 const maxWholeFileBytes = 64 * 1024 * 1024;
 const scanChunkBytes = 1024 * 1024;
-
-/** Where `path` is in the workspace: relative to /work, with `~` its user's home, as the Node environment resolves locally. */
-export function workspaceAbsolutePath(path: string): string {
-  let normalized = path;
-  if (normalized === "~") normalized = home;
-  else if (normalized.startsWith("~/")) normalized = posix.join(home, normalized.slice(2));
-  else if (normalized.startsWith("file://")) normalized = fileURLToPath(normalized);
-  return posix.resolve(workspaceRoot, normalized);
-}
 
 /** The helper's failures that are expected of a file, by its status. */
 function helperFileErrorCode(code: number): FileErrorCode {
@@ -30,7 +25,10 @@ function helperFileErrorCode(code: number): FileErrorCode {
   }
 }
 
-/** Expected failures, such as a missing file, become results; a workspace that can't be reached stays an `unknown` failure with its message. */
+/**
+ * Expected failures, such as a missing file, become results; a workspace that can't be reached is an `unknown` one with
+ * its message. Operations take the context's abort signal, so a stopped call ends even while the workspace doesn't answer.
+ */
 async function attempt<T>(path: string, context: Context, operation: () => Promise<T>): Promise<Result<T, FileError>> {
   if (context.abortSignal?.aborted) return err(new FileError("aborted", "aborted", path));
   try {
@@ -43,21 +41,13 @@ async function attempt<T>(path: string, context: Context, operation: () => Promi
   }
 }
 
-async function stat(workspaceId: string, path: string) {
-  const [described] = await statFilesInWorkspace(workspaceId, user, [path]);
-  return described!;
-}
-
-/** `fileInfo` as the Node environment's `lstat` gives it, from what the helper reports. */
-async function fileInfo(workspaceId: string, path: string): Promise<Result<FileInfo, FileError>> {
-  const described = await stat(workspaceId, path);
-  if (described.kind === "regular" || described.kind === "directory") {
-    const kind = described.symlink ? "symlink" : described.kind === "regular" ? "file" : "directory";
-    return ok({ name: posix.basename(path), path, kind, size: described.size, mtimeMs: described.modified.getTime() });
+/** A file URL's path; one naming another host, or malformed, stays an ordinary path, as the Node environment keeps it. */
+function filePath(url: string): string {
+  try {
+    return fileURLToPath(url);
+  } catch {
+    return url;
   }
-  if (described.kind === "other") return err(new FileError("invalid", "Unsupported file type", path));
-  if (described.kind === "inaccessible") return err(new FileError("permission_denied", `EACCES: permission denied, lstat '${path}'`, path));
-  return err(new FileError("not_found", `ENOENT: no such file or directory, lstat '${path}'`, path));
 }
 
 function unsupported(path: string): Result<never, FileError> {
@@ -71,19 +61,41 @@ function unsupported(path: string): Result<never, FileError> {
  */
 export class WorkspaceFileSystem implements ExecutionEnv {
   readonly id: string;
-  cwd = workspaceRoot;
 
-  constructor(private readonly workspaceId: string) {
+  /** Relative paths resolve against `cwd`, the workspace's /work unless a test gives another folder. */
+  constructor(private readonly workspaceId: string, readonly cwd = workspaceRoot) {
     this.id = `workspace:${workspaceId}`;
   }
 
-  async absolutePath(path: string) { return ok<string, FileError>(workspaceAbsolutePath(path)); }
-  async joinPath(parts: string[]) { return ok<string, FileError>(posix.join(...parts)); }
+  /** Where `path` is in the workspace: relative to `cwd`, with `~` the agent user's home, as the Node environment resolves locally. */
+  #resolve(path: string): string {
+    if (path === "~") return home;
+    if (path.startsWith("~/")) return posix.join(home, path.slice(2));
+    return posix.resolve(this.cwd, path.startsWith("file://") ? filePath(path) : path);
+  }
 
+  /** What is at `path`, following symlinks; nothing there, or nothing the user may reach, is an error. */
+  async #describe(path: string, context: Context): Promise<Result<Exclude<WorkspaceFileStat, { kind: "missing" | "inaccessible" }>, FileError>> {
+    const described = await attempt(path, context, async () => (await statFilesInWorkspace(this.workspaceId, user, [path], { signal: context.abortSignal }))[0]!);
+    if (!described.ok) return described;
+    const { value } = described;
+    if (value.kind === "missing") return err(new FileError("not_found", `${path} does not exist`, path));
+    if (value.kind === "inaccessible") return err(new FileError("permission_denied", `${path} is in a folder the agent may not look into`, path));
+    return ok(value);
+  }
+
+  readonly absolutePath: ExecutionEnv["absolutePath"] = async (path) => ok(this.#resolve(path));
+  readonly joinPath: ExecutionEnv["joinPath"] = async (parts) => ok(posix.join(...parts));
+
+  /** Its kind as the Node environment's `lstat` reports it, so a symlink is one; its size and time are those of what it points to. */
   async fileInfo(path: string, context: Context): Promise<Result<FileInfo, FileError>> {
-    const absolute = workspaceAbsolutePath(path);
-    const result = await attempt(absolute, context, () => fileInfo(this.workspaceId, absolute));
-    return result.ok ? result.value : result;
+    const absolute = this.#resolve(path);
+    const described = await this.#describe(absolute, context);
+    if (!described.ok) return described;
+    const { value } = described;
+    if (value.kind === "other") return err(new FileError("invalid", `${absolute} is a device, FIFO or socket`, absolute));
+    const kind = value.symlink ? "symlink" : value.kind === "regular" ? "file" : "directory";
+    return ok({ name: posix.basename(absolute), path: absolute, kind, size: value.size, mtimeMs: value.modified.getTime() });
   }
 
   async exists(path: string, context: Context): Promise<Result<boolean, FileError>> {
@@ -93,44 +105,55 @@ export class WorkspaceFileSystem implements ExecutionEnv {
   }
 
   async canonicalPath(path: string, context: Context): Promise<Result<string, FileError>> {
-    const absolute = workspaceAbsolutePath(path);
-    const described = await attempt(absolute, context, () => stat(this.workspaceId, absolute));
+    const absolute = this.#resolve(path);
+    const described = await this.#describe(absolute, context);
     if (!described.ok) return described;
-    const { value } = described;
-    if (value.kind === "regular" || value.kind === "directory" || value.kind === "other") {
-      if (value.canonicalPath !== undefined) return ok(value.canonicalPath);
-    } else if (value.kind === "inaccessible") return err(new FileError("permission_denied", `EACCES: permission denied, realpath '${absolute}'`, absolute));
-    return err(new FileError("not_found", `ENOENT: no such file or directory, realpath '${absolute}'`, absolute));
+    // None for a file removed since it was described, or one whose real path is too long to resolve. Not found lets
+    // callers fall back to its folder's, as pi-durable's mutation queue does.
+    const { canonicalPath } = described.value;
+    return canonicalPath === undefined ? err(new FileError("not_found", `${absolute} has no real path that can be resolved`, absolute)) : ok(canonicalPath);
   }
 
   async readTextFile(path: string, context: Context): Promise<Result<string, FileError>> {
-    const absolute = workspaceAbsolutePath(path);
+    const absolute = this.#resolve(path);
     // Buffer keeps a byte-order mark, as Node's readFile does; edit puts it back after matching.
-    return attempt(absolute, context, async () => (await readFileInWorkspace(this.workspaceId, { user, path: absolute }, { maxBytes: maxWholeFileBytes })).toString("utf8"));
+    return attempt(absolute, context, async () => (await readFileInWorkspace(this.workspaceId, { user, path: absolute }, { maxBytes: maxWholeFileBytes, signal: context.abortSignal })).toString("utf8"));
   }
 
   async writeFile(path: string, content: string | Uint8Array, context: Context): Promise<Result<void, FileError>> {
-    const absolute = workspaceAbsolutePath(path);
-    return attempt(absolute, context, () => writeFileInWorkspace(this.workspaceId, { user, path: absolute }, content));
+    const absolute = this.#resolve(path);
+    return attempt(absolute, context, () => writeFileInWorkspace(this.workspaceId, { user, path: absolute }, content, { signal: context.abortSignal }));
   }
 
   async openBinaryReader(path: string, options: { noFollow?: boolean } | undefined, context: Context): Promise<Result<BinaryReader, FileError>> {
-    const absolute = workspaceAbsolutePath(path);
+    const absolute = this.#resolve(path);
     if (options?.noFollow) return err(new FileError("not_supported", "Workspace files always follow symlinks", absolute));
     const opened = await attempt(absolute, context, () => openFileInWorkspace(this.workspaceId, { user, path: absolute }, { signal: context.abortSignal }));
     if (!opened.ok) {
       // The helper refuses anything but a regular file alike; tell a folder apart, as the Node environment does.
       const info = opened.error.code === "invalid" ? await this.fileInfo(absolute, context) : undefined;
-      if (info?.ok && info.value.kind === "directory") return err(new FileError("is_directory", "EISDIR: illegal operation on a directory, read", absolute));
+      if (info?.ok && info.value.kind === "directory") return err(new FileError("is_directory", `${absolute} is a folder`, absolute));
       return opened;
     }
     const file = opened.value;
+    let closed = false;
+    // The file stays open on the context it was opened with; each use ends when its own context is aborted.
+    const use = <T>(useContext: Context, operation: () => Promise<T>) =>
+      closed ? Promise.resolve(err<T, FileError>(new FileError("invalid", `${absolute} is closed`, absolute))) : attempt(absolute, useContext, () => awaitWithContext(operation(), useContext));
     return ok({
-      info: (readContext) => attempt(absolute, readContext, async () => {
+      info: (infoContext) => use(infoContext, async () => {
         const { size, modified } = await file.stat();
-        return { name: posix.basename(absolute), path: absolute, kind: "file", size, mtimeMs: modified.getTime() };
+        return { name: posix.basename(absolute), path: absolute, kind: "file" as const, size, mtimeMs: modified.getTime() };
       }),
-      read: (offset, length, readContext) => attempt(absolute, readContext, () => file.read(offset, length)),
+      async read(offset, length, readContext) {
+        if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0) {
+          return err(new FileError("invalid", `Can't read ${length} bytes at ${offset}`, absolute));
+        }
+        if (length > maxWholeFileBytes) {
+          return err(new FileError("invalid", `${absolute} is too large to read at once: ${length} bytes, over the limit of ${maxWholeFileBytes}`, absolute));
+        }
+        return use(readContext, () => file.read(offset, length));
+      },
       async scanLines(range, scanContext) {
         let scanner: LineScanner;
         try {
@@ -138,39 +161,44 @@ export class WorkspaceFileSystem implements ExecutionEnv {
         } catch {
           return err(new FileError("invalid", "Invalid line range", absolute));
         }
-        return attempt(absolute, scanContext, async () => {
+        return use(scanContext, async () => {
           for (let position = 0; ; position += scanChunkBytes) {
+            // Stop reading once aborted, not only waiting: the file takes one request at a time.
+            if (scanContext.abortSignal?.aborted) throw new Error("aborted");
             const chunk = await file.read(position, scanChunkBytes);
-            if (chunk.byteLength > 0) scanner.push(chunk);
+            scanner.push(chunk);
             if (chunk.byteLength < scanChunkBytes) return scanner.finish();
           }
         });
       },
-      async close() { file.close(); },
+      async close() {
+        closed = true;
+        file.close();
+      },
     });
   }
 
   async createTempDir(prefix: string | undefined, context: Context): Promise<Result<string, FileError>> {
     return attempt("/tmp", context, async () => {
-      const result = await runInWorkspace(this.workspaceId, { argv: ["mktemp", "-d", `/tmp/${prefix ?? ""}XXXXXX`], user });
+      const result = await runInWorkspace(this.workspaceId, { argv: ["mktemp", "-d", `/tmp/${prefix ?? ""}XXXXXX`], user }, { signal: context.abortSignal });
       if (result.exitCode !== 0) throw new Error(result.stderr.trim() || `mktemp exited with ${result.exitCode}`);
       return result.stdout.toString().trim();
     });
   }
 
-  async openTextLineReader(path: string) { return unsupported(path); }
-  async readTextLines(path: string) { return unsupported(path); }
-  async readBinaryFile(path: string) { return unsupported(path); }
-  async appendFile(path: string) { return unsupported(path); }
-  async truncateFile(path: string) { return unsupported(path); }
-  async flushFile(path: string) { return unsupported(path); }
-  async renameFile(path: string) { return unsupported(path); }
-  async listDir(path: string) { return unsupported(path); }
-  async openDirReader(path: string) { return unsupported(path); }
-  async watch() { return unsupported(this.cwd); }
-  async createDir(path: string) { return unsupported(path); }
-  async remove(path: string) { return unsupported(path); }
-  async createTempFile() { return unsupported("/tmp"); }
-  async exec(): Promise<Result<never, ExecutionError>> { return err(new ExecutionError("shell_unavailable", "Workspace commands run through the bash tool")); }
+  readonly openTextLineReader: ExecutionEnv["openTextLineReader"] = async (path) => unsupported(path);
+  readonly readTextLines: ExecutionEnv["readTextLines"] = async (path) => unsupported(path);
+  readonly readBinaryFile: ExecutionEnv["readBinaryFile"] = async (path) => unsupported(path);
+  readonly appendFile: ExecutionEnv["appendFile"] = async (path) => unsupported(path);
+  readonly truncateFile: ExecutionEnv["truncateFile"] = async (path) => unsupported(path);
+  readonly flushFile: ExecutionEnv["flushFile"] = async (path) => unsupported(path);
+  readonly renameFile: ExecutionEnv["renameFile"] = async (path) => unsupported(path);
+  readonly listDir: ExecutionEnv["listDir"] = async (path) => unsupported(path);
+  readonly openDirReader: ExecutionEnv["openDirReader"] = async (path) => unsupported(path);
+  readonly watch: ExecutionEnv["watch"] = async () => unsupported(this.cwd);
+  readonly createDir: ExecutionEnv["createDir"] = async (path) => unsupported(path);
+  readonly remove: ExecutionEnv["remove"] = async (path) => unsupported(path);
+  readonly createTempFile: ExecutionEnv["createTempFile"] = async () => unsupported("/tmp");
+  readonly exec: ExecutionEnv["exec"] = async () => err(new ExecutionError("shell_unavailable", "Workspace commands run through the bash tool"));
   async cleanup() {}
 }
