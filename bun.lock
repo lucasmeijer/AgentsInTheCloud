@@ -70,7 +70,7 @@
         "@earendil-works/pi-ai": "catalog:",
         "@earendil-works/pi-coding-agent": "catalog:",
         "@modelcontextprotocol/sdk": "1.32.2",
-        "@pierre/diffs": "1.6.2",
+        "@pierre/diffs": "1.7.0-beta.1",
         "@wasm-fmt/biome_fmt": "0.2.9",
         "@wasm-fmt/ruff_fmt": "0.15.20",
         "@wasm-fmt/shfmt": "0.2.7",
@@ -143,7 +143,7 @@
         "@agents-in-the-cloud/workspace": "workspace:*",
         "@agents-in-the-cloud/workspace-templates": "workspace:*",
         "@hotwired/turbo": "8.0.23",
-        "@pierre/diffs": "1.6.2",
+        "@pierre/diffs": "1.7.0-beta.1",
         "typebox": "^1.0.57",
       },
     },
@@ -285,7 +285,7 @@
         "@agents-in-the-cloud/shared": "workspace:*",
         "@agents-in-the-cloud/syntax": "workspace:*",
         "@agents-in-the-cloud/workspace": "workspace:*",
-        "@pierre/diffs": "1.6.2",
+        "@pierre/diffs": "1.7.0-beta.1",
         "typebox": "^1.0.57",
       },
     },
@@ -467,8 +467,8 @@
       "name": "@agents-in-the-cloud/syntax",
       "dependencies": {
         "@agents-in-the-cloud/shared": "workspace:*",
-        "@pierre/diffs": "1.6.2",
-        "@pierre/highlights": "0.3.0",
+        "@pierre/diffs": "1.7.0-beta.1",
+        "@pierre/highlights": "0.4.0",
       },
     },
     "packages/update": {
@@ -549,7 +549,7 @@
     },
   },
   "patchedDependencies": {
-    "@pierre/diffs@1.6.2": "patches/@pierre%2Fdiffs@1.6.2.patch",
+    "@pierre/diffs@1.7.0-beta.1": "patches/@pierre%2Fdiffs@1.7.0-beta.1.patch",
     "@gespenst/core@0.2.0": "patches/@gespenst%2Fcore@0.2.0.patch",
     "@hotwired/turbo@8.0.23": "patches/@hotwired%2Fturbo@8.0.23.patch",
   },
@@ -794,9 +794,11 @@
 
     "@oxlint/plugins": ["@oxlint/plugins@1.90.0", "", {}, "sha512-FT0JJDNbj9oobVWHpAzFckHY/bx1ftPjulBx4UCMXqmDUGqVWOkbKe5bj4zdEL+D5Ud7y/RfioLwSvlHBMjI4w=="],
 
-    "@pierre/diffs": ["@pierre/diffs@1.6.2", "", { "dependencies": { "@pierre/highlights": "0.3.0", "@pierre/theme": "2.0.0", "@pierre/theming": "1.0.2", "diff": "9.0.0", "hast-util-to-html": "9.0.5", "lru_map": "0.4.1", "shiki": "^3.0.0 || ^4.0.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-Hpk+HjjsJ2IWRZ3ALAa7rdBfhF2Zeyh5Kk7L4riMXRo3eHal9yQR1TgBryp+OzGyxfFfwsnEBOQztoANZIzpMQ=="],
+    "@pierre/diffs": ["@pierre/diffs@1.7.0-beta.1", "", { "dependencies": { "@pierre/highlights": "0.4.0", "@pierre/patches": "0.0.1", "@pierre/theme": "2.0.0", "@pierre/theming": "1.0.2", "diff": "9.0.0", "hast-util-to-html": "9.0.5", "lru_map": "0.4.1", "shiki": "^3.0.0 || ^4.0.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-VLM+Z1nzHQ9YSTrt9OB7lMH8/l3HdWzD0U6gZktSRNnxHEvz15/QHSUufGU3+lCSkKZh49UJFuCPR/CrMhxmNA=="],
 
-    "@pierre/highlights": ["@pierre/highlights@0.3.0", "", {}, "sha512-s6xZ/giPPrSeCO2w254GiysUXD4ditKMTOrl1vHynvPqP7VdlujYi01O9joxJ0T16XkoXGQMN6zkRi9+O8NCzg=="],
+    "@pierre/highlights": ["@pierre/highlights@0.4.0", "", {}, "sha512-2a38H7ep3KweGi1fGQpJk+Krod2OMpDIXagKPlqBd1Y9P460T7zQmc66Wm2JAH1SpIG93wCyyhZVrkc5dnAJVQ=="],
+
+    "@pierre/patches": ["@pierre/patches@0.0.1", "", {}, "sha512-NycJQVQNuqmBdr7u1LsUcmkiIz1fRm9xhWZyRbm21oJYd0MVVCa45t9Lsuj5IKrTMBonxOuh4LMv+R3BpL4bmQ=="],
 
     "@pierre/theme": ["@pierre/theme@2.0.0", "", {}, "sha512-yNDd9GYLQl1mEUJR8AneJ5e4ohLIHQd/wZLWr4fagt78vS2RwwZNW530vVgHqXFAyFVcFlRmGUD5ramXH46OXw=="],
 

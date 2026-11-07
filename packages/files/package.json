@@ -13,7 +13,7 @@
     "@agents-in-the-cloud/shared": "workspace:*",
     "@agents-in-the-cloud/syntax": "workspace:*",
     "@agents-in-the-cloud/workspace": "workspace:*",
-    "@pierre/diffs": "1.6.2",
+    "@pierre/diffs": "1.7.0-beta.1",
     "typebox": "^1.0.57"
   }
 }

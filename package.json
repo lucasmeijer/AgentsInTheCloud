@@ -44,8 +44,8 @@
     "typescript": "7.0.2"
   },
   "patchedDependencies": {
-    "@pierre/diffs@1.6.2": "patches/@pierre%2Fdiffs@1.6.2.patch",
     "@gespenst/core@0.2.0": "patches/@gespenst%2Fcore@0.2.0.patch",
-    "@hotwired/turbo@8.0.23": "patches/@hotwired%2Fturbo@8.0.23.patch"
+    "@hotwired/turbo@8.0.23": "patches/@hotwired%2Fturbo@8.0.23.patch",
+    "@pierre/diffs@1.7.0-beta.1": "patches/@pierre%2Fdiffs@1.7.0-beta.1.patch"
   }
 }

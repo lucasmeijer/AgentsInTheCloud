@@ -1,4 +1,4 @@
-import { createStyleElement, createThemeStyleElement, DiffHunksRenderer, parsePatchFiles, preloadHighlighter, wrapThemeCSS, type ParsedPatch } from "@pierre/diffs";
+import { createCoreStyleElement, createStyleElement, createThemeStyleElement, DiffHunksRenderer, parsePatchFiles, preloadHighlighter, wrapThemeCSS, type ParsedPatch } from "@pierre/diffs";
 import { renderHTML } from "@pierre/diffs/ssr";
 import { escapeHtml } from "@agents-in-the-cloud/shared";
 import { toolDiffOptions } from "./pierre.ts";
@@ -17,7 +17,7 @@ export function renderMarkdownDiff(code: string, provisional = false): string {
   let patches: ParsedPatch[];
   // Incomplete or malformed external input stays readable as a snippet.
   try {
-    patches = parsePatchFiles(code, undefined, true);
+    patches = parsePatchFiles(code, { throwOnError: true });
   } catch {
     return renderSnippet(code);
   }
@@ -30,7 +30,7 @@ export function renderMarkdownDiff(code: string, provisional = false): string {
       const renderer = new DiffHunksRenderer({ ...toolDiffOptions, diffIndicators: "classic", hunkSeparators: "metadata", lineDiffType: "word-alt" });
       const result = renderer.renderDiff({ ...file, lang: "text" })!;
       const rendered = renderHTML([
-        createStyleElement(result.css, true),
+        createCoreStyleElement(),
         createThemeStyleElement(wrapThemeCSS(result.themeStyles, result.baseThemeType ?? "dark")),
         createStyleElement(`${toolDiffOptions.unsafeCSS} ${wordDiffCSS}`),
         renderer.renderFullAST(result),

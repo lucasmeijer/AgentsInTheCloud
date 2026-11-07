@@ -48,7 +48,7 @@
     "@agents-in-the-cloud/workspace-templates": "workspace:*",
     "@agents-in-the-cloud/shared": "workspace:*",
     "@agents-in-the-cloud/syntax": "workspace:*",
-    "@pierre/diffs": "1.6.2",
+    "@pierre/diffs": "1.7.0-beta.1",
     "beautiful-mermaid": "1.1.3",
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-coding-agent": "catalog:",
