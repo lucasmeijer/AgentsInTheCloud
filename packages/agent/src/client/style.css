@@ -234,6 +234,11 @@
 .agent-detail-table th, .agent-detail-table td { padding: 8px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
 .agent-detail-table th { width: 110px; white-space: nowrap; font-weight: normal; color: var(--text-muted); background: var(--region-header-surface); }
 .agent-detail-table tr + tr { border-top: 1px solid var(--line); }
+/* On narrow screens each label sits above its value so the value gets the full width. */
+@media (max-width: 700px) {
+  .agent-detail-table, .agent-detail-table tbody, .agent-detail-table tr, .agent-detail-table th, .agent-detail-table td { display: block; width: auto; }
+  .agent-detail-table th { padding-block: 4px; }
+}
 /* A link to another place in a transcript. */
 .agent-trace-link { text-decoration: none; color: var(--text-muted); }
 .agent-trace-link:hover { color: var(--text); text-decoration: underline; }
