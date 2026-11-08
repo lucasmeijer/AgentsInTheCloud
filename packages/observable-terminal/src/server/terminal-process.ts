@@ -237,7 +237,8 @@ tmux -N wait-for "$session-running"
 
 // Reading the exit before and after checking the session tells a process that
 // just finished apart from one whose terminal disappeared.
-const stateScript = `dir=$1 session=$2
+const stateScript = `root=$1 dir=$2 session=$3
+${lockRoot}
 flag() { if [ -f "$dir/$1" ]; then echo 1; else echo 0; fi; }
 report() { printf 'exited %s %s %s\\n' "$(cat "$dir/exit")" "$(flag aborted)" "$(flag timed-out)"; cat "$dir/output"; exit 0; }
 if [ -f "$dir/exit" ]; then report; fi
@@ -316,7 +317,7 @@ export function createTerminalProcesses(options: { run: RunTerminalProcessComman
 
   async function state(id: string): Promise<TerminalProcessState> {
     const session = terminalProcessSession(id);
-    const stdout = await sh(stateScript, [directory(id), session]);
+    const stdout = await sh(stateScript, [options.root, directory(id), session]);
     const newline = stdout.indexOf("\n");
     const header = newline < 0 ? stdout : stdout.slice(0, newline);
     const running = /^running ([01])$/.exec(header);

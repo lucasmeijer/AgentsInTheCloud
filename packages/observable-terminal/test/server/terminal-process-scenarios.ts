@@ -270,6 +270,32 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
       expect(await processes.state(id)).toEqual({ state: "missing" });
     });
 
+    test("reading a finished result holds the cleanup lock until the result is read", async () => {
+      const { id, started } = start("echo complete; exit 7");
+      await started;
+      await processes.waitForExit(id);
+      const reading = `reading-${crypto.randomUUID()}`;
+      const proceed = `read-result-${crypto.randomUUID()}`;
+      const reader = createTerminalProcesses({
+        root: join(directory, "processes"), start: place!.start,
+        run: (command, options) => {
+          const argv = [...command.argv];
+          // Pause between finding the exit file and reading it, where cleanup used to win.
+          argv[2] = `cat() { case "$1" in */exit) tmux wait-for -S ${reading}; tmux wait-for ${proceed};; esac; command cat "$@"; }\n${argv[2]}`;
+          return place!.run({ ...command, argv }, options);
+        },
+      });
+      const result = reader.state(id);
+      await tmux("wait-for", reading);
+      const lock = await place!.run({ argv: ["flock", "-n", join(directory, "processes"), "true"], user: "agents-in-the-cloud", workdir: "/" }, {});
+      // Resume even if the assertion fails, so the test leaves no blocked reader.
+      await tmux("wait-for", "-S", proceed);
+      expect(await result).toMatchObject({ state: "exited", exitCode: 7, output: { text: "complete" } });
+      expect(lock.exitCode).toBe(1);
+      await processes.release(id);
+      expect(await reader.state(id)).toEqual({ state: "missing" });
+    });
+
     test("a process whose terminal disappeared is lost, and is not started again", async () => {
       const { id, started } = start("sleep 30");
       await started;
