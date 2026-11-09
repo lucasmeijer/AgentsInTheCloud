@@ -34,13 +34,14 @@ Get ahead of any challenges you might run into while achieving the requested tas
 
 - Aim for 4–10 proposals per round. Leave later-stage choices for later rounds.
 
-- The first time you present a set of proposals to the user, end it with this explanation on how they can choose to respond. Omit it all other times.
-  ```markdown
-  accept -> accepts all
-  accept, but I don't know about 4.. -> accepts only proposals 1,2 & 3, assumes you have not read 5,6,7
-  3b --> accept 1 & 2, reject 3, instead take alternative 3b. assumes you have not read 4,5,6
-  implement -> accepts all, leaves lplan mode, and starts implementing the agreed upon direction. 
-  ```
+- The first time you present a set of proposals to the user, end it with this Markdown table explaining how they can choose to respond. Render it as a table, not a code block. Omit it all other times.
+
+  | Reply | Meaning |
+  | --- | --- |
+  | `accept` | Accepts all proposals. |
+  | `accept, but I don't know about 4..` | Accepts only proposals 1, 2, and 3. Assumes you have not read 5, 6, or 7. |
+  | `3b` | Accepts 1 and 2, rejects 3, and chooses alternative 3b instead. Assumes you have not read 4, 5, or 6. |
+  | `implement` | Accepts all proposals, leaves lplan mode, and starts implementing the agreed direction. |
 
 ### Where fold-outs go
 
