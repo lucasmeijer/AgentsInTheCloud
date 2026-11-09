@@ -238,6 +238,21 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
       expect(result.output.text).toBe("quick");
     });
 
+    test("a deadline passing after release leaves other panes alone", async () => {
+      const bystander = `bystander-${crypto.randomUUID()}`;
+      expect((await tmux("new-session", "-d", "-s", bystander, "sleep 30")).exitCode).toBe(0);
+      try {
+        const { id, started } = start("echo quick", { deadline: Date.now() + 300 });
+        await started;
+        await processes.waitForExit(id);
+        await processes.release(id);
+        await Bun.sleep(600);
+        expect((await tmux("display-message", "-p", "-t", `=${bystander}:`, "#{pane_mode}")).stdout.trim()).toBe("");
+      } finally {
+        await tmux("kill-session", "-t", `=${bystander}`);
+      }
+    });
+
     test("kept plain text holds the whole output and outlives release", async () => {
       const { id, started } = start("printf '\\033[31mred\\033[0m\\n'; seq 1 300", { keepText: true });
       await started;

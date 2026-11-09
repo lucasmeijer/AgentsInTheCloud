@@ -107,6 +107,10 @@ const awaitFinishFunction = `await_finish() {
 }
 `;
 
+// tmux shows a failed run-shell command ("'…' returned 2") in view mode on
+// whichever pane is current, often someone's terminal, so the commands tmux
+// runs for us always succeed.
+
 // The scripts below live in each process's directory. They are POSIX sh, and
 // rely only on tmux, flock and pgrep besides. Nothing waits by sleeping:
 // tmux reports when a pane is dead (only once it has read all of the pane's
@@ -228,7 +232,7 @@ if ! pid=$(tmux -N new-session -d -P -F '#{pane_pid}' -s "$session" -x "$cols" -
 fi
 printf '%s\\n' "$pid" > "$dir/pid"
 if [ -n "$remaining" ]; then
-  tmux -N run-shell -b -d "$((remaining / 1000)).$(printf '%03d' "$((remaining % 1000))")" "sh $dir/expire $dir $session >/dev/null 2>&1"
+  tmux -N run-shell -b -d "$((remaining / 1000)).$(printf '%03d' "$((remaining % 1000))")" "sh $dir/expire $dir $session >/dev/null 2>&1 || :"
 fi
 tmux -N wait-for -S "$session-ready"
 # Holding the lock until the command runs, so a stop always finds it running.
@@ -353,7 +357,7 @@ export function createTerminalProcesses(options: { run: RunTerminalProcessComman
       const env = Object.entries({ ...observableTerminalEnvironment, ...start.env }).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
       const pane = `exec sh ${dir}/run ${dir} ${session}`;
       // The prefixes keep each argument in place when tmux expands it to nothing.
-      const hook = `run-shell -b "sh ${dir}/finish ${dir} ${session} #{hook_pane} s#{pane_dead_status} g#{pane_dead_signal} >/dev/null 2>&1"`;
+      const hook = `run-shell -b "sh ${dir}/finish ${dir} ${session} #{hook_pane} s#{pane_dead_status} g#{pane_dead_signal} >/dev/null 2>&1 || :"`;
       await sh(startScript, [
         options.root, dir, session, requestDigest(start, cols, rows), start.cwd,
         String(cols), String(rows), String(observableTerminalHistoryLimit), start.deadline === undefined ? "" : String(start.deadline),
