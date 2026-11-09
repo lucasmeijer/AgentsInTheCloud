@@ -1,6 +1,6 @@
 ---
 name: narrated-video
-description: Records a narrated screen recording of a software product being used, with karaoke-style subtitles and a text-to-speech voiceover when credentials allow. Use when asked for a demo video, a walkthrough, a screen recording, or a video showing a bug or feature.
+description: Records a narrated screen recording of a software product being used, with a text-to-speech voiceover and karaoke-style subtitles. Use when asked for a demo video, a walkthrough, a screen recording, or a video showing a bug or feature.
 ---
 
 # Narrated Video
@@ -10,8 +10,9 @@ Make a video that feels like a person sitting next to the viewer, using the prod
 - **Show real use.** Drive the product the way a normal user would, at a pace a viewer can follow. Make every action visible: the pointer, what's typed, and any file or image being used. Cut dead time like loading and typing delays.
 - **Never fake it.** If something blocks you, like a login wall or CAPTCHA, don't try to get around it. Record as far as you got, say so in the narration, and point it out when you hand the video over.
 - **Narrate.** Write a short, conversational script that says what's happening and why it matters, in sync with what's on screen.
-- **Voice it, if you can.** If the environment has credentials for a natural-sounding text-to-speech service, turn the script into a voiceover. If not, skip the audio rather than installing a local voice; the subtitles carry the narration alone.
-- **Karaoke subtitles.** Burn the narration in as subtitles that highlight each word as it's spoken, or at a comfortable reading pace when there's no voice. Place them where they won't cover what matters or the player's controls.
+- **Voice it.** Turn the script into a natural-sounding voiceover with text-to-speech. Use a service the environment has credentials for, or else a local voice.
+- **Fit the footage to the voice.** It's fine to edit the recording, like pausing, holding, slowing down, or cutting, so it lines up with the narration and subtitles.
+- **Karaoke subtitles at the top.** Burn the narration in at the top of the video, highlighting each word as it's spoken. Keep them clear of what matters on screen.
 - **Keep it short.** Show only what the viewer needs to get the point.
 - **Check it.** Watch the result before handing it over, and check the voice too, for example by transcribing it. Fix anything out of sync, cut off, too small, or hard to read.
 
