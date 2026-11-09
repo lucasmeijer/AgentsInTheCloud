@@ -13,6 +13,6 @@ Make a video that feels like a person sitting next to the viewer, using the prod
 - **Voice it, if you can.** If the environment has credentials for a natural-sounding text-to-speech service, turn the script into a voiceover. If not, skip the audio rather than installing a local voice; the subtitles carry the narration alone.
 - **Karaoke subtitles.** Burn the narration in as subtitles that highlight each word as it's spoken, or at a comfortable reading pace when there's no voice. Place them where they won't cover what matters or the player's controls.
 - **Keep it short.** Show only what the viewer needs to get the point.
-- **Check it.** Watch the result before handing it over, and check the voice too, for example by transcribing it. Fix anything out of sync, cut off, or hard to read.
+- **Check it.** Watch the result before handing it over, and check the voice too, for example by transcribing it. Fix anything out of sync, cut off, too small, or hard to read.
 
 When you're making several videos of the same thing, like a before and after, keep them in the same style so they're easy to compare.
