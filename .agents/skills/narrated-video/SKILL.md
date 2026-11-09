@@ -8,6 +8,8 @@ description: Records a narrated screen recording of a software product being use
 Make a video that feels like a person sitting next to the viewer, using the product and talking them through it.
 
 - **Show real use.** Drive the product the way a normal user would, at a pace a viewer can follow. Make every action visible: the pointer, what's typed, and any file or image being used. Cut dead time like loading and typing delays.
+- **Frame it.** What matters should fill the screen and be easy to read, even if the product itself is small.
+- **Draw the pointer.** Headless browser recordings don't show the mouse. Inject a cursor element that follows `mousemove` events, for example with Playwright's `addInitScript`, and move the mouse in steps so it glides.
 - **Never fake it.** If something blocks you, like a login wall or CAPTCHA, don't try to get around it. Record as far as you got, say so in the narration, and point it out when you hand the video over.
 - **Narrate.** Write a short, conversational script that says what's happening and why it matters, in sync with what's on screen.
 - **Voice it.** Turn the script into a natural-sounding voiceover with text-to-speech. Use a service the environment has credentials for, or else a local voice.
