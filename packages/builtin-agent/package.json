@@ -11,7 +11,8 @@
     "./server/durable-codemode-templates": "./src/server/durable-codemode-templates.ts",
     "./server/durable-workspace-files": "./src/server/durable-workspace-files.ts",
     "./client": "./src/client/index.ts",
-    "./server/render-composer": "./src/server/render-composer.ts"
+    "./server/render-composer": "./src/server/render-composer.ts",
+    "./server/render-live-transcript": "./src/server/render-live-transcript.ts"
   },
   "dependencies": {
     "@agents-in-the-cloud/core": "workspace:*",

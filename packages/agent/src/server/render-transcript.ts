@@ -160,26 +160,33 @@ export function workingCommentaryItems(section: WorkingTranscriptItem): Transcri
   return section.items.filter((item) => item.type === "text" || item.type === "message");
 }
 
-/** Live renderers pass the commentary collection's islands so morphing the turn keeps its rows mounted. */
-export function renderWorkingSection(ctx: AgentRenderContext, section: WorkingTranscriptItem, commentaryHtml?: string): string {
+/** Whether a finished turn's items load when it opens, rather than with the transcript. */
+export function workingItemsLoadLazily(ctx: AgentRenderContext, section: WorkingTranscriptItem): boolean {
+  const finished = section.completedAt !== undefined || section.stoppedAt !== undefined;
+  return !ctx.readOnly && Boolean(ctx.lazyCompletedWorkingItems && finished);
+}
+
+/** Live renderers pass the commentary collection's islands so morphing the turn keeps its rows mounted,
+ * and likewise the islands of a turn whose items show inline. */
+export function renderWorkingSection(ctx: AgentRenderContext, section: WorkingTranscriptItem, commentaryHtml?: string, itemsHtml?: string): string {
   if (section.completedAt !== undefined && section.items.length === 0 && !section.timing) return "";
   // A live commentary collection is its own region: the turn's summary ticking along must not resend it.
   const commentaryIsland = commentaryHtml !== undefined ? " data-turbo-permanent" : "";
   const summary = workingSummary(ctx, section);
   const commentary = commentaryContext(ctx);
   commentaryHtml ??= workingCommentaryItems(section).map((item) => renderTranscriptItem(commentary, item)).join("");
-  const finished = section.completedAt !== undefined || section.stoppedAt !== undefined;
-  const lazy = !ctx.readOnly && Boolean(ctx.lazyCompletedWorkingItems && finished);
+  const lazy = workingItemsLoadLazily(ctx, section);
   const attributes = ctx.readOnly ? "" : lazy
     ? `data-controller="agent-lazy-detail" data-action="toggle->agent-lazy-detail#load" data-agent-turn-turn-id-value="${escapeHtml(section.key)}"`
     : ctx.inlineWorkingItems ? `data-agent-turn-turn-id-value="${escapeHtml(section.key)}"` : `data-controller="agent-turn" data-agent-turn-workspace-id-value="${escapeHtml(ctx.workspaceId)}" data-agent-turn-agent-id-value="${escapeHtml(ctx.agentId)}" data-agent-turn-turn-id-value="${escapeHtml(section.key)}" data-agent-turn-branch-id-value="${escapeHtml(ctx.branchId ?? "")}" data-action="toggle->agent-turn#toggle"`;
   const items = lazy
     ? `<turbo-frame id="${ids.detailFrame(ctx, section.key)}" data-turbo-permanent data-agent-lazy-detail-target="frame" data-src="${escapeHtml(transcriptItemPath(ctx, section.key))}"></turbo-frame>`
-    : ctx.readOnly || ctx.inlineWorkingItems ? renderWorkingContent(ctx, section) : "";
+    : itemsHtml ?? (ctx.readOnly || ctx.inlineWorkingItems ? renderWorkingContent(ctx, section) : "");
   const builtinLazy = !ctx.readOnly && !ctx.inlineWorkingItems && !lazy;
+  const itemsIsland = builtinLazy ? ' data-agent-turn-target="items" data-turbo-permanent' : itemsHtml !== undefined ? " data-turbo-permanent" : "";
   return `<div class="agent-working-block" id="${ids.item(ctx, section.key)}">${disclosureHtml({
     element: { attributesHtml: attributes }, summary,
-    bodyAttributesHtml: lazy ? undefined : `id="${ids.workingItems(ctx, section.key)}"${builtinLazy ? ' data-agent-turn-target="items" data-turbo-permanent' : ""}`,
+    bodyAttributesHtml: lazy ? undefined : `id="${ids.workingItems(ctx, section.key)}"${itemsIsland}`,
     bodyHtml: items,
   })}<div class="disclosure-content agent-working-commentary" id="${ids.workingItems(commentary, section.key)}"${commentaryIsland}>${commentaryHtml}</div></div>`;
 }

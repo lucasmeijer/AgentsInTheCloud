@@ -1,7 +1,43 @@
 import { escapeHtml, liveCollection, type LiveRegion } from "@agents-in-the-cloud/shared";
 import { commentaryContext, ids, type AgentRenderContext } from "@agents-in-the-cloud/agent/server/render-context";
-import { renderModelContextEntries, renderTranscriptItem, renderWorkingSection, workingCommentaryItems, type AgentModelContextView } from "@agents-in-the-cloud/agent/server/render-transcript";
+import { renderModelContextEntries, renderTranscriptItem, renderWorkingSection, workingCommentaryItems, workingItemsLoadLazily, type AgentModelContextView } from "@agents-in-the-cloud/agent/server/render-transcript";
 import type { TranscriptItem, WorkingTranscriptItem } from "@agents-in-the-cloud/agent/server/transcript";
+import { StreamingMarkdownRenderer } from "@agents-in-the-cloud/markdown";
+
+/** Renders live messages' Markdown as they grow: completed blocks once, then only the mutable tail. */
+export class StreamingTexts {
+  private readonly messages = new Map<string, { source: string; renderer: StreamingMarkdownRenderer; stableHtml: string; tailHtml: string; tailBlocks?: readonly string[] }>();
+  constructor(private readonly workspaceId: string) {}
+
+  readonly render: NonNullable<AgentRenderContext["streamingText"]> = (key, source) => {
+    let cached = this.messages.get(key);
+    if (!cached || !source.startsWith(cached.source)) {
+      cached = { source: "", renderer: new StreamingMarkdownRenderer(this.workspaceId), stableHtml: "", tailHtml: "" };
+      this.messages.set(key, cached);
+    }
+    if (source !== cached.source) {
+      const update = cached.renderer.render(source);
+      cached.source = source;
+      cached.stableHtml += update.stableHtmlAddition;
+      cached.tailHtml = update.tailHtml;
+      cached.tailBlocks = update.tailBlocks;
+    }
+    return cached;
+  };
+
+  /** A finalized message gets a persisted identity: don't keep every old parser for a long conversation. */
+  retainLive(items: readonly TranscriptItem[]): void {
+    const live = new Set<string>();
+    const collect = (list: readonly TranscriptItem[]) => { for (const item of list) {
+      if (item.type === "text" && item.live) live.add(item.key);
+      if (item.type === "working") collect(item.items);
+    } };
+    collect(items);
+    for (const key of this.messages.keys()) if (!live.has(key)) this.messages.delete(key);
+  }
+
+  clear(): void { this.messages.clear(); }
+}
 
 export class LiveTranscriptRenderer {
   private readonly cache = new Map<string, { fingerprint: string; html: string }>();
@@ -11,18 +47,26 @@ export class LiveTranscriptRenderer {
     return items.map(item => {
       const children: LiveRegion[] = [];
       let commentaryIslands: string | undefined;
+      let itemIslands: string | undefined;
       if (item.type === "working") {
         const commentary = commentaryContext(ctx);
         const collection = liveCollection(ids.workingItems(commentary, item.key), this.rows(commentary, workingCommentaryItems(item)));
         commentaryIslands = collection.html;
         children.push(collection);
+        // A turn whose items show inline, until it finishes and loads them lazily, keeps them as rows too.
+        if (ctx.inlineWorkingItems && !ctx.readOnly && !workingItemsLoadLazily(ctx, item)) {
+          const items = liveCollection(ids.workingItems(ctx, item.key), this.rows(ctx, item.items));
+          itemIslands = items.html;
+          children.push(items);
+        }
       }
-      const rendering = item.type === "text" && item.live && !(item.final && ctx.jsonFinalAnswers) ? ctx.streamingText!(item.key, item.text) : undefined;
+      // Without a streaming renderer, a live message is re-rendered whole within its own row.
+      const rendering = item.type === "text" && item.live && !(item.final && ctx.jsonFinalAnswers) && ctx.streamingText ? ctx.streamingText(item.key, item.text) : undefined;
       const key = ids.item(ctx, item.key);
       const fingerprint = item.type === "working" ? undefined : JSON.stringify(rendering ? { ...item, text: "" } : item);
       const cached = this.cache.get(key);
       const html = fingerprint !== undefined && cached?.fingerprint === fingerprint ? cached.html
-        : item.type === "working" && commentaryIslands !== undefined ? renderWorkingSection(ctx, item, commentaryIslands)
+        : item.type === "working" && commentaryIslands !== undefined ? renderWorkingSection(ctx, item, commentaryIslands, itemIslands)
         : renderTranscriptItem(rendering ? { ...ctx, streamingText: () => ({ stableHtml: "", tailHtml: "" }) } : ctx, item);
       if (fingerprint !== undefined) this.cache.set(key, { fingerprint, html });
       if (rendering) children.push(
@@ -34,7 +78,12 @@ export class LiveTranscriptRenderer {
   }
 
   renderTranscript(ctx: AgentRenderContext, items: TranscriptItem[], modelContext: AgentModelContextView): LiveRegion {
-    const region = liveCollection(ids.transcript(ctx), [{ id: `${ids.transcript(ctx)}_context`, html: renderModelContextEntries(ctx, modelContext) }, ...this.rows(ctx, items)]);
+    return this.renderRows(ctx, items, renderModelContextEntries(ctx, modelContext));
+  }
+
+  /** A transcript whose rows are regions of their own, after `contextHtml` (what the model was given). */
+  renderRows(ctx: AgentRenderContext, items: readonly TranscriptItem[], contextHtml: string): LiveRegion {
+    const region = liveCollection(ids.transcript(ctx), [{ id: `${ids.transcript(ctx)}_context`, html: contextHtml }, ...this.rows(ctx, items)]);
     // Notices are browser-owned ephemeral messages, never snapshot state.
     region.html += this.noticesMount(ctx);
     return region;
