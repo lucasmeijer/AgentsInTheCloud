@@ -9,7 +9,7 @@ export interface CableSubscriptionOptions {
   /** Runs when a previously ready subscription loses its Cable connection. */
   onDisconnected?: () => void;
   onRejected?: (reason: string) => void;
-  /** The server-rendered element this subscription continues. Its shown regions go with each subscribe until a snapshot is applied; a reconnect then gets a full snapshot. */
+  /** The server-rendered element this subscription continues. Its shown regions, and those applied since, go with each subscribe, so snapshots omit regions the page still shows. */
   shownIn?: Element;
 }
 

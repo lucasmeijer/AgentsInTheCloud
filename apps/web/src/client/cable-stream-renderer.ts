@@ -7,7 +7,7 @@ let delivery = Promise.resolve();
 
 /** One application queue, not just a receipt-time lease check. Parent mounts and
  * their children are applied in wire order, with no deferred Turbo repaint race. */
-export const renderCableStreams: CableStreamRenderer = (html, isCurrent, onApplied) => {
+export const renderCableStreams: CableStreamRenderer = (html, isCurrent, onApplied, onRegion) => {
   delivery = delivery.then(async () => {
     if (!isCurrent()) return;
     const template = document.createElement("template");
@@ -38,6 +38,9 @@ export const renderCableStreams: CableStreamRenderer = (html, isCurrent, onAppli
       const action = StreamActions[stream.getAttribute("action")!];
       if (!action) throw new Error(`Unknown live action: ${stream.getAttribute("action")}`);
       await action.call(stream);
+      // A stream that changes part of a region names it; only a region's last stream carries its digest.
+      const region = stream.getAttribute("region") ?? stream.getAttribute("target");
+      if (region) onRegion(region, stream.getAttribute("digest") ?? undefined);
     }
     if (!isCurrent()) return;
     document.querySelectorAll("[data-controller~='workspace-presentation']").forEach(element => element.dispatchEvent(new Event("live:structure")));

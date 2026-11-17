@@ -98,7 +98,7 @@ export interface WebAppDeps {
 export interface WebApp {
   fetch(request: Request): Promise<Response>;
   invalidateWorkspace(workspaceId: string): void;
-  subscribeShell(listener: (html: string) => void): Promise<import("@agents-in-the-cloud/shared").CableChannelSubscription>;
+  subscribeShell(listener: (html: string) => void, shown?: LiveRegionDigests): Promise<import("@agents-in-the-cloud/shared").CableChannelSubscription>;
   subscribeSurface(identifier: CableIdentifier, listener: (html: string) => void, shown?: LiveRegionDigests): Promise<import("@agents-in-the-cloud/shared").CableChannelSubscription>;
   deleteCurrentWorkspaceFromAgent(workspaceId: string, force: boolean): Promise<DeleteCurrentWorkspaceResult>;
   resumeWorkspaceDeletions(): void;
@@ -1317,7 +1317,7 @@ export function createWebApp(deps: WebAppDeps): WebApp {
   }
 
   return {
-    subscribeShell: listener => shell.subscribe(listener),
+    subscribeShell: (listener, shown) => shell.subscribe(listener, shown),
     subscribeSurface,
     invalidateWorkspace,
     deleteCurrentWorkspaceFromAgent,

@@ -19,14 +19,45 @@ type DesiredSubscription = {
   leases: Set<SubscriptionLease>;
   status: "pending" | "ready" | "rejected";
   subscriptionId?: string;
-  /** Until a snapshot is applied, the page still shows this element's server render. */
-  shownIn?: Element;
 };
 
-export type CableStreamRenderer = (html: string, isCurrent: () => boolean, onApplied: () => void) => void;
+/** A live region the page shows: the element it was applied to, and the digest of its markup. */
+type ShownRegion = { element: WeakRef<Element>; digest: string };
+
+export type CableStreamRenderer = (html: string, isCurrent: () => boolean, onApplied: () => void, onRegion: (target: string, digest: string | undefined) => void) => void;
 
 export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRenderer): AgentsInTheCloudCableClient {
   const desired = new Map<string, DesiredSubscription>();
+  // What each channel's regions on the page show, kept across unsubscribing so that subscribing
+  // again (switching back to a workspace, reconnecting) only receives regions that changed.
+  const shownRegions = new Map<string, Map<string, ShownRegion>>();
+
+  /** Subscriptions to one channel that differ only in parameters, like a workspace surface's selection, render the same regions. */
+  function shownRegionsKey(identifier: CableIdentifier): string {
+    return serializeCableIdentifier(identifier.channel === "module" ? { ...identifier, params: {} } : identifier);
+  }
+
+  function showRegion(identifier: CableIdentifier, target: string, digest: string | undefined): void {
+    const key = shownRegionsKey(identifier);
+    let regions = shownRegions.get(key);
+    const element = document.getElementById(target);
+    if (!digest || !element) { regions?.delete(target); return; }
+    if (!regions) shownRegions.set(key, regions = new Map());
+    regions.set(target, { element: new WeakRef(element), digest });
+  }
+
+  /** Regions still in the page as they were applied: a target whose element was replaced or removed shows something else. */
+  function shownDigests(identifier: CableIdentifier): Record<string, string> | undefined {
+    const regions = shownRegions.get(shownRegionsKey(identifier));
+    if (!regions) return undefined;
+    const digests: Record<string, string> = {};
+    for (const [target, region] of regions) {
+      const element = region.element.deref();
+      if (element?.isConnected && document.getElementById(target) === element) digests[target] = region.digest;
+      else regions.delete(target);
+    }
+    return Object.keys(digests).length ? digests : undefined;
+  }
   const delays = [100, 250, 500, 1000, 2000, 5000];
   let socket: WebSocket | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -56,8 +87,8 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
     subscription.subscriptionId = subscriptionId;
     changed();
     const message: Extract<CableClientMessage, { command: "subscribe" }> = { command: "subscribe", identifier: subscription.identifier, subscriptionId };
-    const shown = subscription.shownIn?.getAttribute(liveShownAttribute);
-    if (shown) message.shown = Value.Parse(liveRegionDigestsSchema, JSON.parse(shown));
+    const shown = shownDigests(subscription.identifier);
+    if (shown) message.shown = shown;
     sendRaw(message);
   }
 
@@ -89,6 +120,12 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
     }
   }
 
+  /** Applies a subscription's streams while it stays current, noting the regions they show. */
+  function render(html: string, message: { identifier: CableIdentifier; subscriptionId: string }, subscription: DesiredSubscription, onApplied: () => void): void {
+    const isCurrent = () => matchingSubscription(message.identifier, message.subscriptionId) === subscription;
+    renderStreams(html, isCurrent, onApplied, (target, digest) => showRegion(message.identifier, target, digest));
+  }
+
   function handleMessage(source: WebSocket, event: MessageEvent): void {
     if (socket !== source) return;
     lastMessageAt = Date.now();
@@ -102,17 +139,14 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
       case "confirm_subscription": {
         const subscription = matchingSubscription(message.identifier, message.subscriptionId);
         if (!subscription) break;
-        const isCurrent = () => matchingSubscription(message.identifier, message.subscriptionId) === subscription;
         const applied = () => {
-          if (!isCurrent()) return;
+          if (matchingSubscription(message.identifier, message.subscriptionId) !== subscription) return;
           subscription.status = "ready";
-          subscription.shownIn?.removeAttribute(liveShownAttribute);
-          subscription.shownIn = undefined;
           if ([...desired.values()].every(item => item.status !== "pending")) recovering = false;
           changed();
           for (const lease of subscription.leases) lease.options?.onReady?.();
         };
-        if (message.html) renderStreams(message.html, isCurrent, applied);
+        if (message.html) render(message.html, message, subscription, applied);
         else applied();
         break;
       }
@@ -129,7 +163,7 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
         break;
       case "turbo_stream": {
         const subscription = matchingSubscription(message.identifier, message.subscriptionId);
-        if (subscription) renderStreams(message.html, () => matchingSubscription(message.identifier, message.subscriptionId) === subscription, () => {});
+        if (subscription) render(message.html, message, subscription, () => {});
         break;
       }
       case "ping":
@@ -178,9 +212,15 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
     },
     subscribe(identifier, options) {
       const key = serializeCableIdentifier(identifier);
+      const shownIn = options?.shownIn;
+      const shown = shownIn?.getAttribute(liveShownAttribute);
+      if (shownIn && shown) {
+        for (const [target, digest] of Object.entries(Value.Parse(liveRegionDigestsSchema, JSON.parse(shown)))) showRegion(identifier, target, digest);
+        shownIn.removeAttribute(liveShownAttribute);
+      }
       let subscription = desired.get(key);
       if (!subscription) {
-        subscription = { identifier, leases: new Set(), status: "pending", shownIn: options?.shownIn };
+        subscription = { identifier, leases: new Set(), status: "pending" };
         desired.set(key, subscription);
         closingForPageHide = false;
         connect();

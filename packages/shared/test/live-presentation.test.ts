@@ -98,19 +98,34 @@ test("a mount that only now becomes permanent is emptied by the morph, so its ch
   expect(live.flush()).toContain('target="items"');
 });
 
+test("streams carry their region's digest, so a client subscribing again only receives regions that changed since", () => {
+  let rows = ["<p>First</p>"];
+  const live = published(() => [transcript(rows), { target: "actions", html: "<button>Send</button>" }]);
+  rows = ["<p>First</p>", "<p>Second</p>"];
+  const applied = Object.fromEntries([...(live.sent[0]! + live.flush()).matchAll(/target="([^"]+)" (?:method="morph" )?digest="([^"]+)"/g)].map(match => [match[1]!, match[2]!]));
+  expect(Object.keys(applied).sort()).toEqual(["actions", "row-0", "row-1", "transcript"]);
+
+  const again: string[] = [];
+  createLivePresentation(() => [transcript(rows), { target: "actions", html: "<button>Stop</button>" }]).subscribe(html => again.push(html), applied);
+  expect(again[0]).toContain('target="actions"');
+  expect(again[0]).not.toContain('target="transcript"');
+  expect(again[0]).not.toContain('target="row-');
+});
+
 test("a block region resends only the blocks that changed, by position", () => {
   let blocks = ["<h1>Title</h1>", "<p>First</p>", "<ul><li>One</li></ul>"];
   const live = published(() => [{ target: "tail", html: blocks.join(""), blocks }]);
   blocks = ["<h1>Title</h1>", "<p>First</p>", "<ul><li>One</li><li>Two</li></ul>", "<p>Next</p>"];
   const grown = live.flush();
   expect(grown).not.toContain("Title");
-  expect(grown).toContain('action="replace" targets="[id=&quot;tail&quot;] &gt; :nth-child(3)" method="morph"');
-  expect(grown).toContain('action="append" target="tail"><template><p>Next</p>');
+  expect(grown).toContain('action="replace" targets="[id=&quot;tail&quot;] &gt; :nth-child(3)" method="morph" region="tail"');
+  expect(grown).toContain('action="append" target="tail" digest=');
+  expect(grown).toContain("<p>Next</p>");
 
   blocks = ["<h1>Title</h1>", "<p>First, edited</p>"];
   const shrunk = live.flush();
   expect(shrunk).toContain(":nth-child(2)");
-  expect(shrunk).toContain('action="remove" targets="[id=&quot;tail&quot;] &gt; :nth-child(n+3)"');
+  expect(shrunk).toContain('action="remove" targets="[id=&quot;tail&quot;] &gt; :nth-child(n+3)" region="tail" digest=');
 
   blocks = ["<p>Elsewhere</p>"];
   expect(live.flush()).toContain('action="update" target="tail" method="morph"');

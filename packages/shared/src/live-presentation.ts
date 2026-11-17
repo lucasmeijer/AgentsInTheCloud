@@ -20,7 +20,8 @@ export interface LiveSubscription {
   unsubscribe(): void;
 }
 
-/** Digests of the regions a server-rendered page shows, by target. */
+/** Digests of the regions a page shows, by target: placed by the server render, or applied from
+ * streams since. A subscription's first snapshot omits regions whose digest is still current. */
 export const liveRegionDigestsSchema = Type.Record(Type.String(), Type.String());
 export type LiveRegionDigests = Readonly<Static<typeof liveRegionDigestsSchema>>;
 
@@ -84,20 +85,21 @@ function sentRegion(region: LiveRegion, parent: string | undefined): SentRegion 
 }
 
 /** Streams that bring a block region from `before` to `after`: changed blocks morph in place,
- * then extra ones go and new ones follow. */
-function blockStreams(target: string, before: readonly string[], after: readonly string[]): string | undefined {
+ * then extra ones go and new ones follow. Only the last carries the region's digest, so a
+ * client that stops partway doesn't claim to show the result. */
+function blockStreams(target: string, before: readonly string[], after: readonly string[], digest: string): string | undefined {
   let same = 0;
   while (same < before.length && same < after.length && before[same] === after[same]) same++;
   // With nothing in common (say, the first blocks moved elsewhere), one update is smaller.
   if (same === 0) return undefined;
   const children = (selector: string) => `[id="${target}"] > ${selector}`;
-  let html = "";
+  const streams: ((digest?: string) => string)[] = [];
   for (let index = same; index < Math.min(before.length, after.length); index++) {
-    html += turboStream("replace", children(`:nth-child(${index + 1})`), after[index], { targets: true, method: "morph" });
+    streams.push(digest => turboStream("replace", children(`:nth-child(${index + 1})`), after[index], { targets: true, method: "morph", region: target, digest }));
   }
-  if (after.length < before.length) html += turboStream("remove", children(`:nth-child(n+${after.length + 1})`), "", { targets: true });
-  if (after.length > before.length) html += turboStream("append", target, after.slice(before.length).join(""));
-  return html;
+  if (after.length < before.length) streams.push(digest => turboStream("remove", children(`:nth-child(n+${after.length + 1})`), "", { targets: true, region: target, digest }));
+  if (after.length > before.length) streams.push(digest => turboStream("append", target, after.slice(before.length).join(""), { digest }));
+  return streams.map((stream, index) => stream(index === streams.length - 1 ? digest : undefined)).join("");
 }
 
 /** `forced` regions are sent even when unchanged: the client lacks them or just lost them.
@@ -115,8 +117,9 @@ function regionStreams(regions: readonly LiveRegion[], previous: Map<string, Sen
     if (forced && shown[region.target] === liveRegionDigest(region.html)) previous.set(region.target, sentRegion(region, parent));
     else if (changed) {
       const append = !forced && !moved && region.appendOnly && before !== undefined && region.html.startsWith(before.html);
-      const blocks = !forced && !moved && region.blocks && before?.blocks && (region.action ?? "update") === "update" ? blockStreams(region.target, before.blocks, region.blocks) : undefined;
-      html += blocks ?? turboStream(append ? "append" : region.action ?? "update", region.target, append ? region.html.slice(before.html.length) : region.html, append || region.morph === false ? {} : { method: "morph" });
+      const digest = liveRegionDigest(region.html);
+      const blocks = !forced && !moved && region.blocks && before?.blocks && (region.action ?? "update") === "update" ? blockStreams(region.target, before.blocks, region.blocks, digest) : undefined;
+      html += blocks ?? turboStream(append ? "append" : region.action ?? "update", region.target, append ? region.html.slice(before.html.length) : region.html, append || region.morph === false ? { digest } : { method: "morph", digest });
       previous.set(region.target, sentRegion(region, parent));
       sent = true;
     }
