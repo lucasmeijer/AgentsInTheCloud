@@ -144,7 +144,6 @@ test("historical Diff endpoints handle renames, deletions, binary, large, mode-o
   await writeFile(join(root, "large.txt"), "line\n".repeat(5_001));
   await writeFile(join(root, "empty.txt"), "");
   await git(localRepository(root), ["update-index", "--chmod=+x", "mode.txt"]);
-  // Commit the staged mode change without resetting it through `git add`.
   await git(localRepository(root), ["add", "src", "removed.txt", "binary.bin", "large.txt", "empty.txt"]);
   await git(localRepository(root), ["commit", "-m", "Special files"]);
   const head = (await git(localRepository(root), ["rev-parse", "HEAD"])).toString().trim();
@@ -206,7 +205,6 @@ test("staged and working nodes compare the captured index independently without 
   expect(explicitStaged.endpoints).toEqual({ target: stagedChanges, base: head });
   expect(explicitStaged.stats).toEqual(staged.stats);
   expect(await readFile(join(root, ".git/index"))).toEqual(indexBytes);
-  // Moving the real index does not change this history's staged endpoint.
   await git(localRepository(root), ["add", "file.txt"]);
   const pinned = await captureChanges(localRepository(root), staged.endpoints, all.history);
   expect(pinned.files.get("file.txt")!.newContents).toBe("staged\n");
@@ -297,7 +295,6 @@ test("upstream membership marks only HEAD-reachable commits absent from the actu
   expect(records.get(base)!.ahead).toBe(false);
   expect(records.get(local)!.ahead).toBe(true);
   expect(records.get(side)!.ahead).toBe(false);
-  // Branch names are labels on pinned object IDs; advancing refs leaves this history fixed.
   await git(localRepository(root), ["update-ref", "refs/remotes/origin/main", local]);
   expect(snapshot.history.upstreamId).toBe(base);
   expect(snapshot.history.references.find(ref => ref.name === "origin/main")!.id).toBe(base);

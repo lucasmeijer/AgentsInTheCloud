@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 import { PopupPosition } from "../popup/popup-position.ts";
 

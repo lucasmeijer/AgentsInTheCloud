@@ -3,7 +3,6 @@ import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Subprocess mocks keep Docker and module replacement out of concurrent tests.
 for (const scenario of ["new", "warm", "stopped", "upgrade", "unavailable", "build-failed", "publish-failed"] as const) {
   test(`repository builder: ${scenario}`, async () => {
     const directory = await mkdtemp(join(tmpdir(), "repository-builder-unit-"));
@@ -64,7 +63,7 @@ for (const scenario of ["new", "warm", "stopped", "upgrade", "unavailable", "bui
       expect(result.calls.filter(args => args[0] === "ps")).toHaveLength(1);
       if (["warm", "stopped"].includes(scenario)) {
         expect(readConfig).toBeUndefined();
-        expect(await readdir(control)).toEqual([]); // existing configuration isn't rewritten
+        expect(await readdir(control)).toEqual([]);
       } else {
         expect(readConfig).toEqual(["run", "--rm", "--network=none", "--entrypoint", "cat", runtimeImage, "/etc/docker/daemon.json"]);
         const daemon = JSON.parse(await readFile(join(control, "daemon.json"), "utf8"));

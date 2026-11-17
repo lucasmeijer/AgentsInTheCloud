@@ -85,7 +85,6 @@ export async function modelThinkingLevels(ref: ModelRef) {
   return model ? getSupportedThinkingLevels(model) : [];
 }
 
-/** Render the actual launch values, independent of enabled models and remembered preferences. */
 export async function renderReadOnlyLaunchModelSettings(modelValue: string | undefined, thinkingLevel: string | undefined): Promise<string> {
   const ref = modelValue ? parseModelRef(modelValue) : undefined;
   const model = ref ? (await createPiModelRuntime()).getModel(ref.provider, ref.id) : undefined;

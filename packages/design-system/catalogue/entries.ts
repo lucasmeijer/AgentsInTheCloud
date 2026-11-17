@@ -32,7 +32,6 @@ export interface CatalogueEntry {
   contract: string;
   imports?: Record<string, string>;
   sources?: string[];
-  /** Compare the same specimen with and without the popular group marker. */
   compareButtonSizes?: boolean;
   examples: { title: string; render: (idSuffix?: string) => string }[];
 }

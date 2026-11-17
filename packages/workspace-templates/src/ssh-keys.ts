@@ -77,7 +77,6 @@ export async function revealWorkspaceTemplateSshKeys(scope: ConfigurationScope, 
   return await Promise.all((configuration.sshKeys ?? []).map((key) => decryptWorkspaceTemplateValue(key.projectId, key.id, key.encryptedPrivateKey, keyFile)));
 }
 
-/** Global keys and the template's own; an SSH agent offers all of them. */
 export async function revealEffectiveSshKeys(workspaceTemplateId?: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<string[]> {
   return (await Promise.all(workspaceScopes(workspaceTemplateId).map((scope) => revealWorkspaceTemplateSshKeys(scope, file, keyFile)))).flat();
 }

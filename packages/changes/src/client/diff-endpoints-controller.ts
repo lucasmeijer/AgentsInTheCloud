@@ -83,7 +83,6 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
         shell.dataset.changesDiffEndpointsOpenValue = String(this.isOpen);
         shell.dataset.changesLayout = this.element.dataset.changesLayout ?? "unified";
         shell.dataset.changesWrap = this.element.dataset.changesWrap ?? "false";
-        // A saved code edit hands its file disclosure and scroll position to the refreshed Changes.
         if (this.element.dataset.changesFileCollapse !== undefined) shell.dataset.changesFileCollapse = this.element.dataset.changesFileCollapse;
         if (this.element.dataset.changesScroll !== undefined) shell.dataset.changesScroll = this.element.dataset.changesScroll;
       }
@@ -139,7 +138,6 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
       const direction = event.key === "ArrowUp" ? -1 : 1;
       this.setHistoryHeight(this.pickerTarget.getBoundingClientRect().height + direction * (event.shiftKey ? 80 : 24));
     }
-    // The stylesheet keeps room for the comparison below.
     private setHistoryHeight(height: number): void {
       const clamped = Math.max(minimumHistoryHeight, Math.round(height));
       this.element.style.setProperty("--changes-history-height", `${clamped}px`);
@@ -270,7 +268,6 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
     }
 
     refresh(): void { this.withEditGuard(() => { void this.generate("refresh"); }); }
-    /** Showing Changes refreshes it, but never asks to leave an open code edit; saving or discarding refreshes then. */
     refreshWhenShown(): void { if (!this.element.querySelector("[data-code-editing]")) void this.generate("refresh", true); }
     retry(): void {
       const operation = this.lastOperation;
@@ -278,7 +275,6 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
       else this.withEditGuard(() => { void this.generate(operation); });
     }
     dismissError(): void { this.errorTarget.hidden = true; }
-    /** `shown`: Changes refreshes because it was shown, not because you asked; see the refresh route. */
     private async generate(operation: "compare" | "refresh", shown = false): Promise<void> {
       this.request?.abort();
       if (operation === "refresh") {
@@ -295,7 +291,6 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
       data.set("history", this.historyIdValue);
       data.set("client", this.client);
       data.set("sequence", String(++this.sequence));
-      // Keep the existing comparison request fields at the HTTP boundary.
       data.set("end", this.endpoints!.target);
       if (this.endpoints!.base !== undefined) data.set("start", this.endpoints!.base ?? "");
       data.set("pickerOpen", String(this.isOpen));
@@ -304,7 +299,6 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
         const result = await fetch(`/workspaces/${encodeURIComponent(this.workspaceIdValue)}/changes/${operation}`, { method: "POST", body: data, signal: request.signal, headers: { Accept: "text/vnd.turbo-stream.html" } });
         const html = await result.text();
         if (request.signal.aborted) return;
-        // A later selection, maybe from another browser, superseded this one. Point the history back at the shown comparison.
         if (result.status === 204) {
           this.endpoints = this.comparison!.endpoints;
           this.anchor = this.endpoints.target;
@@ -312,11 +306,9 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
           return;
         }
         const contentType = result.headers.get("Content-Type") ?? "";
-        // Only plain-text bodies are readable messages; an HTML error page would show up as markup.
         if (!contentType.includes("text/vnd.turbo-stream.html")) throw new Error(contentType.startsWith("text/plain") && html ? html : `The server responded with ${result.status}.`);
         this.failed = !result.ok;
         window.Turbo!.renderStreamMessage(html);
-        // Turbo inserts the stream synchronously; rendering its targets occurs in the next task.
         await new Promise(resolve => setTimeout(resolve, 0));
       } catch (error) {
         if (request.signal.aborted) return;
@@ -339,7 +331,6 @@ export function createDiffEndpointsController(Controller: WorkspaceClientControl
         const result = await fetch(`/workspaces/${encodeURIComponent(this.workspaceIdValue)}/changes/history?${query}`, { signal: request.signal, headers: { Accept: "text/vnd.turbo-stream.html" } });
         const html = await result.text();
         if (request.signal.aborted) return;
-        // This history is outdated: an open code edit kept a refresh out. Refresh; it shows the first page of the new history.
         if (result.status === 409) {
           this.moreTarget.disabled = false;
           this.refresh();

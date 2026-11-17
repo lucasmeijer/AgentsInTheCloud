@@ -3,7 +3,6 @@ import { execWorkspaceShell } from "@agents-in-the-cloud/workspace";
 import { createPiModelRuntime, getEnabledModels } from "@agents-in-the-cloud/llm/server";
 import { createPiCliConfiguration } from "./pi-cli-bridge.ts";
 
-/** Pi's standard config location is managed by AgentsInTheCloud; other Pi settings are preserved. */
 export async function installPiCliConfiguration(workspaceId: string): Promise<void> {
   const configuration = await createPiCliConfiguration(await createPiModelRuntime(), await getEnabledModels());
   const script = `

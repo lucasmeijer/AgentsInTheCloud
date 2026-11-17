@@ -99,7 +99,6 @@ export async function ingressErrorPage(error: Error, workspaceName: string): Pro
   }
 
   const css = await (styles ??= inlineDesignSystemCss());
-  // An empty reference navigates to this document’s URL, including its query.
   const retry = actionLinkHtml({ href: "", variant: "secondary", content: { kind: "caption", caption: "Retry" } });
   return response(`<!doctype html><html lang="en" data-theme="nord"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)} · AgentsInTheCloud</title><style>${css}
 body {

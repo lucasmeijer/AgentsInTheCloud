@@ -30,7 +30,6 @@ const subscriptionSchema = Type.Object({
   keys: Type.Object({ p256dh: Type.String(), auth: Type.String() }),
 });
 
-/** Browser input must not turn the push sender into an arbitrary HTTP proxy. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Browser subscription JSON is validated at this input boundary.
 export function parsePushSubscription(value: unknown): PushSubscription {
   if (!Value.Check(subscriptionSchema, value)) throw new Error("Invalid push subscription");
@@ -50,7 +49,6 @@ export async function sendTurnNotification(ctx: AgentRenderContext, subscription
   const vapid = await vapidKeys();
   const title = await getWorkspaceTitle(ctx.workspaceId);
   const init = title ? undefined : await getWorkspaceInit(ctx.workspaceId);
-  // Use the same display name as the Workspace sidebar, including unnamed workspaces.
   const workspaceName = title || (isGitWorkspaceTemplateInit(init) ? init.name : undefined) || `Workspace ${ctx.workspaceId}`;
   try {
     await webPush.sendNotification(subscription, JSON.stringify({

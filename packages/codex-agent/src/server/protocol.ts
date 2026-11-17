@@ -1,7 +1,6 @@
 import type { JsonValue } from "@agents-in-the-cloud/core";
 import type * as Protocol from "../protocol.ts";
 
-// The executable and generated types are pinned together. Experimental catalog APIs are negotiated during initialize.
 export const codexVersion = "0.160.1";
 export interface Requests {
   initialize: [Protocol.InitializeParams, Protocol.InitializeResponse];

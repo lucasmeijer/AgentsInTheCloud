@@ -29,7 +29,6 @@ describe("transcript rendering", () => {
     let rendered = 0;
     const pane = await renderAgentPane(ctx, agent, { regions: () => { rendered++; return regions; } });
     expect(pane.html).not.toContain("Settled prompt");
-    // Only a page render needs the live content.
     expect(rendered).toBe(0);
     expect(pane.live!.subscriberId).toBe(ids.pane(ctx));
     const placed = placeLiveRegions(pane.html, pane.live!.regions(), pane.live!.subscriberId);

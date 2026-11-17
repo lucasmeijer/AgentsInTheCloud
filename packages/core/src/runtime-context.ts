@@ -2,11 +2,8 @@ import { homedir, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 export interface AgentsInTheCloudRuntimeContext {
-  /** Path as seen by the AgentsInTheCloud process itself. Use this for normal AgentsInTheCloud file IO. */
   agentsInTheCloudDataDir: string;
-  /** Same directory as seen by the Docker daemon. Use this for Docker bind mount sources. */
   dockerHostAgentsInTheCloudDataDir: string;
-  /** Host-side Docker bridge IP used for AgentsInTheCloud/workspace traffic. */
   dockerBridgeHost: string;
 }
 

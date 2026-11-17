@@ -11,7 +11,6 @@ function totals(stats: ReturnType<typeof parseGitNumstat>): ChangesNodeStats {
   return totals;
 }
 
-/** Each synthetic row describes its own layer, independently of the selected comparison. */
 export async function captureSyntheticStats(root: Repository, headTree: string, indexTree: string, files: ChangesFileSummary[]): Promise<{ staged: ChangesNodeStats; working: ChangesNodeStats }> {
   const [staged, working, untracked] = await Promise.all([
     git(root, ["diff", "--numstat", "-z", "-M", headTree, indexTree, "--"]),

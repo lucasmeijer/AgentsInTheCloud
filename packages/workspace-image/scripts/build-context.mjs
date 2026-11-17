@@ -48,7 +48,6 @@ await rm(outDir, { recursive: true, force: true });
 await mkdir(join(outDir, "files"), { recursive: true });
 
 const hash = createHash("sha256");
-// v14 embeds the resulting signature as an image label.
 hash.update("agents-in-the-cloud-workspace-image-v14\n");
 const env = {};
 const moduleNames = [];
@@ -116,7 +115,6 @@ for (const module of modules) {
   appendCopies(module.copyInstructions);
   for (const script of module.runInstructions) dockerfile += `RUN ${dockerEscapeRun(script)}\n\n`;
 }
-// Module installation must not change the original home. Template-only defaults are copied later.
 dockerfile += `RUN diff -r --no-dereference /opt/agents-in-the-cloud/home-defaults /home/agents-in-the-cloud\n`;
 if (finalCopies.length) dockerfile += "# Files independent of module setup\n";
 appendCopies(finalCopies);
@@ -130,7 +128,6 @@ dockerfile += `COPY runtime-units/ /usr/lib/systemd/system/\n`;
 dockerfile += `RUN python3 -c 'import json; p="/etc/docker/daemon.json"; c=json.load(open(p)); c["hosts"]=["fd://"]; json.dump(c,open(p,"w"))'\n`;
 dockerfile += `RUN mkdir -p /etc/agents-in-the-cloud && printf "disabled\\n\\n" > /etc/agents-in-the-cloud/docker-support\n`;
 dockerfile += `RUN mkdir -p /.agents-in-the-cloud && printf "systemctl start agents-in-the-cloud-tmux.service\\n" > /.agents-in-the-cloud/init.sh\n`;
-// binfmt registrations belong to the host kernel; workspace shutdown must not unregister them.
 dockerfile += `RUN systemctl mask systemd-binfmt.service\n`;
 dockerfile += `ENTRYPOINT ["/usr/local/bin/agents-in-the-cloud-workspace-init"]\nCMD []\nWORKDIR /work\n`;
 await writeFile(join(outDir, "Dockerfile"), dockerfile);

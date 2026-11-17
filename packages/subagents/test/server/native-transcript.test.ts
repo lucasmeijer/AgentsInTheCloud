@@ -24,7 +24,6 @@ test("a message links to the call that gave its sender its latest task", async (
         ["incoming", receipt("hello", "sibling", "message", 6)],
       ] as const) await tx.appendEntry(communicationEntry, conversation.id, { data: { direction, receipt: data } });
     }, context);
-    // A subagent it gave work to sends from one of its background activities.
     expect(nativeDelegationTranscript(await conversation.context(context)).messages.map(message => [message.key, message.dispatchedByToolCallId, message.senderActivityKey])).toEqual([
       ["progress", "call_spawn", "child"], ["done", "call_followup", "child"], ["hello", undefined, undefined],
     ]);

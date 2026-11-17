@@ -5,7 +5,6 @@ import { response } from "@agents-in-the-cloud/shared/http";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { LiveDoc } from "@earendil-works/pi-durable";
 
-/** Where a script's one-shot agent's conversation opens, over the pane of the Agent whose transcript links to it. */
 export function oneShotAgentPath(ctx: Pick<AgentRenderContext, "workspaceId" | "agentId">, oneShotId: string): string {
   return `/workspaces/${encodeURIComponent(ctx.workspaceId)}/agents/${encodeURIComponent(ctx.agentId)}/one-shot/${encodeURIComponent(oneShotId)}`;
 }
@@ -23,7 +22,6 @@ export async function handleOneShotAgentRequest(request: Request, url: URL): Pro
   const records = await owner.catalog();
   const record = records.find(record => record.agentId === decodeURIComponent(match[3]!) && isOneShotAgent(record));
   if (!record) return new Response("One-shot agent not found", { status: 404 });
-  // A subagent's transcript links to its own one-shot agents; the page slides over its root Agent's pane.
   const rootId = records.find(item => item.agentId === agentId)?.rootId ?? agentId;
   const live = await owner.harness.snapshot(LiveDoc, record.durableId, context);
   const page: BackgroundActivity = {

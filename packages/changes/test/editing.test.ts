@@ -30,7 +30,7 @@ test("working-tree saves preserve baseline, permissions, Git index, and pinned l
   const snapshot = await captureChanges(repo, { target: workingTree, base: stagedChanges });
   const index = await readFile(join(root, ".git/index"));
   const model = await store.begin("workspace", repo, snapshot, "file.ts");
-  await captureChanges(repo); // A new live snapshot must not invalidate the edit lease.
+  await captureChanges(repo);
   const saved = await store.save("workspace", repo, model.token, "original\nstaged\nedited\n", [], () => {});
   expect(await readFile(join(root, "file.ts"), "utf8")).toBe("original\nstaged\nedited\n");
   expect((await stat(join(root, "file.ts"))).mode & 0o777).toBe(0o755);
@@ -106,7 +106,7 @@ test("LF, CRLF, Unicode, empty files and final newlines round-trip unchanged", a
     expect(diskContents(editorContents(contents), ending)).toBe(contents);
     const { root, repo, store } = await fixture(contents);
     await writeFile(join(root, "file.ts"), contents);
-    await chmod(join(root, "file.ts"), 0o755); // A mode-only change is still a genuine text file.
+    await chmod(join(root, "file.ts"), 0o755);
     const snapshot = await captureChanges(repo);
     const model = await store.begin("workspace", repo, snapshot, "file.ts");
     await store.save("workspace", repo, model.token, editorContents(contents), [], () => {});

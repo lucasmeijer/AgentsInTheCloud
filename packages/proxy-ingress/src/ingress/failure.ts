@@ -14,7 +14,6 @@ export class StoppedWorkspaceError extends Error {
   }
 }
 
-/** The workspace gateway attests that the failure occurred on its connection to the app. */
 export class WorkspaceUpstreamError extends Error {
   constructor(message: string, public readonly port: number) {
     super(message);
@@ -22,7 +21,6 @@ export class WorkspaceUpstreamError extends Error {
   }
 }
 
-/** A transport failure on the AgentsInTheCloud-to-workspace hop, not the app hop. */
 export class WorkspaceConnectionError extends Error {
   constructor(cause: unknown) {
     super(errorMessage(cause), { cause });

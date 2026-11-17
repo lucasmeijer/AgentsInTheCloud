@@ -60,7 +60,6 @@ function savingError(error: WorkspaceHelperError): Error {
   if (error.code === WorkspaceHelperStatus.NOT_FOUND) return new EditableFileError("File not found", 404);
   if (error.code === WorkspaceHelperStatus.FAILED_PRECONDITION) return new EditableFileError("Only regular files can be edited", 422);
   if (error.code === WorkspaceHelperStatus.PERMISSION_DENIED) return new EditableFileError("File is read-only", 403);
-  // Grew past what the editor could have opened, so it changed.
   if (error.code === WorkspaceHelperStatus.RESOURCE_EXHAUSTED) return new EditableFileError("File changed on disk", 409);
   return error;
 }

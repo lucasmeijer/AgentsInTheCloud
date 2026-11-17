@@ -15,7 +15,6 @@ export interface StreamingMarkdownUpdate {
   stableBoundary: number;
   stableHtmlAddition: string;
   tailHtml: string;
-  /** The tail as one element per top-level block, when it renders that way; `tailHtml` joins them. */
   tailBlocks?: string[];
 }
 
@@ -61,7 +60,6 @@ export function streamingMarkdownStableBoundary(source: string): number {
   return boundary;
 }
 
-/** List items, quotes and indented code. */
 const containerLinePattern = /^(?: {4}|\t| {0,3}(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)| {0,3}>)/;
 
 /**
@@ -104,7 +102,6 @@ function nextFence(open: Fence | undefined, line: string): Fence | undefined {
   const marker = match[1]![0];
   if (marker !== "`" && marker !== "~") throw new Error("fence pattern matched an unsupported marker");
   if (!open) {
-    // Backticks are forbidden in backtick-fence info, but legal for tilde fences.
     if (marker === "`" && match[2]!.includes("`")) return undefined;
     return { marker, size: match[1]!.length };
   }
@@ -129,7 +126,6 @@ function isIndependentCompletedBlock(block: string): boolean {
     fence = nextFence(fence, line);
     if (!wasInFence && !fence) {
       math = nextDisplayMath(undefined, line);
-      // Contents of math blocks have no Markdown reference/list semantics.
       if (!/^ {0,3}(\$\$|\\\[)/.test(line)) outsideFenceLines.push(line);
     }
   }
@@ -143,7 +139,6 @@ function isIndependentCompletedBlock(block: string): boolean {
   return !outsideFenceLines.some((line, index) => index > 0 && /^\s*\|?(?:\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/.test(line));
 }
 
-/** Make only a temporary parsing copy of an incomplete mutable tail. */
 export function repairStreamingMarkdownTail(tail: string): string {
   // Markdown already closes fenced blocks at EOF, including inside containers.
   // A synthetic unindented closer can instead open a new root-level code block.
@@ -179,7 +174,6 @@ export function repairStreamingMarkdownTail(tail: string): string {
 function hasUnmatchedInlineBacktick(text: string): boolean {
   let openingSize = 0;
   for (let index = 0; index < text.length;) {
-    // Backslashes escape backticks in prose, but are literal inside code spans.
     if (!openingSize && text[index] === "\\") { index += 2; continue; }
     if (text[index] !== "`") { index++; continue; }
     const start = index;
@@ -199,7 +193,6 @@ export function renderStreamingMarkdownSnapshot(workspaceId: string, source: str
   };
 }
 
-/** Bounded state belonging to one append-only live transcript item. */
 export class StreamingMarkdownRenderer {
   private stableBoundary = 0;
 

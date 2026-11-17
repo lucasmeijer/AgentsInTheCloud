@@ -9,14 +9,12 @@ function settingsPath(): string {
 }
 
 export async function readStoredUpdateChannel(): Promise<UpdateChannel | undefined> {
-  // Retain the serialized field in existing update.json files.
   const { releaseChannel: updateChannel } = await readJsonSettings(settingsPath());
   if (updateChannel === undefined) return undefined;
   if (!Value.Check(updateChannelSchema, updateChannel)) throw new Error("Invalid update settings");
   return updateChannel;
 }
 
-/** System and the installer read these to update from wherever this app's checkout publishes. */
 export async function writeStoredRepositories(): Promise<void> {
   await updateJsonSettings(settingsPath(), (settings) => { settings.appRepository = appRepository; settings.systemRepository = systemRepository; });
 }

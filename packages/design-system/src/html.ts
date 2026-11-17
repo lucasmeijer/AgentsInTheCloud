@@ -2,14 +2,12 @@ import { escapeHtml } from "@agents-in-the-cloud/shared";
 
 export type HtmlContent =
   | { kind: "text"; text: string }
-  /** Trusted, already-escaped HTML. */
   | { kind: "html"; html: string };
 
 export function classNames(...values: Array<string | undefined | false>): string {
   return values.filter(Boolean).join(" ");
 }
 
-/** Components that render their own Stimulus wiring own these attributes; callers pass controllers and actions instead. */
 export const stimulusAttributes = ["data-controller", "data-action"] as const;
 
 export function attributesHtml(value?: string, owned: readonly string[] = []): string {

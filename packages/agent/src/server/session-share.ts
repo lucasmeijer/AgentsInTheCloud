@@ -50,7 +50,6 @@ export function sessionShareDir(shareKey: string, dataDir = getAgentsInTheCloudR
   return join(dataDir, "session-shares", sessionShareKeySlug(shareKey));
 }
 
-/** Publish a complete snapshot while its source may continue receiving turns. */
 export async function publishSessionSnapshot(source: string, target: string): Promise<void> {
   await mkdir(dirname(target), { recursive: true });
   const temporary = `${target}.tmp-${randomUUID()}`;

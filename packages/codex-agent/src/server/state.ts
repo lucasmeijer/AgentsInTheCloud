@@ -5,11 +5,9 @@ import type {
 } from "../protocol.ts";
 import type { CodexNotification } from "./protocol.ts";
 
-/** A projection of Codex's native state. Final item snapshots replace streamed deltas. */
 export class CodexState {
   readonly turns: Turn[] = [];
   readonly completedItems = new Set<string>();
-  /** When items started, in milliseconds. Only live notifications say; Codex's history doesn't. */
   readonly itemStarts = new Map<string, number>();
   private reviewTurnId?: string;
   private readonly reviewWorkerTurns = new Set<string>();

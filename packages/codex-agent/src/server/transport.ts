@@ -5,7 +5,6 @@ import type { CodexNotification } from "./protocol.ts";
 import { CodexRpc } from "./rpc.ts";
 import { codexVersion } from "./protocol.ts";
 
-/** Stdio stays private: no listening port or raw provider credential in a workspace. */
 export async function openCodexTransport(workspaceId: string, home: string, notification: (notification: CodexNotification) => void, failed: (error: Error) => void, mcp: { url: string; token: string }) {
   await resolveWorkspace(workspaceId);
   const executable = `/home/agents-in-the-cloud/.codex-cli/${codexVersion}/node_modules/.bin/codex`;
@@ -20,7 +19,6 @@ export async function openCodexTransport(workspaceId: string, home: string, noti
       stderr = (stderr + stderrDecoder.decode(chunk, { stream: true })).slice(-16000);
     }
     stderr = (stderr + stderrDecoder.decode()).slice(-16000);
-  // A failed call also rejects `exited`, which reports it.
   })().catch(() => {});
   let reported = false;
   const report = (error: Error) => {

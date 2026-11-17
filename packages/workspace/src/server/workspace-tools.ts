@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WorkspaceDockerMount } from "../types.ts";
 
-/** Publish workspace helpers into one read-only directory mount, including nested installations. */
 export async function prepareWorkspaceToolsMount(
   runtime: AgentsInTheCloudRuntimeContext,
   packagesDirectory = fileURLToPath(new URL("../../../", import.meta.url)),
@@ -26,7 +25,6 @@ export async function prepareWorkspaceToolsMount(
       tools.set(tool.name, origin);
     }
   }
-  // Keep the directory inode so running workspaces also see updated tools.
   await mkdir(directory, { recursive: true });
   for (const [name, source] of tools) {
     const target = join(directory, name);

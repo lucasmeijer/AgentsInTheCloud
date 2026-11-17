@@ -15,9 +15,7 @@ export function terminalSocketDimensions(url: URL) {
   return { cols: dimension("cols", 80), rows: dimension("rows", 24) };
 }
 
-/** Own one attachment per socket, including final-output ordering and detach. */
 export function createObservableTerminalSocket(options: ObservableTerminalAttachOptions, events: {
-  /** Whether the terminal has ended for good, checked on connecting and whenever an attachment exits. */
   ended?: () => Promise<boolean>;
   onProgress?: (progress: ObservableTerminalProgressMessage) => void;
   onClose?: () => void;

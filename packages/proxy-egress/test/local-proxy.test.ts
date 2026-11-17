@@ -21,13 +21,11 @@ async function listen(server: net.Server) {
   return (server.address() as net.AddressInfo).port;
 }
 async function localRelay(socketPath: string): Promise<number> {
-  // Use the workspace's transport, with an ephemeral port reported by socat.
   const child = spawn("socat", ["-d", "-d", "TCP4-LISTEN:0,bind=127.0.0.1,reuseaddr,fork", `UNIX-CONNECT:${socketPath}`], {
     stdio: ["ignore", "ignore", "pipe"], detached: true,
   });
   const closed = new Promise<void>(resolve => child.once("close", () => resolve()));
   cleanup.push(async () => {
-    // Stop the listener and every connection child, not just the parent.
     if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid!, "SIGTERM");
     await closed;
   });
@@ -120,7 +118,6 @@ test("workspace socket controls HTTP and HTTPS identity, policy and reconnection
     return fetch(target, { ...init, proxy: "", tls: { ...init.tls, ca: caPem } });
   };
   const start = (id: string) => startWorkspaceEgressProxy({ socketPath: join(directory, id, "egress.sock"), ca, getContext: async () => contexts.get(id)!, upstreamFetch,
-    // Like upstreamFetch, map logical HTTPS port 443 to the local TLS fixture.
     upstreamConnect: (port, hostname) => net.connect(port === 443 ? httpsPort : port, hostname),
   });
   let alpha = await start("alpha");
@@ -156,7 +153,6 @@ test("workspace socket controls HTTP and HTTPS identity, policy and reconnection
     expect((await proxyRequest(alphaPort, "https://127.0.0.2/private", { headers: zigHeaders })).status).toBe(403);
     expect(received.length).toBe(beforeDenied);
   }
-  // Only the default Zig std.http signature selects the compatibility path.
   for (const agent of ["curl/8.0.0", "zig/0.16.0", "zig/ (std.http)", "zig/0.16.0 (std.http) custom", "not-zig/0.16.0 (std.http)"]) {
     const unaffected = await tunnel(alphaPort, "localhost:443", `User-Agent: ${agent}\r\n`);
     expect(unaffected.response).toContain("200 Connection Established");
@@ -175,7 +171,6 @@ test("workspace socket controls HTTP and HTTPS identity, policy and reconnection
   secure.destroy();
   expect(response).toContain("destination response");
   expect(received.at(-1)).toEqual({ key: "alpha-secret", authorization: "Bearer destination-authorization", proxyAuthorization: undefined, body: "" });
-  // Hosts without selected secrets retain opaque CONNECT tunnelling.
   const withoutSecrets = createHttpHooks({ allowedInternalHosts: ["127.0.0.1"] });
   contexts.set("beta", { workspaceId: "beta", env: {}, hooks: withoutSecrets.httpHooks, secrets: [] });
   // A TLS connection established before the host gains a secret remains opaque.
@@ -213,7 +208,6 @@ test("workspace socket controls HTTP and HTTPS identity, policy and reconnection
   expect(received.at(-1)?.key).toBe("new-secret");
   freshTls.destroy();
   contexts.set("beta", { workspaceId: "beta", env: {}, hooks: withoutSecrets.httpHooks, secrets: [] });
-  // A credential bridge must select TLS interception without ordinary secrets.
   let bridgeHosts = ["127.0.0.1"];
   registerWorkspaceRequestTransform("test-tls-bridge", async (request) => request, async () => bridgeHosts);
   cleanup.push(() => { registerWorkspaceRequestTransform("test-tls-bridge", async (request) => request); });
@@ -229,7 +223,6 @@ test("workspace socket controls HTTP and HTTPS identity, policy and reconnection
   await requestOnTls(bridgeTls);
   expect(received.at(-1)?.key).toBe("bridge-secret");
   bridgeTls.destroy();
-  // Endpoint changes apply to the next CONNECT without rebuilding the context.
   bridgeHosts = [];
   const opaqueTls = await connectTls();
   await requestOnTls(opaqueTls);
@@ -247,7 +240,6 @@ test("workspace socket controls HTTP and HTTPS identity, policy and reconnection
   expect(noSecretsForwarded.status).toBe(200);
   expect(received.at(-1)?.key).toBe("ATELIER_TEST_PLACEHOLDER");
   expect(received.at(-1)?.authorization).toBeUndefined();
-  // The Zig compatibility path must not change non-HTTPS CONNECT tunnels.
   const plain = await tunnel(betaPort, `127.0.0.1:${httpPort}`, "User-Agent: zig/0.16.0 (std.http)\r\n");
   expect(plain.response).toContain("200 Connection Established");
   const tunneled = await new Promise<string>((resolve, reject) => {
@@ -265,7 +257,6 @@ test("workspace socket controls HTTP and HTTPS identity, policy and reconnection
   const blocked = await tunnel(alphaPort, "127.0.0.2:443");
   expect(blocked.response).toContain("403"); blocked.socket.destroy();
   expect(received.length).toBe(beforeBlocked);
-  // Restart only the application-side listener. The workspace relay stays up.
   await alpha.close(); alpha = await start("alpha");
   const reconnected = await proxyRequest(alphaPort, `http://127.0.0.1:${httpPort}/after-restart`, { headers });
   expect(reconnected.body).toBe("destination response");
@@ -278,7 +269,6 @@ test("local relay survives an unavailable socket and forwards concurrent large t
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const socketPath = join(directory, "egress.sock");
   const port = await localRelay(socketPath);
-  // A failed UNIX-CONNECT must only terminate that connection's child.
   await new Promise<void>((resolve, reject) => {
     const client = net.connect(port, "127.0.0.1");
     client.setTimeout(5000, () => client.destroy(new Error("Unavailable socket did not close")));

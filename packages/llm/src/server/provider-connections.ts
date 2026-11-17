@@ -4,7 +4,6 @@ import { usesProviderSubscription } from "./subscription.ts";
 
 export type ProviderConnection = "connected" | "disconnected" | "needs_attention";
 
-/** Stored OAuth credentials are not proof that sign-in can still be used. */
 export async function providerConnections(runtime: Pick<ModelRuntime, "getProviderAuthStatus" | "listCredentials" | "getAuth"> & { getProviders(): readonly { id: string }[] }): Promise<Map<string, ProviderConnection>> {
   return new Map(await Promise.all(runtime.getProviders().map(async (provider) => {
     const status = runtime.getProviderAuthStatus(provider.id);

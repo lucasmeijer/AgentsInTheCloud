@@ -18,13 +18,11 @@ async function searchProvider(provider: GitHostingProvider, credential: GitHosti
       const wait = error.retryAfterSeconds ? ` Try again in ${error.retryAfterSeconds} seconds.` : " Try again in a few minutes.";
       return { repositories: [], notice: `${provider.label} search is rate limited.${wait}` };
     }
-    // One provider failing shouldn't hide the others' results; show what went wrong in its place.
     console.error(`[repository-search] ${provider.label} search failed`, error);
     return { repositories: [], notice: `${provider.label} search failed: ${errorMessage(error)}` };
   }
 }
 
-/** Every connected provider, plus public GitHub search, which works without a connection. */
 export async function searchRepositories(query: string): Promise<ProviderRepositorySearch[]> {
   const trimmed = query.trim();
   const searches = gitHostingProviders.flatMap((provider) => {

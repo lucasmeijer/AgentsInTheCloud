@@ -4,7 +4,6 @@ import { setToggleValue, type ToggleChangeEvent } from "@agents-in-the-cloud/des
 
 export type SettingsEditorLoadedEvent = CustomEvent<{ location: string; submitted: boolean }>;
 
-/** Browser-owned draft, save and focus behavior for server-rendered settings editors in one Turbo frame. */
 export class SettingsEditorController extends Controller<HTMLElement> {
   static targets = ["form", "frame", "content", "colorPicker", "error", "requestError"];
   declare readonly formTargets: HTMLFormElement[];
@@ -35,11 +34,9 @@ export class SettingsEditorController extends Controller<HTMLElement> {
   dirty(): boolean { return this.formTargets.some(form => this.originals.has(form) && this.originals.get(form) !== this.values(form)); }
   markClean(): void { this.formTargets.forEach(form => this.originals.set(form, this.values(form))); }
   resumeAutosaves(): void { this.formTargets.forEach(form => this.queueAutosave(form)); }
-  /** Reload the frame at another location of the same page. */
   reload(destination: string): void { this.frameTarget.setAttribute("src", destination); }
 
   formTargetConnected(form: HTMLFormElement): void {
-    // New-secret host defaults are initialized by their own Stimulus controller first.
     requestAnimationFrame(() => {
       if (!form.isConnected) return;
       const key = form.dataset.settingsEditorFormKey!;
@@ -58,15 +55,12 @@ export class SettingsEditorController extends Controller<HTMLElement> {
   private updateSave(form: HTMLFormElement): void {
     const button = form.querySelector<HTMLButtonElement>("[data-settings-editor-save]")!;
     const original = this.originals.get(form);
-    // New server-rendered forms stay disabled until their initial snapshot is captured.
     const unchanged = original === undefined || original === this.values(form);
     button.disabled = this.submissions > 0 || unchanged || form.dataset.settingsEditorAvailable === "false";
-    // New edits restore the action immediately; the shared feedback timer never owns disabled state.
     if (!unchanged && !this.submissions) resetButtonConfirmation(button);
   }
   colorPickerTargetConnected(picker: HTMLInputElement): void {
     const color = picker.closest("form")!.querySelector<HTMLInputElement>('input[name="swatchColor"]')!.value;
-    // Canvas converts the existing OKLCH swatch to the native picker's sRGB hex format.
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 1;
     const context = canvas.getContext("2d")!;
@@ -76,7 +70,6 @@ export class SettingsEditorController extends Controller<HTMLElement> {
     picker.value = "#" + [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(channel => channel.toString(16).padStart(2, "0")).join("");
   }
   colorChanged(event: Event): void {
-    // Wait for the native picker to commit so autosave does not interrupt color browsing.
     if (event.type === "input") { event.stopPropagation(); return; }
     // SAFETY: This change action is bound only to the native color input.
     const picker = event.target as HTMLInputElement;
@@ -103,7 +96,6 @@ export class SettingsEditorController extends Controller<HTMLElement> {
     this.autosaves.set(form, setTimeout(() => {
       this.autosaves.delete(form);
       const button = form.querySelector<HTMLButtonElement>("[data-settings-editor-save]")!;
-      // An open dialog, such as a discard confirmation, holds autosaves until it closes.
       if (!form.isConnected || this.element.querySelector("dialog[open]") || button.disabled || !form.checkValidity()) return;
       form.requestSubmit(button);
     }, 600));
@@ -144,7 +136,6 @@ export class SettingsEditorController extends Controller<HTMLElement> {
     });
     if (!event.detail.success) this.submittedFocus = undefined;
     if (!event.detail.success && form.hasAttribute("data-settings-editor-autosave")) form.querySelector<HTMLElement>("[data-settings-editor-save-actions]")!.hidden = false;
-    // Validation streams own their error rendering and focus. Transport failures have no stream.
     if (!event.detail.success && !event.detail.fetchResponse?.response.headers.get("Content-Type")?.startsWith("text/vnd.turbo-stream.html")) this.showRequestError();
   }
   dismissError(): void {
@@ -192,7 +183,6 @@ export class SettingsEditorController extends Controller<HTMLElement> {
     });
   }
 
-  /** The panel body scrolling this editor: inside its frame, or around it when the frame is embedded in a panel. */
   private scroller(): HTMLElement {
     return this.frameTarget.querySelector<HTMLElement>(".panel__body") ?? this.frameTarget.closest<HTMLElement>(".panel__body")!;
   }
@@ -206,7 +196,6 @@ export class SettingsEditorController extends Controller<HTMLElement> {
     const nextContent = nextFrame.querySelector<HTMLElement>('[data-settings-editor-target="content"]')!;
     const submittedPath = nextContent.dataset.settingsEditorSubmittedPath;
     const scrollTop = this.scroller().scrollTop;
-    // A save refreshes server-owned markup without throwing away drafts in other editors.
     if (submittedPath) {
       const submittedAction = new URL(submittedPath, location.href).href;
       for (const current of this.frameTarget.querySelectorAll<HTMLDetailsElement>("details[data-settings-editor-disclosure]")) {
@@ -268,7 +257,6 @@ export class SettingsEditorController extends Controller<HTMLElement> {
   };
 }
 
-/** Form actions may carry a view query; drafts are matched by the record path they save. */
 function actionPath(form: HTMLFormElement): string {
   const url = new URL(form.action);
   return `${url.origin}${url.pathname}`;

@@ -51,20 +51,17 @@ export class DurableAgentPresentation {
   }
 
   static async attach(conversation: Pick<Conversation, "watch" | "context">, ctx: AgentRenderContext, context: Context, onCommit?: (view: ConversationView) => void | Promise<void>) {
-    // Start at the newest compaction or reset rather than the start of the history; later ones are cut in update().
     const { head } = await conversation.context(context);
     const watch = await conversation.watch(context, { from: head?.head, min: wholeWindow, max: wholeWindow });
     try { return new DurableAgentPresentation(watch, ctx, onCommit); }
     catch (error) { await watch.stop(); throw error; }
   }
 
-  /** Same exact frame used for transcript, busy state, settings, inbox and usage. */
   get state() { return durableViewState(this.frame); }
   get busy(): boolean { return Boolean(this.state.live.run || this.state.live.compactions?.length); }
   get branchId(): string { return this.ctx.branchId!; }
   get closed() { return this.watch.closed; }
 
-  /** `view` holds the active context only. */
   private update(view: ConversationView) {
     this.frame = view;
     const branch = `${view.conversation.id}:${view.entries.find(entry => entry.head !== undefined)?.id ?? "root"}`;

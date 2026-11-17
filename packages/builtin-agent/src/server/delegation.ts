@@ -7,7 +7,6 @@ import { isOneShotAgent } from "./durable-workspace.ts";
 
 export interface AgentDelegation {
   create(models: Models, harness: () => Harness): { extension: Extension; models: Models };
-  /** The messages a generation request sends, as the extension's request hook prepares them. */
   requestMessages(messages: readonly Message[], conversationId: ConversationId): Message[];
   attributed(entry: EntryRecord): "task" | "message" | undefined;
 }
@@ -22,7 +21,6 @@ export function configureAgentDelegation(delegation: AgentDelegation | undefined
 export async function resolveAgent(workspaceId: string, agentId: string): Promise<WorkspaceAgentInfo> {
   const root = (await listWorkspaceAgents(workspaceId)).find((agent) => agent.agentId === agentId);
   if (root) return root;
-  // A child agent, such as a subagent or a script's one-shot agent, shares its root's journal.
   const child = (await (await durableWorkspaceOwner(workspaceId)).catalog()).find(record => record.parentId && record.agentId === agentId);
   if (child) return { ...child, workspaceId, path: "", storage: "durable", oneShot: isOneShotAgent(child) };
   throw new AgentsInTheCloudCoreError("agent_not_found", `Agent not found: ${agentId}`);

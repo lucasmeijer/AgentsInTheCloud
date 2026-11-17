@@ -29,7 +29,6 @@ describe("Global workspace settings", () => {
       { envName: "NPM_TOKEN", secretValue: "template-token" },
       { envName: "OPENAI_API_KEY", secretValue: "openai" },
     ]);
-    // Empty workspaces have no template, so only global secrets apply.
     expect((await revealEffectiveSecrets(undefined, file, keyFile)).map(({ secretValue }) => secretValue).sort()).toEqual(["global-token", "openai"]);
   });
 

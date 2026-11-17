@@ -42,7 +42,6 @@ export function renderError(workspaceId: string, historyId: string, message = ""
   return `<div id="${errorId(workspaceId, historyId)}" class="changes-diff-endpoints-error" data-changes-diff-endpoints-target="error" role="alert" ${message ? "" : "hidden"}><span>${escapeHtml(message)}</span>${buttonHtml({ type: "button", variant: "secondary", content: { kind: "caption", caption: "Retry" }, attributesHtml: 'data-action="changes-diff-endpoints#retry"' })}${buttonHtml({ type: "button", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.Close, label: "Dismiss comparison error" }, attributesHtml: 'data-action="changes-diff-endpoints#dismissError"' })}</div>`;
 }
 
-/** Why a commit link's comparison couldn't be shown. Dismissing it clears it on the server, so it stays dismissed. */
 export function renderNotice(workspaceId: string, historyId: string, message?: string): string {
   const dismiss = `<form class="changes-notice-dismiss" method="post" action="/workspaces/${encodeURIComponent(workspaceId)}/changes/notice/dismiss"><input type="hidden" name="history" value="${escapeHtml(historyId)}">${buttonHtml({ type: "submit", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.Close, label: "Dismiss" } })}</form>`;
   return `<div id="${noticeId(workspaceId, historyId)}">${message ? `<div class="changes-diff-endpoints-error" role="alert"><span>${escapeHtml(message)}</span>${dismiss}</div>` : ""}</div>`;
@@ -57,7 +56,6 @@ export function renderChanges(workspaceId: string, snapshot: ChangesSnapshot, bu
     element: { tag: "button", attributesHtml: `type="button" data-action="changes-diff-endpoints#togglePicker" data-changes-diff-endpoints-target="trigger" aria-expanded="${pickerOpen}" aria-controls="${pickerId}"` },
   }) : '<strong>Changes</strong>';
   const picker = history.phase === "ready" ? `<div id="${pickerId}" class="changes-picker-host" data-changes-diff-endpoints-target="picker" role="region" aria-label="Commit history" ${pickerOpen ? "" : "hidden"}><div class="changes-history-scroll" data-changes-diff-endpoints-target="historyScroll">${renderHistory(snapshot)}</div><div class="changes-picker-resizer" role="separator" aria-label="Resize commit history" aria-orientation="horizontal" tabindex="0" data-action="pointerdown->changes-diff-endpoints#beginResize pointermove->changes-diff-endpoints#dragResize keydown->changes-diff-endpoints#resizeWithKeyboard"></div></div>` : "";
-  // History is the permanent shell; live comparisons replace only the Pierre island underneath it.
   return `<section id="${changesBodyId(workspaceId, history.id)}" data-turbo-permanent class="changes-body" data-controller="changes-diff-endpoints" data-changes-diff-endpoints-workspace-id-value="${escapeHtml(workspaceId)}" data-changes-diff-endpoints-history-id-value="${history.id}" data-changes-diff-endpoints-open-value="${pickerOpen}" data-action="changes-edit:refresh->changes-diff-endpoints#refresh live:before-stream-render@document->changes-diff-endpoints#preservePresentation turbo:before-stream-render@document->changes-diff-endpoints#preservePresentation keydown.esc->changes-diff-endpoints#escape">
     <header class="changes-diff-endpoints-header">${header}${buttonHtml({ type: "button", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.Refresh, label: "Refresh history and diff" }, attributesHtml: 'data-action="changes-diff-endpoints#refresh" data-changes-diff-endpoints-target="refresh"' })}</header>${picker}${renderComparison(workspaceId, snapshot, buckets)}
     <div class="changes-loading" data-changes-diff-endpoints-target="loading" role="status" hidden><span class="changes-spinner" aria-hidden="true"></span><span>Generating comparison…</span></div><div class="changes-alerts">${renderNotice(workspaceId, history.id, snapshot.notice)}${renderError(workspaceId, history.id)}</div>
@@ -87,7 +85,6 @@ const mediaAnnotation = (path: string) => [{ lineNumber: 1, metadata: { kind: "m
 const mediaItem = (path: string, cacheKey: string, version: number): CodeViewItem<MediaAnnotation> => ({ id: path, type: "file", version, file: { name: path, lang: "text", contents: "", cacheKey }, annotations: mediaAnnotation(path) });
 const mediaTemplate = (path: string, html: string) => `<template data-changes-media="${escapeHtml(path)}"><div class="changes-media">${html}</div></template>`;
 
-/** An unchanged file as the Files view would show it: text, or an image, video or audio preview. */
 export function renderUnchangedFile(workspaceId: string, snapshotId: string, path: string, file: UnchangedFile, editable: boolean): string {
   const cacheKey = `${snapshotId}:${path}`;
   if (file.kind === "image" || file.kind === "video" || file.kind === "audio") {
@@ -130,13 +127,11 @@ function renderImageComparison(workspaceId: string, snapshot: ChangesSnapshot, f
 
 const lineCounts = (totals: BucketTotals) => `<span class="changes-additions">+${totals.additions}</span><span class="changes-deletions">−${totals.deletions}</span>`;
 
-/** All files, the main work's lines, then each bucket that has files. */
 function renderSummary(fileCount: number, totals: ChangeTotals): string {
   const buckets = totals.buckets.filter(bucket => bucket.files).map(bucket => `<span class="changes-summary-bucket">${escapeHtml(bucket.name)} ${lineCounts(bucket)}</span>`).join("");
   return `<span class="changes-summary"><span>${fileCount} ${fileCount === 1 ? "file" : "files"}</span>${lineCounts(totals.main)}${buckets}</span>`;
 }
 
-/** Headings the viewer places above each group when files are grouped by bucket. */
 function renderGroupHeadings(totals: ChangeTotals): string {
   const heading = (key: string, name: string, stats = "") => `<template data-changes-group="${key}"><div class="changes-file-header changes-group-header"><span class="changes-group-name" role="heading" aria-level="2">${escapeHtml(name)}</span>${stats ? `<span class="changes-file-stats">${stats}</span>` : ""}</div></template>`;
   return heading("main", totals.main.name, lineCounts(totals.main)) + totals.buckets.map((bucket, index) => heading(String(index), bucket.name, lineCounts(bucket))).join("") + heading("unchanged", "Unchanged files");
@@ -184,7 +179,6 @@ export function renderDiff(workspaceId: string, snapshot: ChangesSnapshot, bucke
     <template data-changes-target="commentEditor"><form class="changes-comment changes-comment-editor" data-action="submit->changes#saveComment keydown.meta+enter->changes#commentShortcut keydown.ctrl+enter->changes#commentShortcut keydown.esc->changes#cancelComment"><textarea class="textarea" rows="3" required maxlength="10000" aria-label="Comment" placeholder="Leave a comment" data-action="input->changes#commentInput"></textarea><footer><span class="changes-comment-footer-space"></span>${buttonHtml({ type: "button", variant: "secondary", content: { kind: "caption", caption: "Discard" }, attributesHtml: 'data-action="changes#cancelComment"' })}${buttonHtml({ type: "submit", variant: "primary", content: { kind: "caption", caption: "Comment" } })}</footer></form></template>
     <template data-changes-target="commentCard"><article class="changes-comment changes-comment-card">${contentRowHtml({ width: "fill", kind: "multiline", label: { kind: "text", text: "Comment", textAttributesHtml: "data-comment-body" }, element: { tag: "button", attributesHtml: 'type="button" aria-label="Edit comment" data-action="changes#editComment"' } })}<div class="changes-comment-tools">${renderCopyCommentButton()}${iconButton("Delete comment", "deleteComment", Icons.Trash)}</div></article></template>`;
   const empty = snapshot.index.phase === "not-git" ? "This workspace isn’t a Git repository." : snapshot.endpoints.target === workingTree && snapshot.base === (snapshot.history.head ?? snapshot.history.emptyTree) ? "No uncommitted changes." : snapshot.label === "Unstaged changes" ? "No unstaged changes." : snapshot.label === "Staged changes" ? "No staged changes." : "No changed files in this comparison.";
-  // The history-keyed parent protects Pierre’s managed DOM during live shell morphs.
   return `<section id="${domId("changes", snapshot.id, "diff")}" class="changes-diff" data-controller="changes changes-edit" data-action="changes-edit:viewer->changes#shareViewer" data-changes-edit-workspace-id-value="${escapeHtml(workspaceId)}" data-changes-edit-snapshot-id-value="${snapshot.id}" data-changes-workspace-id-value="${escapeHtml(workspaceId)}" data-changes-snapshot-id-value="${snapshot.id}" data-changes-collapsed-value="${collapsed}">
     <header class="changes-toolbar">
       <div class="changes-controls">${renderSummary(files.length, totals)}${files.length || comments.some(comment => comment.status !== "inline") ? buttonHtml({ type: "button", variant: "secondary", disabled: files.length > 0, content: { kind: "icon-only", iconHtml: collapseIcons, label: collapsed ? "Expand all" : "Collapse all" }, attributesHtml: `data-action="changes#toggleCollapse" data-changes-target="collapseToggle" data-collapsed="${collapsed}"` }) : ""}${displayMenu}</div>

@@ -3,7 +3,6 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Exercise the real command boundary without a daemon or process-global mocks.
 async function dockerResult(stderr: string, exitCode: number) {
   const directory = await mkdtemp(join(tmpdir(), "docker-result-"));
   try {

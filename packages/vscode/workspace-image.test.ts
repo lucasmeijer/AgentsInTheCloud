@@ -28,7 +28,6 @@ for (const [architecture, serverArchitecture] of [["amd64", "x64"], ["arm64", "a
     await executable(join(bin, "dpkg"), `echo ${architecture}`);
     await executable(join(bin, "curl"), `printf '%s\\n' "$2" > '${directory}/requested-url'; [ "$3" = "-o" ]; cp '${archive}' "$4"`);
     await executable(join(bin, "su"), '[ "$1" = agents-in-the-cloud ]; [ "$2" = -c ]; exec sh -c "$3"');
-    // Exercise the archive provisioning block, not an editor or browser UI.
     const run = manifest.run[0];
     const script = run.slice(run.indexOf("code_commit="), run.indexOf("chmod -R a+rX"))
       .replaceAll("/opt/agents-in-the-cloud/", `${directory}/opt/agents-in-the-cloud/`)

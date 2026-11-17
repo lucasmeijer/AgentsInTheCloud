@@ -19,7 +19,6 @@ export class LiveIslands {
   }
 }
 
-/** Panes whose content is a surface of its own, published while the presentation selects the pane. */
 export const paneSurfaceKinds = ["agent-pane", "work-view-body"] as const;
 export type PaneSurfaceKind = typeof paneSurfaceKinds[number];
 
@@ -27,7 +26,6 @@ export function paneContentId(workspaceId: string, kind: PaneSurfaceKind, key: s
   return domId(kind === "agent-pane" ? "agent_content" : "work_content", workspaceId, key);
 }
 
-/** A pane's content element: the target of its surface's region, and that surface's subscriber. */
 export function paneContentHtml(workspaceId: string, kind: PaneSurfaceKind, key: string): string {
   return `<div class="fixed-shell-live-body" id="${escapeHtml(paneContentId(workspaceId, kind, key))}" data-turbo-permanent data-controller="live-surface" data-live-surface-workspace-value="${escapeHtml(workspaceId)}" data-live-surface-kind-value="${kind}" data-live-surface-key-value="${escapeHtml(key)}"></div>`;
 }
@@ -41,7 +39,6 @@ export function barButton(label: string, action: string, iconHtml: string, attri
   });
 }
 
-/** Busy and attention are independent and share one indicator slot. */
 export function busyAttentionIndicator(state: { busy?: boolean; requestingAttention?: boolean }): string {
   const label = [state.busy && "Busy", state.requestingAttention && "Requesting attention"].filter(Boolean).join("; ");
   return `<span class="status-indicator"${label ? ` role="img" aria-label="${label}"` : ""}>${state.busy ? '<i class="status-spinner sm" aria-hidden="true"></i>' : ""}${state.requestingAttention ? '<i class="status-dot attention" aria-hidden="true"></i>' : ""}</span>`;

@@ -38,14 +38,12 @@ export const gitCredentialHelperShellBody = credentialHelperShellBody(gitHosting
 
 export const gitCredentialHelperCommand = `!f() { ${gitCredentialHelperShellBody}; }; f`;
 
-/** Real tokens for host-side git; workspaces only ever receive placeholders. */
 export function gitHostingTokenEnvironment(): Record<string, string> {
   return Object.fromEntries(connectedGitHostingProviders().map(({ provider, credential }) => [provider.tokenEnvVar, credential.token]));
 }
 
 export const gitHostingKnownHosts = gitHostingProviders.map((provider) => provider.sshKnownHosts).join("");
 
-/** `github.com/org/repo` style shorthand for a provider-hosted repository. */
 export function gitHostingShorthandUrl(spec: string): string | undefined {
   return gitHostingProviders.some((provider) => spec.toLowerCase().startsWith(`${provider.gitHost}/`)) ? `https://${spec}` : undefined;
 }

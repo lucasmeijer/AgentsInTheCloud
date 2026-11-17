@@ -157,7 +157,6 @@ describe("workspace provisioning execution", () => {
     expect(await finished).toMatchObject({ message: "workspace one provisioning cancelled" });
     expect(next).toBe(false);
     expect(provisioning.snapshot("one")).toBeUndefined();
-    // Finished runs no longer subscribe to operation progress.
     await events.emit("workspace_provision_progress", { workspaceId: "one", output: "late output" });
   });
 

@@ -1,6 +1,5 @@
 import { closeWebSocket, forwardToUpstream, maxSocketBufferedBytes } from "../../../packages/proxy-ingress/src/ingress/websocket.ts";
 
-/** Only named AgentsInTheCloud endpoints are reachable; never proxy arbitrary loopback ports. */
 export function localTarget(host: string, appPort: number): number | undefined {
   const hostname = host.split(":")[0];
   if (hostname === "agents-in-the-cloud.localhost") return appPort;

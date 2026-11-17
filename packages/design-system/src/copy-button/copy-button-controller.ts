@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 import { copyTextToClipboard } from "@agents-in-the-cloud/shared";
 import { showButtonConfirmation } from "../button-confirmation/button-confirmation-controller.ts";

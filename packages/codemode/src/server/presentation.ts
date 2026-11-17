@@ -11,7 +11,6 @@ import { oneShotAgentPath } from "./page.ts";
 
 const requestSchema = Type.Object({ prompt: Type.String(), label: Type.Optional(Type.String()) });
 
-/** The agent's answer as the script got it, as indented JSON; otherwise its text, such as why it failed. */
 function resultHtml(tool: ToolView): { summary: string; html: string } | undefined {
   const text = tool.resultText?.trim();
   if (tool.status === "running" || tool.status === "streaming" || !text) return undefined;
@@ -25,17 +24,14 @@ function resultHtml(tool: ToolView): { summary: string; html: string } | undefin
   return { summary: oneLine(JSON.stringify(value), 80), html: codeBlockHtml(JSON.stringify(value, null, 2), "result.json") };
 }
 
-/** A compact row opening to its body; the row's label is cut to fit, so a summary after it can be long. */
 function compactDisclosure(label: string, bodyHtml: string): string {
   return disclosureHtml({ summary: { kind: "compact", width: "fill", label: { kind: "text", text: label } }, bodyHtml: `<div class="agent-tool-detail">${bodyHtml}</div>` });
 }
 
-/** Code mode's own calls carry their agent; other Agents' tools may share the name. */
 function oneShotRequest(tool: ToolView) {
   return tool.childAgentId !== undefined && Value.Check(requestSchema, tool.args) ? { request: tool.args, agentId: tool.childAgentId } : undefined;
 }
 
-/** A script's `tools.agent` call: its prompt, its conversation, and the request and result behind rows. */
 const oneShotAgentCall: AgentToolPresentation = {
   summary(tool) {
     const call = oneShotRequest(tool);

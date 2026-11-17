@@ -1,4 +1,3 @@
-/** Bounded diagnostics must not hang the control service on a broken daemon. */
 export async function command(args: string[], timeout = 5000): Promise<string> {
   const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe", env: { ...process.env, LC_ALL: "C" } });
   const timer = setTimeout(() => child.kill("SIGKILL"), timeout);

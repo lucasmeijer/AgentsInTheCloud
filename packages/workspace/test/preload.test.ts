@@ -96,7 +96,6 @@ test("snapshots requested settings and persists each exact reference before reso
   await expect(f.preloader.load(path)).rejects.toThrow("registry fetch failed");
   const partial = JSON.parse(await readFile(join(path, "preloads.json"), "utf8"));
   expect(partial).toEqual([{ requested: "postgres:17", reference: `${postgres}@${digestA}` }, { requested: "redis:8" }]);
-  // Both the registry and source tag change before retry and process restart.
   f.registry.set(postgres, digestB);
   f.images.set(postgres, digestB);
   f.registry.set(redis, digestB);

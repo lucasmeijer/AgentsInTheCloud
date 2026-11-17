@@ -22,7 +22,6 @@ function assertNameAvailable(configuration: ConfigurationRecord, name: string, e
   if (configuration.environment?.some((variable) => variable.id !== exceptVariableId && variable.name === name)) throw new AgentsInTheCloudCoreError("workspace_template_environment_variable_exists", `A variable named ${name} already exists here`);
 }
 
-/** Global variables and the template's own, which replace global ones with the same name. */
 export async function effectiveEnvironment(workspaceTemplateId?: string, file = workspaceTemplatesFile()): Promise<Record<string, string>> {
   const store = await readWorkspaceTemplateStore(file);
   return Object.fromEntries(workspaceScopes(workspaceTemplateId).flatMap((scope) => findConfigurationRecord(store, scope).environment ?? []).map(({ name, value }) => [name, value]));

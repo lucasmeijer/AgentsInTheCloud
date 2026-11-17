@@ -7,7 +7,6 @@ import { Type, type Static } from "typebox";
 import { bashToolDefinition, forcedColorEnvironment, formatBashOutput } from "@agents-in-the-cloud/agent/server/bash-tool";
 
 type BashRequest = {
-  /** Also the terminal process id. */
   id: string;
   command: string;
   deadline: number;
@@ -15,12 +14,10 @@ type BashRequest = {
   env: Record<string, string>;
 };
 
-/** Each operation's committed outcome, so a finished command never needs its workspace again. */
 type BashResult =
   | { status: "uncertain"; message: string }
   | { status: "done"; exitCode: number | null; aborted: boolean; timedOut: boolean; output: string; displayAnsi: string; fullOutputPath: string };
 
-/** What code mode scripts get from `tools.bash()`, also for a nonzero exit, as with pi's bash. */
 const bashStructuredOutputSchema = Type.Object({
   output: Type.String({ description: "Combined stdout and stderr, as the model sees it" }),
   truncated: Type.Boolean({ description: "Whether output was cut; the full output is in fullOutputPath" }),
@@ -36,14 +33,12 @@ const BashChild = defineDoc<{ id: TaskId<BashResult> | null }>({
   kind: "agents-in-the-cloud.bash-child", version: 1, scope: "task", initial: () => ({ id: null }), checkpointWhen: () => false,
 });
 
-/** Install the tool AND its owned task together. The task's abort protocol owns Stop. */
 export function createDurableBashExtension(workspaceId: string, processes: TerminalProcesses = workspaceTerminalProcesses(workspaceId)) {
   /**
    * Waits for tmux to report the process ended, and turns that into the operation's outcome.
    * A restart reruns the phase, which reattaches to the same terminal process.
    */
   async function settle(id: string, context: Context): Promise<BashResult> {
-    // The command signal alone cancels the wait: it kills the waiting shell.
     const signal = context.abortSignal;
     const state = signal ? await withCommandSignal(signal, () => processes.waitForEnd(id)) : await processes.waitForEnd(id);
     if (state.state === "missing") return { status: "uncertain", message: "The command's terminal process is missing, so the command was not run again." };
@@ -70,7 +65,6 @@ export function createDurableBashExtension(workspaceId: string, processes: Termi
         }
         const result = await settle(request.id, context);
         await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result } }), context);
-        // Committed, so the workspace no longer needs to keep it.
         await processes.release(request.id);
       },
     },
@@ -86,7 +80,6 @@ export function createDurableBashExtension(workspaceId: string, processes: Termi
   });
   const bash = defineTool({
     ...bashToolDefinition,
-    // Safe means reattach to our terminal process, NOT execute an arbitrary command again.
     replay: "safe",
     structuredOutputSchema: bashStructuredOutputSchema,
     async execute(args, api, context) {
@@ -112,7 +105,6 @@ export function createDurableBashExtension(workspaceId: string, processes: Termi
       if (settled.state.outcome.status === "faulted" || settled.state.outcome.status === "failed") throw new Error(settled.state.outcome.error.message);
       if (settled.state.outcome.status !== "completed") throw new Error(`Command operation ${settled.state.outcome.status}`);
       const result = settled.state.outcome.result;
-      // The diagnostic is the error text scripts get, since there is no structured output.
       if (result.status === "uncertain") return { isError: true, output: [{ type: "text", text: result.message }], diagnostics: [{ severity: "error", code: "uncertain", message: result.message }] };
       const formatted = formatBashOutput(result.output, result.displayAnsi, result.fullOutputPath);
       let text = formatted.output || "(no output)";

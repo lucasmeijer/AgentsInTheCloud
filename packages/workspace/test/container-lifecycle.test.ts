@@ -33,7 +33,6 @@ test("recovery uses frozen sources and copies everything before starting", async
     expect((await f.checkpoint()).phase).toBe("configuring");
     await writeFile(f.sources[0], "changed settings");
     await rm(f.sources[1], { recursive: true });
-    // A new module instance stands in for a replacement app process.
     expect(await f.lifecycle().ensureStarted()).toBe("startup log");
     const checkpoint = await f.checkpoint();
     expect(checkpoint.phase).toBe("configured");

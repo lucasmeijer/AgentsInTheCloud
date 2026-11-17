@@ -5,7 +5,6 @@ import { workspaceRoot } from "@agents-in-the-cloud/workspace";
 import { codexAgentsInTheCloudTmTheme, codexThemeName } from "./theme.ts";
 import type { WorkspaceAgentInput } from "@agents-in-the-cloud/shared";
 
-/** Run inside tmux so installation progress and failures stay visible in the tab. */
 export function codexLaunchScript(input: WorkspaceAgentInput, imagePaths: string[], settings: CliModelSettings, session: CliAgentSession, resumeId?: string): string {
   const prompt = cliPromptText(input);
   // Invocation-local overrides avoid trust prompts without changing shared config.
@@ -15,7 +14,6 @@ export function codexLaunchScript(input: WorkspaceAgentInput, imagePaths: string
   const args = [...(resumeId ? ["resume", resumeId] : []), "--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust", "--no-alt-screen", "--cd", workspaceRoot,
     "-c", `sqlite_home=${JSON.stringify(`${session.directory}/codex`)}`,
     "-c", `projects={${JSON.stringify(workspaceRoot)}={trust_level="trusted"}}`,
-    // Codex reports completion through notify; its lifecycle hooks report the start of a turn.
     "-c", `notify=${JSON.stringify(turnSignalArgv(session.turnSignalCommand, "finished"))}`,
     "-c", `hooks={SessionStart=[{hooks=[{type="command",command=${JSON.stringify(`node ${shellQuote(`${session.directory}/codex/session-start.cjs`)}`)}}]}],UserPromptSubmit=[{hooks=[{type="command",command=${JSON.stringify(turnSignalShell(session.turnSignalCommand, "started"))}}]}]}`,
     "-c", `tui.theme=${JSON.stringify(codexThemeName)}`, "-c", "notice.hide_full_access_warning=true",

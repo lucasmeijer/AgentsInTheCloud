@@ -13,7 +13,6 @@ export interface WorkspaceAgentInfo {
   path: string;
   storage?: "durable";
   readOnly?: boolean;
-  /** A script's one-shot agent, whose final answer is JSON. */
   oneShot?: boolean;
 }
 
@@ -33,7 +32,6 @@ async function agentRecords(workspaceId: string): Promise<AgentRecord[]> {
     Value.Assert(agentsSchema, value);
     return value.agents;
   }
-  // Read the actual previous format once; all subsequent writes use Agent names.
   const previousContent = await readTextIfExists(join(getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir, "workspaces", workspaceId, "metadata", "agent-conversations.json"));
   const previous: unknown = previousContent === undefined ? undefined : JSON.parse(previousContent);
   if (isJsonObject(previous) && previous.version !== undefined) {
@@ -85,7 +83,6 @@ async function listWorkspaceAgentsUnlocked(workspaceId: string): Promise<Workspa
   const { workspaceDurableJournalDirectory } = await import("./durable-storage.ts");
   const journal = await workspaceDurableJournalDirectory(workspaceId);
   const local: WorkspaceAgentInfo[] = (await agentRecords(workspaceId)).map(info => ({ ...info, workspaceId, path: journal }));
-  // The journal catalog wins after a crash between a metadata commit and tab metadata.
   if (local.length && await Bun.file(join(journal, "main.jsonl")).exists()) {
     const { durableWorkspaceOwner } = await import("./runtime.ts");
     const catalog = await (await durableWorkspaceOwner(workspaceId)).catalog();
@@ -122,7 +119,6 @@ export async function setWorkspaceAgentTitle(agent: WorkspaceAgentInfo, title: s
   });
 }
 
-/** Remove a closed Agent from the active list without deleting its transcript. */
 export async function removeClosedWorkspaceAgent(agent: WorkspaceAgentInfo): Promise<void> {
   await serializeAgentOperation(agent.workspaceId, async () => {
     const current = (await listWorkspaceAgentsUnlocked(agent.workspaceId)).find((item) => item.agentId === agent.agentId)!;

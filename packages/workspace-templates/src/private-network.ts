@@ -3,12 +3,10 @@ import { invalidArguments } from "@agents-in-the-cloud/core";
 import { isPrivateNetworkAddress } from "@agents-in-the-cloud/shared/egress-policy";
 import { findConfigurationRecord, workspaceScopes, workspaceTemplatesFile, readWorkspaceTemplateStore, updateWorkspaceTemplateStore, type ConfigurationScope } from "./workspace-template.ts";
 
-/** One exact TCP destination on a private network; IPv6 hosts are unbracketed. */
 export interface PrivateNetworkDestination { host: string; port: number }
 
 const hostnamePattern = /^(?=.{1,253}$)[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?(?:\.[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?)*$/;
 
-/** Parses `host:port`, `address:port` or `[ipv6]:port`. Address literals must be on a private network. */
 export function parsePrivateNetworkDestination(entry: string): PrivateNetworkDestination {
   const match = /^(?:\[([^\]]+)\]|([^:[\]]+)):(\d{1,5})$/.exec(entry.trim().toLowerCase());
   const port = Number(match?.[3]);
@@ -21,7 +19,6 @@ export function parsePrivateNetworkDestination(entry: string): PrivateNetworkDes
   return { host, port };
 }
 
-/** The destination a request asks for: URL hostnames bracket IPv6 addresses, listed destinations don't. */
 export function requestedPrivateNetworkDestination(hostname: string, port: number): PrivateNetworkDestination {
   return { host: hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1"), port };
 }
@@ -30,7 +27,6 @@ export function formatPrivateNetworkDestination({ host, port }: PrivateNetworkDe
   return isIP(host) === 6 ? `[${host}]:${port}` : `${host}:${port}`;
 }
 
-/** Replaces the scope's destinations with one `host:port` per line. Changes reach existing workspaces. */
 export async function setPrivateNetworkAccess(scope: ConfigurationScope, input: string, file = workspaceTemplatesFile()): Promise<string[]> {
   const entries = [...new Set(input.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#")).map((line) => formatPrivateNetworkDestination(parsePrivateNetworkDestination(line))))];
   return await updateWorkspaceTemplateStore(file, (store) => {
@@ -41,7 +37,6 @@ export async function setPrivateNetworkAccess(scope: ConfigurationScope, input: 
   });
 }
 
-/** Global destinations plus the template's own. */
 export async function effectivePrivateNetworkAccess(workspaceTemplateId?: string, file = workspaceTemplatesFile()): Promise<PrivateNetworkDestination[]> {
   const store = await readWorkspaceTemplateStore(file);
   const entries = new Set(workspaceScopes(workspaceTemplateId).flatMap((scope) => findConfigurationRecord(store, scope).privateNetworkAccess ?? []));

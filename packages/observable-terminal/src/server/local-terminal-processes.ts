@@ -21,7 +21,6 @@ export function runLocally(tmuxDirectory: string): RunTerminalProcessCommand {
   return (start, options) => runCommand(start.argv, { cwd: start.workdir, env: environment(tmuxDirectory, start.env), stdin: options.stdin });
 }
 
-/** Starts terminal clients on this machine on a PTY, the way the workspace helper starts them. */
 export function startLocally(tmuxDirectory: string): StartWorkspaceProcess {
   return (start) => {
     if (!start.terminal) throw new Error("Only terminal clients start locally");
@@ -48,7 +47,6 @@ export function startLocally(tmuxDirectory: string): StartWorkspaceProcess {
       signal: (signal) => child.kill(signal),
       resize: ({ cols, rows }) => {
         terminal.resize(cols, rows);
-        // Resizing the PTY alone doesn't tell the client.
         child.kill("SIGWINCH");
       },
       cancel: () => child.kill("SIGHUP"),
@@ -79,7 +77,6 @@ export function localTerminalProcesses(directory: string): TerminalProcesses {
   });
 }
 
-/** Forgets every terminal process in `directory`, killing any still running. */
 export async function clearLocalTerminalProcesses(directory: string): Promise<void> {
   const tmuxDirectory = join(directory, "tmux");
   await mkdir(tmuxDirectory, { recursive: true });
@@ -93,12 +90,10 @@ function appTerminalProcessesDirectory(): string {
 
 let app: TerminalProcesses | undefined;
 
-/** Terminal processes on the app's own machine, such as provisioning's. */
 export function appTerminalProcesses(): TerminalProcesses {
   return app ??= localTerminalProcesses(appTerminalProcessesDirectory());
 }
 
-/** Provisioning never outlives the app, so what the last app left is cleared when it starts. */
 export function clearAppTerminalProcesses(): Promise<void> {
   return clearLocalTerminalProcesses(appTerminalProcessesDirectory());
 }

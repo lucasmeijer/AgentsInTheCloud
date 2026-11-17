@@ -21,7 +21,6 @@ if (terminal) {
   process.stdin.on("data", (data: Buffer) => child.write(data));
   process.stdout.on("resize", () => child.resize(size()));
 }
-// A hangup, e.g. from killing this terminal, ends the remote process too.
 process.on("SIGHUP", () => child.cancel());
 process.on("SIGTERM", () => child.cancel());
 

@@ -18,7 +18,6 @@ export async function runDocker(args: string[], options: CommandOptions = {}): P
     return { ...result, stdout: result.stdout.toString() };
   } finally {
     if (execution && signal?.aborted) {
-      // Killing a Docker CLI does not kill the process inside the container.
       await withCommandSignal(AbortSignal.timeout(10_000), async () => {
         // Stops what the caller's own `docker exec` started.
         // oxlint-disable-next-line agents-in-the-cloud/no-docker-exec
@@ -45,7 +44,6 @@ export async function requireDocker(args: string[], options: CommandOptions = {}
   return result;
 }
 
-/** timeout owns the process group; its child records that parent PID for cancellation. */
 function cancellableExec(args: string[]) {
   const valueOptions = new Set(["--user", "-u", "--env", "-e", "--env-file", "--workdir", "-w", "--detach-keys"]);
   let index = 1;

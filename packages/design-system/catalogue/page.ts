@@ -15,7 +15,6 @@ function disclosure(label: string, bodyHtml: string): string {
   return disclosureHtml({ summary: { kind: "compact", label: { kind: "text", text: label } }, bodyHtml });
 }
 
-/** Server-rendered reference; examples and shown usage share the same function. */
 export async function designSystemCatalogueHtml(
   options: { reloadUrl?: string } = {},
 ): Promise<string> {

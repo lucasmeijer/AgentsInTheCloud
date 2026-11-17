@@ -58,7 +58,6 @@ export function renderSlashCommandCatalog(templates: readonly PromptTemplate[], 
   }).join("");
   const promptTemplateButtonCatalog = promptTemplateButtons ? `<div class="agent-prompt-template-buttons" data-popular-button="touch" role="group" aria-label="Prompt template buttons">${promptTemplateButtons}</div>` : "";
   const slashCommandCatalog = autocompleteHtml({ kind: "results", label: "Slash commands", contentHtml: commands.map((command, index) => {
-    // Keep existing previews for built-in actions without modelling them as Prompt templates.
     const preview = command.kind === "prompt-template" ? command.prompt : command.kind === "builtin" && command.trigger !== "/tree" ? command.trigger : undefined;
     const hasPreview = preview !== undefined;
     const sourceLabel = command.source === "codex" ? "Codex" : command.source === "claude" ? "Claude Code" : "AgentsInTheCloud";

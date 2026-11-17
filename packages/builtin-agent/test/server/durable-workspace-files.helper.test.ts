@@ -17,7 +17,6 @@ import { openDurableWorkspace, type DurableWorkspace } from "../../src/server/du
 import { projectDurableTranscript } from "../../src/server/durable-transcript.ts";
 import type { TranscriptItem } from "@agents-in-the-cloud/agent/server/transcript";
 
-// A real helper, running as root and reaching files as the agent's user, as in a workspace.
 const workspaceId = "files-test";
 const context = BACKGROUND_CONTEXT;
 let directory: string;
@@ -29,7 +28,6 @@ beforeAll(async () => {
   const binary = join(directory, "aitc-workspace-helper");
   await buildGoProgram(fileURLToPath(new URL("../../../workspace-helper/helper", import.meta.url)), binary, `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`);
   const socket = workspaceHelperSocketPath(workspaceId);
-  // The helper gives its socket to this folder's owner.
   await mkdir(dirname(socket), { recursive: true });
   helper = Bun.spawn(["sudo", "-n", binary, "--listen", socket, "--state", join(directory, "state")], { stdout: "inherit", stderr: "pipe" });
   const stderr = helper.stderr.pipeThrough(new TextDecoderStream()).getReader();
@@ -48,18 +46,15 @@ afterAll(async () => {
   closeWorkspaceHelperConnection(workspaceId);
   helper.kill();
   await helper.exited;
-  // The helper keeps its state as root.
   await Bun.spawn(["sudo", "-n", "rm", "-rf", directory]).exited;
 });
 
-/** A fresh folder, and the environment and tools that resolve relative paths in it. */
 async function files() {
   const path = await mkdtemp(join(directory, "files-"));
   const env = new WorkspaceFileSystem(workspaceId, path);
   return { path, env, tools: createDurableFileTools(env) };
 }
 
-/** Runs one call of `tool` through a Harness, as the agent would, and returns its result message. */
 async function call(tool: ToolRegistration<any>, args: Record<string, JsonValue>) {
   const models = createModels();
   const faux = fauxProvider({ tokensPerSecond: 100_000 });
@@ -99,9 +94,7 @@ test("paths resolve in the workspace: relative to /work, ~ to the agent's home",
   expect(await resolved("file://elsewhere/a.md")).toBe("/work/file:/elsewhere/a.md");
 });
 
-/** What read needs of an environment, held to pi-durable's own conformance cases. */
 class ConformingFiles extends WorkspaceFileSystem {
-  // The cases set up folders and renames, which no tool asks of the workspace; the files are local here.
   override readonly createDir: ExecutionEnv["createDir"] = async (path) => ok(await mkdir(join(this.cwd, path)));
   override readonly renameFile: ExecutionEnv["renameFile"] = async (source, destination) => ok(await rename(join(this.cwd, source), join(this.cwd, destination)));
 }
@@ -122,7 +115,6 @@ test("write creates folders, edit keeps a byte-order mark and line endings, read
   const shown = await call(read!, { path: file, offset: 2, limit: 1 });
   expect(shown.text).toStartWith("changed");
   expect(shown.text).toContain("2 more lines in file. Use offset=3 to continue.");
-  // People read the Harness's remark without the markup the model gets it in.
   expect(shown.transcriptText).toBe("changed\r\n\n2 more lines in file. Use offset=3 to continue.");
 });
 
@@ -142,7 +134,6 @@ test("images are read for the model", async () => {
   const shown = await call(read!, { path: "red.png" });
   expect(shown.isError).toBe(false);
   expect(shown.content).toContainEqual({ type: "image", mimeType: "image/png", data: png });
-  // A huge image is refused before it is read into the app's memory.
   await writeFile(join(path, "huge.png"), Buffer.from(png, "base64"));
   await truncate(join(path, "huge.png"), 65 * 1024 * 1024);
   const huge = await call(read!, { path: "huge.png" });

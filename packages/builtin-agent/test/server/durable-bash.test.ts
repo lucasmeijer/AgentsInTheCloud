@@ -27,14 +27,12 @@ afterEach(async () => {
   }
 });
 
-/** Terminal processes on this machine, on a tmux server of their own. */
 async function fixture() {
   const path = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-bash-"));
   fixtures.push(path);
   return { path, tmuxDirectory: join(path, "tmux"), processes: terminalProcessesIn(path) };
 }
 
-/** The processes, reporting each start once it has happened. */
 function observed(processes: TerminalProcesses) {
   const started = Promise.withResolvers<string>();
   return { started: started.promise, processes: { ...processes, async start(options) {
@@ -88,7 +86,6 @@ test("a finished command becomes the tool result, and its terminal process is re
 test("output the model doesn't see stays readable at fullOutputPath", async () => {
   const { result } = await run("seq 1 3000; exit 1");
   const { fullOutputPath } = Value.Parse(bashDetails, result.details);
-  // One text item: the Harness had nothing of its own to cut.
   expect(result.content).toHaveLength(1);
   const [content] = result.content;
   if (content?.type !== "text") throw new Error("expected a text result");
@@ -111,7 +108,6 @@ test("a command whose terminal disappears is reported as uncertain, not run agai
   const tmux = (...args: string[]) => runLocally(f.tmuxDirectory)({ argv: ["tmux", ...args], user: "agents-in-the-cloud" }, {});
   const processes: TerminalProcesses = { ...f.processes, async start(options) {
     await f.processes.start(options);
-    // The command says when it has counted itself; then its terminal goes.
     await tmux("wait-for", "counted");
     await tmux("kill-session", "-t", `=${terminalProcessSession(options.id)}`);
   } };
@@ -179,7 +175,6 @@ test.each(["before-start", "after-start"] as const)("SIGKILL %s recovers without
       expect(results[0]!.isError).toBe(false);
       expect(results[0]!.content).toContainEqual({ type: "text", text: expect.stringContaining("recovered") });
     } else {
-      // A start that may or may not have happened is never guessed at.
       expect(await Bun.file(join(f.path, "count")).exists()).toBe(false);
       expect(results[0]!.isError).toBe(true);
       expect(results[0]!.content[0]).toEqual({ type: "text", text: "The command's terminal process is missing, so the command was not run again." });
@@ -200,18 +195,15 @@ test("aborting a bash tool stops its command but lets the agent finish the turn"
   const tool = inspection.tasks.find(({ record }) => record.kind === "pi.tool")!;
   await h.workspace.harness.abortTask(tool.record.id, context);
   expect((await submission.wait(context)).status).toBe("done");
-  // Released, which kills whatever of the command was left, so it never gets to the touch.
   expect(await f.processes.state(id)).toEqual({ state: "missing" });
   expect(await Bun.file(join(f.path, "after-abort")).exists()).toBe(false);
 });
 
-// bun test fails on the unhandled rejection; in the app, Bun exits on one.
 test("stopping while the command is starting stops it without an unhandled rejection", async () => {
   const f = await fixture();
   let stop!: () => Promise<void>;
   const processes: TerminalProcesses = { ...f.processes, async start(options) {
     await f.processes.start(options);
-    // Stop lands after the command started but before the tool waits for it.
     const stopped = stop();
     await Bun.sleep(300);
     void stopped;

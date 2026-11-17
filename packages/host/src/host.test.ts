@@ -47,7 +47,6 @@ test("private network access replaces destinations through the System handler", 
   expect(parseHostRequest(JSON.stringify({ operation: "private-network-access", destinations }))).toEqual({ operation: "private-network-access", destinations });
   expect(await service.handle({ operation: "private-network-access", destinations })).toBeNull();
   expect(received).toEqual(destinations);
-  // The shape is checked here; System's firewall validates bridges, addresses and ports before using them.
   for (const destination of [{ ...destinations[0], bridge: 1 }, { ...destinations[0], port: "5432" }, { ...destinations[0], extra: true }])
     expect(() => parseHostRequest(JSON.stringify({ operation: "private-network-access", destinations: [destination] }))).toThrow();
 });

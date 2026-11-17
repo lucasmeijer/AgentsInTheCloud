@@ -70,7 +70,6 @@ async function scriptTool(agent: Agent): Promise<ToolView | undefined> {
   return tool;
 }
 
-/** Wait until the running tool's committed output, which a stop keeps, contains `text`. */
 async function committedOutput(agent: Agent, text: string) {
   for (;;) {
     const watch = await agent.watch(context);
@@ -105,7 +104,6 @@ test("a stopped script keeps the calls it made, for the transcript and the model
   const [echo, hold] = tool.nested!;
   expect(echo).toMatchObject({ name: "echo", status: "ok", resultText: "before the stop" });
   expect(hold).toMatchObject({ name: "hold", status: "error", details: { aborted: true } });
-  // What the model gets for the stopped script: which calls ran, and which one the stop cut off.
   expect(tool.resultText).toContain('started c1: echo {"text":"before the stop"}\nfinished c1: ok\nstarted c2: hold {}');
   expect(tool.resultText).not.toContain("finished c2");
 });

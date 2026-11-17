@@ -132,7 +132,6 @@ export function buildFfmpegArgs(inputPath: string, outputPath: string, frameRate
 	];
 }
 
-/** Recording-only overlay: normal Playwright pointer events drive it too. */
 function installRecordingPointer(): void {
 	if (window !== window.top) return;
 	const mount = () => {
@@ -166,7 +165,6 @@ function installRecordingPointer(): void {
 		document.addEventListener("pointermove", event => move(event.clientX, event.clientY), true);
 		document.addEventListener("pointerdown", event => {
 			move(event.clientX, event.clientY);
-			// Keep the pointer above application dialogs and popovers.
 			host.hidePopover();
 			host.showPopover();
 			pulse.style.left = `${event.clientX}px`;
@@ -225,7 +223,6 @@ export async function createAgentsInTheCloudRecording(options: AgentsInTheCloudR
 	}
 	await context.addInitScript(installRecordingPointer);
 	const page = await context.newPage();
-	// setContent also replaces the document, without running init scripts.
 	page.on("domcontentloaded", () => page.evaluate(installRecordingPointer));
 	const playwrightVideoPath = await page.video()!.path();
 	let finalized = false;

@@ -7,14 +7,12 @@ import { workspaceSelectionController } from "./workspace-controller-registry.ts
 
 const templateSettingsPath = /^\/workspace-templates\/[^/]+\/settings$/;
 
-/** Reopen a settings destination when browser history reaches it after the panel was closed. */
 export function restoreTemplateSettingsDestination(): boolean {
   if (!templateSettingsPath.test(location.pathname)) return false;
   if (!document.querySelector('[data-controller~="template-settings"]')) visit(location.href, { action: "replace" });
   return true;
 }
 
-/** Template settings panel: history, focus return and discarding drafts on navigation. Editing belongs to settings-editor. */
 export class TemplateSettingsController extends Controller<HTMLElement> {
   static targets = ["discard", "developer"];
   static outlets = ["settings-editor"];
@@ -40,7 +38,6 @@ export class TemplateSettingsController extends Controller<HTMLElement> {
     workspace.inert = true;
     workspace.setAttribute("aria-hidden", "true");
     document.dispatchEvent(new Event("agents-in-the-cloud:workspace-pane-hidden"));
-    // Settings occupies the main destination on phones, rather than the workspace picker slide.
     this.element.closest(".fixed-shell-app")!.classList.remove("is-mobile-workspace-pane-open");
     document.addEventListener("click", this.navigate, true);
     document.addEventListener("turbo:before-visit", this.beforeVisit);
@@ -74,7 +71,6 @@ export class TemplateSettingsController extends Controller<HTMLElement> {
     for (const target of this.developerTargets) target.hidden = !this.altPressed;
   }
 
-  /** Each rendered settings page has its own history entry; saves replace it. */
   loaded(event: SettingsEditorLoadedEvent): void {
     this.currentUrl = event.detail.location;
     if (event.detail.submitted || this.restoring) history.replaceState({}, "", this.currentUrl);
@@ -121,7 +117,6 @@ export class TemplateSettingsController extends Controller<HTMLElement> {
     if (!target || target.closest("dialog")) return;
     const inside = this.element.contains(target);
     if (event.altKey && !(inside && target.closest('[data-template-settings-target="developer"]'))) return;
-    // Normal links opening another tab do not abandon the current draft.
     if (target instanceof HTMLAnchorElement && target.target === "_blank") return;
     const action = (): void => {
       if (!inside) this.leave();
@@ -129,7 +124,6 @@ export class TemplateSettingsController extends Controller<HTMLElement> {
       target.click();
       this.bypass = false;
     };
-    // Turbo ignores Alt-clicks; the revealed developer entry uses the same replay path.
     if (event.altKey || this.editor.busy || this.editor.dirty() || !inside) {
       event.preventDefault();
       event.stopImmediatePropagation();

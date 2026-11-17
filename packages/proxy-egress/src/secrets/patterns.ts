@@ -1,12 +1,10 @@
 // Portions adapted from @earendil-works/gondolin, Apache-2.0.
 // Source: https://github.com/earendil-works/gondolin
 
-/** normalize hostname allowlist pattern */
 export function normalizeHostnamePattern(pattern: string): string {
   return pattern.trim().toLowerCase().replace(/\.$/, "");
 }
 
-/** match a hostname against a normalized allowlist pattern */
 export function matchHostname(hostname: string, pattern: string): boolean {
   const normalizedHostname = normalizeHostnamePattern(hostname);
   const normalizedPattern = normalizeHostnamePattern(pattern);
@@ -20,7 +18,6 @@ export function matchHostname(hostname: string, pattern: string): boolean {
   return new RegExp(`^${escaped}$`, "i").test(normalizedHostname);
 }
 
-/** test a hostname against multiple allowlist patterns */
 export function matchesAnyHost(hostname: string, patterns: string[]): boolean {
   return patterns.some((pattern) => matchHostname(hostname, pattern));
 }

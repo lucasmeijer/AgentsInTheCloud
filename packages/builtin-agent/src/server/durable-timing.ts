@@ -2,7 +2,6 @@ import type { Context } from "@earendil-works/chord";
 import { defineEntry, defineExtension, GenerationTask, hook, type ConversationId, type TypedEntryDraft } from "@earendil-works/pi-durable";
 import type { TurnTimingSummary } from "@agents-in-the-cloud/agent/server/turn-timing";
 
-/** Bookkeeping entries have no model payload, and travel with native branch history. */
 type Measurement = { phase: "inference-start" | "tools-end"; at: number } | {
   phase: "inference-end";
   at: number;
@@ -31,7 +30,6 @@ export function durableTiming(write: WriteDurableTiming, now = Date.now) {
   })] });
 }
 
-/** A turn's sequential inference and tool-round intervals, not summed tool-call durations. */
 export class DurableTurnTiming {
   startedAt?: number;
   endedAt?: number;
@@ -46,7 +44,6 @@ export class DurableTurnTiming {
     this.startedAt ??= event.at;
     this.endedAt = event.at;
     if (event.phase === "inference-start") {
-      // A repeated start after recovery has no terminal usage for the interrupted request.
       if (this.inferenceStart !== undefined) this.usageComplete = false;
       this.inferenceStart = event.at;
     } else if (event.phase === "inference-end") {
@@ -62,7 +59,6 @@ export class DurableTurnTiming {
     }
   }
 
-  /** Stop ends the turn at `at`, closing a request or tool round it cut off. */
   stop(at: number) {
     if (this.inferenceStart !== undefined) {
       this.inferenceMs += Math.max(0, at - this.inferenceStart);

@@ -9,7 +9,6 @@ export function decodeWorkingFileWrite(result: GitResult): WorkingFileWriteResul
   return "saved";
 }
 
-/** Fixed trusted source, not loaded from the repository. Requests travel on stdin, never in shell source or argv. */
 export const repositoryBatchRunner = String.raw`
 const { lstat, readFile, readlink, mkdtemp, copyFile, rm, open, rename } = require('node:fs/promises');
 const { resolve, join, relative, sep } = require('node:path');

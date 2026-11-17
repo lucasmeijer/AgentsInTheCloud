@@ -1,7 +1,6 @@
 import { domId, escapeHtml } from "@agents-in-the-cloud/shared";
 import { branchColor, historyGraph, rowHeight, comparisonGraph, type HistoryModel } from "../history.ts";
 
-/** Server-rendered history rows and their shared graph. */
 export function renderHistoryGraph(model: HistoryModel, historyId: string, moreHtml = ""): string {
   const graph = historyGraph(model.commits);
   const selected = comparisonGraph(graph, model.endpoints, model.topology);

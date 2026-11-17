@@ -5,7 +5,6 @@ import { createPiModelRuntime, installClaudeSubscriptionAuth, requireProviderSub
 
 export const agentTypeId = "claude";
 export const label = "Claude Code";
-// The executable and @anthropic-ai/claude-agent-sdk 0.3.296 are released and pinned together.
 export const claudeCodeVersion = "2.1.296";
 export const claudeExecutable = `/home/agents-in-the-cloud/.claude-cli/${claudeCodeVersion}/node_modules/.bin/claude`;
 export const settings = createCliModelSettings({
@@ -16,19 +15,15 @@ export async function requireSetup() {
   await requireProviderSubscription(await createPiModelRuntime(), "anthropic", "Claude");
 }
 function claudeAgentDirectory(agentId: string) { return `/home/agents-in-the-cloud/.local/share/agents-in-the-cloud-agents/${agentId}`; }
-/** Claude's own config directory for this Agent, so its conversations stay apart from the Claude Code CLI's. */
 export function claudeConfigDirectory(agentId: string) { return `${claudeAgentDirectory(agentId)}/claude`; }
-/** Session-private MCP configuration; the bearer token never reaches a command line. */
 export function claudeMcpConfigPath(agentId: string) { return `${claudeAgentDirectory(agentId)}/claude-mcp.json`; }
 
-/** Claude Code's own prompt assumes a terminal. This Agent renders its replies. */
 export const renderedTranscriptInstructions = "Your replies are rendered as rich Markdown in AgentsInTheCloud's web transcript, not in a terminal. Where Claude Code's guidance about terminal output conflicts with this, follow AgentsInTheCloud's guidance.";
 
 export async function prepareClaude(workspaceId: string, agentId: string): Promise<{ instructions: string }> {
   const [, connection] = await Promise.all([
     installClaudeSubscriptionAuth(workspaceId, claudeConfigDirectory(agentId), await createPiModelRuntime()),
     prepareCliAgentConnection(workspaceId, agentId, agentsInTheCloudSystemPrompt).then(async connection => {
-      // Claude waits for alwaysLoad servers at startup and includes their tools in turn one.
       const mcp = { mcpServers: { "agents-in-the-cloud": { type: "http", url: connection.url, headers: { Authorization: `Bearer ${connection.token}` }, alwaysLoad: true } } };
       await writeCliSessionFiles(workspaceId, { directory: claudeAgentDirectory(agentId) }, { "claude-mcp.json": JSON.stringify(mcp) });
       return connection;

@@ -17,26 +17,19 @@ export type RunTerminalProcessCommand = (
 ) => Promise<{ exitCode: number; stdout: Buffer; stderr: string }>;
 
 export interface TerminalProcessStart {
-  /** Chosen by the caller, so a retried start finds the same process instead of running it twice. */
   id: string;
-  /** A bash script. It runs on the terminal, so it sees a TTY and can be watched live. */
   command: string;
   cwd: string;
   env?: Record<string, string>;
   cols?: number;
   rows?: number;
-  /** Epoch milliseconds. Enforced where the process runs, and never extended by starting again. */
   deadline?: number;
-  /** Also keep the output as plain text in `textFile(id)`, which outlives `release`. */
   keepText?: boolean;
-  /** Viewers can type, and the terminal follows their size. Otherwise they only watch it, at its own size. */
   interactive?: boolean;
 }
 
 export interface TerminalProcessOutput {
-  /** Scrollback and final screen, with colors. */
   ansi: string;
-  /** The same, as plain text. */
   text: string;
 }
 
@@ -44,17 +37,12 @@ export type TerminalProcessState =
   | { state: "running"; interactive: boolean }
   | {
     state: "exited";
-    /** Null when the command never ran: it was stopped before it started, or its deadline had passed. */
     exitCode: number | null;
-    /** Stopped with `stop`. */
     aborted: boolean;
-    /** Stopped at its deadline. */
     timedOut: boolean;
     output: TerminalProcessOutput;
   }
-  /** Started, but its terminal disappeared before recording a result, e.g. because tmux was killed. */
   | { state: "lost" }
-  /** Never started here, or already released. */
   | { state: "missing" };
 
 export interface TerminalProcesses {
@@ -65,9 +53,7 @@ export interface TerminalProcesses {
    */
   start(options: TerminalProcessStart): Promise<void>;
   state(id: string): Promise<TerminalProcessState>;
-  /** Waits until the process is no longer running; the ambient command signal cancels waiting, not the process. */
   waitForEnd(id: string): Promise<Exclude<TerminalProcessState, { state: "running" }>>;
-  /** Waits until the process exits; the ambient command signal cancels waiting, not the process. */
   waitForExit(id: string): Promise<Extract<TerminalProcessState, { state: "exited" }>>;
   /**
    * Interrupts the command, killing it if it ignores that, and records it as
@@ -79,7 +65,6 @@ export interface TerminalProcesses {
    * once the result is stored elsewhere: starting the same id again runs it again.
    */
   release(id: string): Promise<void>;
-  /** Where `keepText` keeps the plain-text output. */
   textFile(id: string): string;
   /**
    * A viewer's live connection to the process's terminal, sized `size` if the
@@ -133,7 +118,6 @@ const interruptScript = `${awaitFinishFunction}interrupt() {
 }
 `;
 
-/** Run by tmux's timer at the deadline. */
 const expireScript = `dir=$1 session=$2
 if [ ! -d "$dir" ] || [ -f "$dir/exit" ]; then exit 0; fi
 touch "$dir/timed-out"
@@ -177,7 +161,6 @@ exec 9<"$root"
 flock 9
 `;
 
-/** A process that never ran, recorded the way the finish script records one that did. */
 const recordNotRun = `touch "$dir/output"
 if [ -f "$dir/keep-text" ]; then : > "$dir.txt"; fi
 printf 'none\\n' > "$dir/exit"
@@ -294,7 +277,6 @@ function requestDigest(options: TerminalProcessStart, cols: number, rows: number
 }
 
 function parseOutput(ansi: string): TerminalProcessOutput {
-  // The capture ends with the final screen's unused rows.
   const trimmed = ansi.replace(/\s+$/, "");
   return { ansi: trimmed, text: stripTerminalControls(trimmed).replace(/\s+$/, "") };
 }
@@ -305,7 +287,6 @@ function parseOutput(ansi: string): TerminalProcessOutput {
  * the terminal clients that viewers connect through.
  */
 export function createTerminalProcesses(options: { run: RunTerminalProcessCommand; start: StartWorkspaceProcess; root: string }): TerminalProcesses {
-  // Paths appear unquoted in tmux commands, such as the pane-died hook.
   if (!rootPattern.test(options.root)) throw invalidArguments(`Invalid terminal processes root: ${options.root}`);
   const directory = (id: string): string => {
     if (!idPattern.test(id)) throw invalidArguments(`Invalid terminal process id: ${id}`);
@@ -356,7 +337,6 @@ export function createTerminalProcesses(options: { run: RunTerminalProcessComman
       const rows = start.rows ?? observableTerminalRows;
       const env = Object.entries({ ...observableTerminalEnvironment, ...start.env }).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
       const pane = `exec sh ${dir}/run ${dir} ${session}`;
-      // The prefixes keep each argument in place when tmux expands it to nothing.
       const hook = `run-shell -b "sh ${dir}/finish ${dir} ${session} #{hook_pane} s#{pane_dead_status} g#{pane_dead_signal} >/dev/null 2>&1 || :"`;
       await sh(startScript, [
         options.root, dir, session, requestDigest(start, cols, rows), start.cwd,
@@ -389,7 +369,6 @@ export function createTerminalProcesses(options: { run: RunTerminalProcessComman
           const current = await state(id);
           if (closed) return;
           if (current.state !== "running") { socket.close(terminalEndedCloseCode, "ended"); return; }
-          // Whether viewers can type and resize belongs to the process, not to the viewer.
           viewer = createObservableTerminalSocket({
             start: options.start, session: terminalProcessSession(id), ...size,
             user: "agents-in-the-cloud", workdir: "/", requireExistingServer: true, readonly: !current.interactive,
@@ -418,7 +397,6 @@ export async function runTerminalProcess(processes: TerminalProcesses, start: Om
     await started(id);
     return await processes.waitForExit(id);
   } finally {
-    // Not under the waiting's signal, which may be what was cancelled.
     await withCommandSignal(AbortSignal.timeout(10_000), () => processes.release(id));
   }
 }

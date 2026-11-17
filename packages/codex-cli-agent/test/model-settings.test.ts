@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
-// Isolate catalogue mocks and saved preferences from the real provider registry.
 async function scenario(script: string) {
   const directory = await mkdtemp(join(tmpdir(), "codex-model-settings-"));
   try {

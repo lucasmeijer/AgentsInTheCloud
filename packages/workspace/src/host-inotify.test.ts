@@ -25,7 +25,6 @@ test("fails if the kernel value cannot be read", async () => {
 test("verifies the limit after writing it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-inotify-"));
   directories.push(directory);
-  // Simulate a host that continues reporting the old limit after the write.
   await writeFile(join(directory, "cat"), "#!/bin/sh\necho 128\n", { mode: 0o755 });
   const child = Bun.spawn(["sh", "-c", inotifyMinimumScript, "test", join(directory, "limit")], {
     env: { ...process.env, PATH: `${directory}:${process.env.PATH}` }, stdout: "pipe", stderr: "pipe",

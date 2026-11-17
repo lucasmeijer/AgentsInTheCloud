@@ -1,7 +1,6 @@
 import { basename, join } from "node:path";
 import { publishSessionSnapshot, sessionShareDir, workspaceSessionShareKey } from "@agents-in-the-cloud/agent/server/session-share";
 
-/** Copy only native conversation files, never config, MCP tokens or authentication files. */
 export async function exportCliHistory(workspaceId: string, provider: string, tabId: string, slug: string, sources: string[]): Promise<void> {
   if (!sources.length) return;
   const destination = sessionShareDir(await workspaceSessionShareKey(workspaceId));

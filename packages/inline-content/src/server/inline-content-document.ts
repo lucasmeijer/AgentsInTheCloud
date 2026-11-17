@@ -13,7 +13,6 @@ async function runtimeModule(): Promise<string> {
   return runtime;
 }
 
-/** The document is always loaded into an opaque-origin, scripts-only sandbox. */
 export async function inlineContentDocument(fragment: string): Promise<string> {
   const [design, styles, module] = await Promise.all([
     inlineDesignSystemCss(),

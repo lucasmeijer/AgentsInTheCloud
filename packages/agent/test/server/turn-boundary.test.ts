@@ -3,7 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Isolate the workspace shell mock and the module's credential and turn state.
 async function scenario(script: string): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "agent-turn-"));
   try {

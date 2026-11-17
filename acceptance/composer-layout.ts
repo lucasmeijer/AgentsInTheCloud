@@ -67,7 +67,6 @@ const sel = {
 };
 
 const bottom = (box: Box): number => box ? box[1] + box[3] : Number.NaN;
-/** Floating buttons keep the workspace bar's outer inset: 4px on mobile, 10px on desktop. */
 let floatingInset = 4;
 const floatingLabel = { opener: "Open composer", followLatest: "Follow latest", pendingTranscript: "Will autoswitch to transcript when agent is done" };
 
@@ -90,10 +89,9 @@ async function scenario(name: string, description: string, body: (recorder: Scen
   recorder.add(check("tmux window sizes unchanged", changed.length === 0, Object.entries(tmuxAfter).map(([session, size]) => `${session}: ${tmuxBefore[session] ?? "—"} → ${size}`).join("; ")));
 }
 
-/** Runs an action while tracing, and applies the one-step pass criteria to it. */
 async function transition(recorder: ScenarioRecorder, label: string, action: () => Promise<void>, options: { waitMs?: number; expectChange?: boolean; endAtContentChange?: boolean } = {}): Promise<{ before: Frame; after: Frame }> {
   await page.startTrace();
-  await Bun.sleep(80); // Capture the pre-action arrangement before an immediate CDP edit.
+  await Bun.sleep(80);
   const t = await page.mark(label);
   await action();
   await Bun.sleep(options.waitMs ?? 700);
@@ -134,7 +132,6 @@ async function closeComposer(): Promise<void> {
   }
 }
 
-/** Floating stack slots, bottom to top. */
 const floatingOrder = [[floatingLabel.opener], ["View transcript", "Back to terminal", floatingLabel.pendingTranscript], [floatingLabel.followLatest]];
 
 function floatingStackChecks(frame: Frame, composerOpen: boolean, surface: Box = frame.transcript): ReturnType<typeof check>[] {
@@ -167,7 +164,6 @@ for (const name of ["first", "second", "third", "fourth"]) {
   imagePaths.push(path);
 }
 
-// ─── Mobile layout ──────────────────────────────────────────────────────────
 await page.layout("mobile");
 await page.navigate(builtinUrl, sel.transcript);
 
@@ -232,7 +228,6 @@ await scenario("mobile-H1-H7-height", "H1–H7 with the keyboard down: line-by-l
   await Bun.sleep(300);
   const promptTemplateButtons = '.agent-composer-pane .composer-prompt-template-buttons [data-agent-prompt-template-button]';
   const hadPromptTemplateButtons = await page.visible(promptTemplateButtons);
-  // The buttons set the empty composer's height, so the text field simply takes the prompt template buttons' place.
   await transition(recorder, "first letter", () => page.insertText("L"), { expectChange: false });
   recorder.add(check("Prompt template buttons hide once something is written", hadPromptTemplateButtons && !await page.visible(promptTemplateButtons), hadPromptTemplateButtons ? "shown when empty, hidden after one letter" : "no prompt template buttons shown"));
   await page.insertText("ine 1");
@@ -263,7 +258,6 @@ await scenario("mobile-H1-H7-height", "H1–H7 with the keyboard down: line-by-l
   await page.key("a", { ctrl: true });
   await page.key("Backspace");
   await Bun.sleep(300);
-  // H7: thumbnails take one row that scrolls sideways and count toward the height.
   const files = await page.cdp.send("Runtime.evaluate", { expression: `[...document.querySelectorAll('.agent-composer-pane input[type="file"]')].find((e) => e.closest(".agent-composer-pane").checkVisibility())` });
   await page.cdp.send("DOM.enable");
   await page.cdp.send("DOM.setFileInputFiles", { files: imagePaths, objectId: files.result.objectId! });
@@ -285,7 +279,6 @@ await scenario("mobile-H1-H7-height", "H1–H7 with the keyboard down: line-by-l
   recorder.add(
     check("H7: thumbnails sit in one row", row.rowHeight <= row.chipHeight + 12, `row ${row.rowHeight}px for chips of ${row.chipHeight}px (${row.chips} chips)`),
     check("H7: the row scrolls sideways", row.scrollWidth > row.clientWidth, `scrollWidth ${row.scrollWidth} > clientWidth ${row.clientWidth}`),
-    // The text field gets what is left under the max, never less than its own min height (H2: the button column).
     check("H7: thumbnails count toward the max height; the text field gets what's left", close(row.input, Math.max(row.inputMin, max - (row.composer - row.input)), 1) && (close(row.composer, max, 2) || close(row.input, row.inputMin, 1)), `composer ${row.composer} (max ${max}); text field ${row.input}, its min ${row.inputMin}, thumbnails/prompt template buttons/footer ${Math.round(row.composer - row.input)}${row.composer > max + 2 ? " — the fixed rows plus the text field's min exceed the max, so the min wins (H2)" : ""}`),
   );
   await page.key("a", { ctrl: true });
@@ -316,7 +309,6 @@ await scenario("mobile-D2-send", "D2: sending on mobile closes the composer in o
 
 await page.navigate(piUrl, sel.terminal);
 await Bun.sleep(2500);
-// Selecting transcript can now queue autoswitch before Pi has a completed turn.
 await page.tap(sel.viewTranscript);
 await Bun.sleep(500);
 if (!await page.visible(sel.cliTranscript)) {
@@ -393,7 +385,6 @@ await scenario("mobile-D18-frozen-send", "D18: sending while the frozen transcri
   await Bun.sleep(800);
 });
 
-// A Terminal view gets its size the first time it is shown; the scenario starts after that.
 await page.navigate(terminalUrl, ".terminal-view .observable-terminal-host");
 await Bun.sleep(2000);
 
@@ -412,7 +403,7 @@ await scenario("mobile-D24-long-press", "D24: holding open-composer for about 50
   await page.navigate(builtinUrl, sel.transcript);
   await closeComposer();
   await page.startTrace();
-  await Bun.sleep(80); // Capture the pre-action arrangement before an immediate CDP edit.
+  await Bun.sleep(80);
   const t = await page.mark("hold open-composer");
   const release = await page.press(sel.opener);
   await Bun.sleep(800);
@@ -435,7 +426,6 @@ await scenario("mobile-D24-long-press", "D24: holding open-composer for about 50
   );
   recorder.add(...oneStepChecks(analyseTransition(trace, t, Number.POSITIVE_INFINITY, { endAtContentChange: false })).map((result) => ({ ...result, name: `hold open-composer — ${result.name}` })));
   await recorder.file("holding.png", await page.screenshot());
-  // Stop dictation without sending.
   await page.tap('.agent-composer-pane [data-dictation-composer-target="button"]');
   await Bun.sleep(1500);
   await resetComposerText();
@@ -458,11 +448,9 @@ await scenario("mobile-D21-D22-floating", "D21/D22: floating buttons stack botto
   await closeComposer();
 });
 
-// ─── Desktop layout ─────────────────────────────────────────────────────────
 await page.layout("desktop");
 floatingInset = 10;
 await page.navigate(builtinUrl, sel.transcript);
-// Terminals open beside the agent attach at the desktop size before any scenario's baseline.
 await Bun.sleep(3000);
 
 await scenario("desktop-D1-selection", "D1: on desktop the composer is open and its text field focused when the workspace is selected.", async (recorder) => {
@@ -481,7 +469,6 @@ await scenario("desktop-D8-D2-send", "D8/D2/H4: Enter inserts a newline; Cmd+Ent
   await resetComposerText();
   await page.tap(sel.input);
   const minimum = (await transition(recorder, "empty", async () => {}, { waitMs: 150, expectChange: false })).after.composer![3];
-  // Enough lines to fill the button column, so the next one grows the composer.
   const lines = ["Reply with just the word OK and ignore the numbered lines below.", ...Array.from({ length: 9 }, (_, index) => `${index + 1}.`)];
   await page.insertText(lines.join("\n"));
   await Bun.sleep(200);
@@ -526,11 +513,10 @@ await scenario("desktop-D21-D22-floating", "D21/D22 on desktop: the floating-but
   recorder.add(...floatingStackChecks(opened.after, true));
 });
 
-// Launch is a dialog host for the same editor, with its own height budget.
 for (const layout of ["mobile", "desktop"] as const) {
   await page.layout(layout);
   await page.navigate(`${setup.atelier}/workspaces/new`, ".launch-composer .composer-input");
-  await Bun.sleep(1000); // Navigation/layout resizing is not a launch-editor transition.
+  await Bun.sleep(1000);
   await scenario(`${layout}-launch-editor`, "Launch opens without a mobile keyboard, grows with text, and keeps launch controls in reach.", async (recorder) => {
     const focused = await page.evaluate<boolean>('document.activeElement.matches(".launch-composer .composer-input")');
     recorder.add(check("Intentional initial focus", focused === (layout === "desktop"), `textarea focused: ${focused}`));
@@ -540,7 +526,6 @@ for (const layout of ["mobile", "desktop"] as const) {
     // Start empty so this action actually exercises growth on both layouts.
     await page.evaluate<boolean>(`(() => { const input = document.querySelector(".launch-composer .composer-input"); input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`);
     await Bun.sleep(400);
-    // Transcript updates behind the dialog are unrelated to launch-editor growth.
     await transition(recorder, "large launch prompt", () => page.insertText(Array.from({ length: 80 }, (_, i) => `Launch line ${i}`).join("\n")), { endAtContentChange: false });
     const geometry = await page.evaluate<{ fits: boolean; scrolls: boolean; caret: boolean }>(`(() => {
       const dialog = document.querySelector("dialog[open]").getBoundingClientRect();

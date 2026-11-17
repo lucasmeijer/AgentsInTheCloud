@@ -13,20 +13,16 @@ const endpointPattern = /^(?:[0-9a-f]{7,40}\^?|working|staged)$/;
 export const isCommitHash = (endpoint: string): boolean => endpoint !== "working" && endpoint !== "staged";
 export const shortCommit = (hash: string): string => `${hash.slice(0, 7)}${hash.endsWith("^") ? "^" : ""}`;
 
-/** Parse `<endpoint>` or `<base>..<target>`. Hashes are case-insensitive; identical endpoints compare nothing. */
 export function parseCommitLinkSpec(spec: string): CommitLinkTarget | undefined {
   const [base, target, ...rest] = spec.toLowerCase().split("..");
   if (rest.length || ![base, target].every(part => part === undefined || endpointPattern.test(part)) || base === target) return undefined;
   return target === undefined ? { target: base! } : { base, target };
 }
 
-/** The commit target of an `agents-in-the-cloud://commit/<spec>` URL, or undefined for any other or malformed URL. */
 export function parseCommitLinkHref(href: string): CommitLinkTarget | undefined {
-  // Markdown percent-encodes `^`.
   return href.startsWith(commitLinkPrefix) ? parseCommitLinkSpec(href.slice(commitLinkPrefix.length).replaceAll(/%5e/gi, "^")) : undefined;
 }
 
-/** Changes' endpoints for a commit link: `open` shows its comparison, `commit-label` describes it. */
 export function changesCommitUrl(workspaceId: string, endpoint: "open" | "commit-label", { base, target }: CommitLinkTarget): string {
   return `/workspaces/${encodeURIComponent(workspaceId)}/changes/${endpoint}?${new URLSearchParams({ commit: base === undefined ? target : `${base}..${target}` })}`;
 }

@@ -9,7 +9,6 @@ export function managementOriginRejection(request: Request, peerAddress?: string
   const target = new URL(request.url);
   const forwardedProtocol = request.headers.get("x-forwarded-proto");
   if (isLoopbackPeer(peerAddress) && forwardedProtocol !== null) {
-    // One protocol only: malformed/ambiguous forwarding fails closed.
     if (forwardedProtocol !== "http" && forwardedProtocol !== "https") return forbiddenOrigin();
     target.protocol = `${forwardedProtocol}:`;
   }
@@ -26,7 +25,6 @@ function forbiddenOrigin(): Response {
   });
 }
 
-// The address is supplied by the server socket, not forwarding headers.
 function isLoopbackPeer(address: string | undefined): boolean {
   return address === "::1" || /^(?:127\.|::ffff:127\.)/.test(address ?? "");
 }

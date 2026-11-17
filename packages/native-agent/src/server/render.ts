@@ -8,21 +8,15 @@ import { LiveTranscriptRenderer, StreamingTexts } from "@agents-in-the-cloud/bui
 import { escapeHtml, type LiveRegion } from "@agents-in-the-cloud/shared";
 import type { NativeAgentRuntime } from "./agents.ts";
 
-/** A native Agent's pane: its projected transcript, then notices and a lost connection. */
 export function createNativeAgentRendering<Runtime extends NativeAgentRuntime>(options: {
   channelName: string;
-  /** Path segment under the workspace for this Agent type's routes, such as `codex-agents`. */
   routeSegment: string;
   transcript(runtime: Runtime): TranscriptItem[];
   stats(runtime: Runtime): AgentStatsView;
-  /** Work the harness runs beside the conversation, shown in a bar above it. */
   background?: {
     activities(runtime: Runtime): BackgroundActivity[];
-    /** An activity's own detail, such as command output or a subagent's transcript, beneath its facts. */
     detail(runtime: Runtime, activity: BackgroundActivity, ctx: AgentRenderContext): Promise<string>;
-    /** Anything else under the activity's path, such as lazy frames inside its detail. */
     route?(runtime: Runtime, activity: BackgroundActivity, path: string, url: URL, ctx: AgentRenderContext): Promise<Response | undefined>;
-    /** For Agents whose activities can be stopped one by one. */
     stop?(runtime: Runtime, activity: BackgroundActivity): Promise<void>;
   };
 }) {
@@ -45,7 +39,6 @@ export function createNativeAgentRendering<Runtime extends NativeAgentRuntime>(o
     const items = transcriptItems(runtime);
     renderer.texts.retainLive(items);
     const ctx: AgentRenderContext = { ...renderContext(runtime), streamingText: renderer.texts.render };
-    // A harness may still be connecting; its prompt loads when the entry opens, so connecting doesn't change the transcript.
     return renderer.rows.renderRows(ctx, items, renderLazyTranscriptEntry(ctx, "system-prompt", "System prompt"));
   }
   function liveRegions(runtime: Runtime): LiveRegion[] {

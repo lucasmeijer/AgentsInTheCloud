@@ -60,7 +60,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
     private sentSubmissionId?: string;
     private readonly identifySubmission = (event: FormDataEvent): void => {
       const body = event.formData;
-      // Mode may change from send to steer while an uncertain request retries.
       const payload = JSON.stringify([...body.entries()].filter(([key]) => key !== "requestId" && key !== "mode"));
       const key = `${this.composerTextStorageKey}:admission`;
       const prior = this.pendingAdmission();
@@ -128,7 +127,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       this.formTarget.addEventListener("formdata", this.identifySubmission);
       this.formTarget.addEventListener("submit", this.submitting);
       this.composerMutationObserver = new MutationObserver(() => this.updateSendStopButton());
-      // Live morphs update the existing button's state attributes without replacing it.
       this.composerMutationObserver.observe(this.formTarget, {
         childList: true,
         subtree: true,
@@ -192,8 +190,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       if (!this.cableSubscription) this.subscribe();
     }
 
-    /** Follow a link to another place in this transcript without leaving the page. */
-    /** A link into another Agent's transcript, such as a subagent's on its page, is that transcript's to follow. */
     reveal(event: Event & { params: { item: string; agent: string } }): void {
       event.preventDefault();
       if (event.params.agent === this.agentIdValue) void this.revealTarget(event.params.item);
@@ -214,10 +210,8 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       const { turnId } = Value.Parse(Type.Object({ turnId: Type.Union([Type.String(), Type.Null()]) }), await response.json());
       const turn = turnId === null ? null : this.transcriptTarget.querySelector<HTMLDetailsElement>(`[data-agent-turn-turn-id-value="${CSS.escape(turnId)}"]`);
       if (turn) turn.open = true;
-      // Opening a turn loads its items, the target among them.
       const element = await this.appeared(transcriptTargetSelector(target));
       for (const detail of element.querySelectorAll("details")) detail.open = true;
-      // The transcript settles its own position once a turn's items load; reveal after that, or following the latest moves past the target.
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       this.navigation.reveal(element);
     }
@@ -278,8 +272,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       });
     }
 
-    // ---- transcript navigation ----
-
     scrollToTranscriptEnd(): void {
       this.navigation.followLatest();
     }
@@ -292,7 +284,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       const completionMenuOpen = Boolean(this.element.querySelector<HTMLElement>(".agent-completion-menu-host:not([hidden])")?.checkVisibility());
       if (!completionMenuOpen && this.promptHistory.keydown(event, this.inputTarget, () => this.userPrompts())) return;
 
-      // Enter inserts a newline on every keyboard; only ⌘/Ctrl+Enter sends.
       if (composerSubmitKey(event)) {
         event.preventDefault();
         if (this.inputTarget.value.trim() || this.formTarget.querySelector(".agent-chip")) {
@@ -325,7 +316,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       this.updateSendStopButton();
     }
 
-    /** The pane's live content, including its actions, can arrive after it connects. */
     private get busy(): boolean {
       return this.hasSendStopTarget && this.sendStopTarget.dataset.agentBusy === "true";
     }
@@ -355,7 +345,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
     async sendPrompt(event: CustomEvent<AgentComposerSendPromptDetail>): Promise<void> {
       const body = new FormData();
       body.set("text", event.detail.text);
-      // Like a typed prompt: while the agent works, it waits for the turn to end.
       body.set("mode", "send");
       body.set("requestId", crypto.randomUUID());
       body.set("attachmentDraft", String(new FormData(this.formTarget).get("attachmentDraft")));
@@ -382,7 +371,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       const steer = this.steerWhenAdmitted;
       this.steerWhenAdmitted = false;
       if (!event.detail.success) {
-        // Sending never discards the draft.
         if (submission && !this.inputTarget.value) this.setInputValue(submission.text);
         this.element.dispatchEvent(new Event("agent-composer:failed"));
         return;
@@ -398,13 +386,11 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       }
       this.element.dispatchEvent(new Event("agent-composer:sent"));
       const submissionId = event.detail.fetchResponse?.response.headers.get("x-agents-in-the-cloud-submission-id") ?? undefined;
-      // Only input sent while the agent works is queued, and its row may already be shown.
       const queued = submission?.busy && submissionId && !this.transcriptTarget.querySelector(`[data-agent-queued-steer="${CSS.escape(submissionId)}"]`) ? submissionId : undefined;
       this.sentSubmissionId = steer ? undefined : queued;
       if (steer && submissionId) void this.steerQueuedInput(submissionId);
     }
 
-    /** Until the follow-up just sent appears, the newest one on screen is an older one. */
     private steerNewestFollowUp(): void {
       const sent = this.sentSubmissionId;
       this.sentSubmissionId = undefined;
@@ -420,7 +406,6 @@ export function createAgentPaneController(Controller: StimulusControllerConstruc
       if (button.dataset.agentQueuedSteer === this.sentSubmissionId) this.sentSubmissionId = undefined;
     }
 
-    /** Whether it was still a queued follow-up; the live view shows the change. */
     private async steerQueuedInput(submissionId: string): Promise<boolean> {
       const response = await fetch(new URL(`queued-inputs/${encodeURIComponent(submissionId)}/steer`, this.formTarget.action), { method: "POST", headers: { Accept: "application/json" } });
       if (!response.ok) throw new Error(`Could not steer the follow-up: HTTP ${response.status}`);

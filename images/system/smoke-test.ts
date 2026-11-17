@@ -123,7 +123,6 @@ await until(
   "retry fixture failure",
 );
 await exec("rm", "/data/app/fail-startup");
-// Retry returns HTML through a 303, so exercise its status separately.
 assert.equal(
   await exec(
     "bun",
@@ -175,7 +174,6 @@ console.log(
   }),
 );
 
-// Local mode must not start the Tailscale daemon, including after a System restart.
 if ((await api("/access")).mode === "localhost") {
   const tailscaleRunning = async () => (await exec("sh", "-c", "if pgrep -x tailscaled > /dev/null; then echo running; else echo stopped; fi")) === "running";
   assert.equal(await tailscaleRunning(), false, "local startup must leave Tailscale stopped");

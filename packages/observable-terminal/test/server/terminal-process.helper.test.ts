@@ -6,7 +6,6 @@ import { buildGoProgram } from "@agents-in-the-cloud/core";
 import { closeWorkspaceHelper, runWorkspaceProcess, startWorkspaceProcess } from "@agents-in-the-cloud/workspace-helper";
 import { describeTerminalProcesses } from "./terminal-process-scenarios.ts";
 
-/** The same scenarios through a real helper, which runs as root and starts processes as the agent's user. */
 describeTerminalProcesses("terminal processes through the workspace helper", async (tmuxDirectory) => {
   const directory = await mkdtemp(join(tmpdir(), "terminal-process-helper-"));
   const binary = join(directory, "aitc-workspace-helper");
@@ -14,7 +13,6 @@ describeTerminalProcesses("terminal processes through the workspace helper", asy
   const socket = join(directory, "helper.sock");
   const state = join(directory, "state");
   const helper = Bun.spawn(["sudo", "-n", binary, "--listen", socket, "--state", state], { stdout: "inherit", stderr: "pipe" });
-  // The helper logs once it listens. Reading on afterwards keeps its later log lines from hitting a closed pipe.
   const stderr = helper.stderr.pipeThrough(new TextDecoderStream()).getReader();
   let log = "";
   while (!log.includes("listening on")) {
@@ -33,7 +31,6 @@ describeTerminalProcesses("terminal processes through the workspace helper", asy
       closeWorkspaceHelper(socket);
       helper.kill();
       await helper.exited;
-      // The helper keeps its state as root.
       await Bun.spawn(["sudo", "-n", "rm", "-rf", directory]).exited;
     },
   };

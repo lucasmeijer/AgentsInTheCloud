@@ -13,7 +13,6 @@ interface FixtureWorkspace {
   workViews: { key: string; reference: FixtureViewReference }[];
 }
 
-/** Real HTTP boundary; requests missing Origin fail before reaching the fixture. */
 function startManagement() {
   const requests: { method: string; path: string; origin: string | null; body: string }[] = [];
   const state: FixtureWorkspace = { id: "one", url: "/workspaces/one", phase: { kind: "runningPhase" }, agents: [], workViews: [] };

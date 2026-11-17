@@ -94,7 +94,6 @@ test("Pi native MCP discovers AgentsInTheCloud tools and does not duplicate nati
   cleanup.push(() => f.emit("session_shutdown"));
   await f.emit("session_start");
   await f.emit("before_agent_start");
-  // Pi 0.99.2 connects codemode MCP servers in the background until a script or resource tool needs them.
   await f.emit("tool_call", { toolName: "codemode", input: { code: "searchTools('present')" } });
 
   expect(f.notices.filter((message) => message.startsWith("MCP failed"))).toEqual([]);
@@ -108,7 +107,6 @@ test("Pi native MCP discovers AgentsInTheCloud tools and does not duplicate nati
   }, undefined!);
   expect(updates).toEqual(["Opening"]);
   expect(result.content).toEqual([{ type: "text", text: "Presented browser" }]);
-  // Native MCP exposes protocol errors as error results, including to codemode scripts.
   const failed = await f.tools.get("mcp__agents_in_the_cloud__fail")!.execute("call", {}, undefined, undefined, undefined!);
   expect(failed.structuredContent).toMatchObject({ isError: true, content: [{ type: "text", text: "deliberate failure" }] });
 

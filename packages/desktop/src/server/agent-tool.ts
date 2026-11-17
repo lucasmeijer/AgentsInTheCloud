@@ -13,7 +13,6 @@ export function createDesktopPresenter(deps: {
       const desktop = await deps.startDesktop();
       await deps.presentDesktop();
       const details = { ...desktop, workView: { type: "desktop" } };
-      // Tool content, not just UI details: the model must see the live CDP URL.
       return { content: [{ type: "text", text: JSON.stringify(details) }], details };
     },
   };

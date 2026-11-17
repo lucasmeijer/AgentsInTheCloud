@@ -61,7 +61,6 @@ async function handle(request: Request, url: URL): Promise<Response | undefined>
     return response(renderSample(undefined, message));
   }
 }
-/** Host targets AgentsInTheCloud System, not a Workspace or necessarily the physical Docker host. */
 export const agentsInTheCloudServerModule: WorkspaceModule = {
   id: "host",
   settingsContributions: [{ id: "host", label: "Host", order: 80, render: async () => hostAvailable() ? `<div class="host-content"><turbo-frame id="${statsFrame}" src="/host/sample"><p role="status">Sampling host…</p></turbo-frame></div>` : `<p>Host access requires an AgentsInTheCloud System image with the host service. This instance has no Host connection.</p>` }],

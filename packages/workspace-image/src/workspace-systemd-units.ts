@@ -1,4 +1,3 @@
-/** Installed in the workspace image; provisioning and standalone tests share these. */
 export function workspaceRuntimeUnits() {
   return {
     "agents-in-the-cloud-tmux.service": `[Unit]

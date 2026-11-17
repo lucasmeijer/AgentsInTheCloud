@@ -87,7 +87,6 @@ export async function verifyRevision(run: Run, ref: string, commit: string): Pro
   return manifest.digest;
 }
 
-/** Installations get System from their app's channel, so each channel's System must already support the app. */
 export async function assertChannelSystemsSupportApp(run: Run, appDigest: string, channels: readonly ("latest" | "stable")[]): Promise<void> {
   const app = (await inspectImage(run, `${image}@${appDigest}`))!;
   const required = Math.max(...(await platformLabels(run, image, app)).map((labels) => parseSystemVersion(labels[requiredSystemVersionLabel])));
@@ -113,7 +112,6 @@ export async function promoteChannels(run: Run, status: ReleaseStatus, save: () 
       status.channels[channel] = "published";
       save();
     } catch (error) {
-      // A failed response can follow a successful registry write; do not claim rollback.
       status.channels[channel] = "failed";
       save();
       throw error;
@@ -178,7 +176,6 @@ export async function release(options: ReturnType<typeof parseReleaseArgs>, run:
     phase(`Prepared ${status.commit} — ${status.digest}. No channels or release notes published.`);
     return;
   }
-  // New commits on main are fine; the next release picks them up. Rewritten history is not.
   phase("Confirm main still contains this commit");
   await run(["git", "fetch", "origin", "refs/heads/main"]);
   if ((await run(["git", "merge-base", "--is-ancestor", status.commit, "FETCH_HEAD"], { allowFailure: true })).code !== 0)
@@ -228,7 +225,6 @@ async function main(options: ReturnType<typeof parseReleaseArgs>, common: string
   process.on("SIGTERM", interrupt);
   process.on("SIGINT", interrupt);
   const run: Run = async (args, command = {}) => {
-    // Cleanup must still be able to remove a detached worktree after interruption.
     if (interrupted && !(args[0] === "git" && args[1] === "worktree" && args[2] === "remove")) throw new Error("Release interrupted");
     return commands.run(args, command);
   };
@@ -272,7 +268,6 @@ if (import.meta.main) {
           }
         }
       } else {
-        // The worker owns the lock; keep a separate process group for cancellation.
         const child = Bun.spawn([process.execPath, import.meta.path, "--release-worker", ...args], { stdin: "ignore", stdout: "inherit", stderr: "inherit", detached: true });
         const stop = () => { process.kill(-child.pid, "SIGTERM"); };
         process.on("SIGINT", stop);

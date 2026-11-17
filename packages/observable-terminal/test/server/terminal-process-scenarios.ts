@@ -7,7 +7,6 @@ import { terminalEndedCloseCode } from "../../src/shared/index.ts";
 import { createTerminalProcesses, terminalProcessSession, type RunTerminalProcessCommand, type TerminalProcesses, type TerminalProcessState } from "../../src/server/terminal-process.ts";
 import { startPrivateTmux } from "../support/local-terminal-processes.ts";
 
-/** Where the processes run. Every command it runs must reach the tmux server in `tmuxDirectory`. */
 export interface TerminalProcessPlace {
   run: RunTerminalProcessCommand;
   start: StartWorkspaceProcess;
@@ -18,7 +17,6 @@ export interface TerminalProcessPlace {
  * The rejection's message. Awaiting a helper call through `expect(...).rejects`
  * stalls its gRPC stream under bun test, so these await the promise directly.
  */
-/** A viewer's end of a live connection, collecting what it is sent. */
 function viewer() {
   const decoder = new TextDecoder();
   let output = "";
@@ -35,10 +33,8 @@ function viewer() {
       close(code?: number, reason?: string) { closed.resolve({ code, reason }); },
     },
     closed: closed.promise,
-    /** Resolves once tmux has drawn the screen for the viewer. */
     attached: attached.promise,
     output: () => output,
-    /** Resolves once the viewer has been sent `text`. */
     sees: (text: string) => new Promise<void>((resolve) => {
       if (output.includes(text)) resolve();
       else waiting.push({ text, resolve });
@@ -81,7 +77,6 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
       place = await open(tmuxDirectory);
       tmuxServer = await startPrivateTmux(place.run, tmuxDirectory);
       processes = createTerminalProcesses({ run: place.run, start: place.start, root: join(directory, "processes") });
-      // Opening a place may build it first.
     }, 120_000);
 
     afterEach(async () => {
@@ -172,7 +167,6 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
       await processes.stop(id);
       const result = await processes.waitForExit(id);
       expect(result).toMatchObject({ exitCode: 143, aborted: true, timedOut: false });
-      // Like any terminal, it shows bash reporting the signal.
       expect(result.output.text).toBe("before\nTerminated");
     });
 
@@ -202,7 +196,6 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
       expect(await processes.state(id)).toEqual(stopped);
       await processes.start({ id, command: `touch ${marker}`, cwd: directory });
       expect(await processes.state(id)).toEqual(stopped);
-      // Nothing was launched that could still run it.
       expect((await tmux("has-session", "-t", `=${terminalProcessSession(id)}`)).exitCode).not.toBe(0);
       expect(await Bun.file(marker).exists()).toBe(false);
     });
@@ -266,14 +259,12 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
 
     test("releasing a running process kills it and forgets it", async () => {
       const marker = join(directory, `${crypto.randomUUID()}.marker`);
-      // A duration no other process's command line contains.
       const nap = `sleep 30.${crypto.getRandomValues(new Uint32Array(1))[0]}`;
       const { id, started } = start(`${nap}; touch ${marker}`);
       await started;
       await processes.release(id);
       expect(await processes.state(id)).toEqual({ state: "missing" });
       expect((await tmux("has-session", "-t", `=${terminalProcessSession(id)}`)).exitCode).not.toBe(0);
-      // No process is left that could still get to the touch.
       expect((await place!.run({ argv: ["pgrep", "-x", "-f", nap], user: "agents-in-the-cloud", workdir: "/" }, {})).exitCode).toBe(1);
     });
 
@@ -295,7 +286,6 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
         root: join(directory, "processes"), start: place!.start,
         run: (command, options) => {
           const argv = [...command.argv];
-          // Pause between finding the exit file and reading it, where cleanup used to win.
           argv[2] = `cat() { case "$1" in */exit) tmux wait-for -S ${reading}; tmux wait-for ${proceed};; esac; command cat "$@"; }\n${argv[2]}`;
           return place!.run({ ...command, argv }, options);
         },
@@ -303,7 +293,6 @@ export function describeTerminalProcesses(name: string, open: (tmuxDirectory: st
       const result = reader.state(id);
       await tmux("wait-for", reading);
       const lock = await place!.run({ argv: ["flock", "-n", join(directory, "processes"), "true"], user: "agents-in-the-cloud", workdir: "/" }, {});
-      // Resume even if the assertion fails, so the test leaves no blocked reader.
       await tmux("wait-for", "-S", proceed);
       expect(await result).toMatchObject({ state: "exited", exitCode: 7, output: { text: "complete" } });
       expect(lock.exitCode).toBe(1);

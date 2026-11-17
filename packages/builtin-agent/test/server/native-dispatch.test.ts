@@ -44,7 +44,6 @@ test("production dispatch reattaches native journal, deduplicates passively, ret
   const commands = await getWorkspaceAgentController(agent);
   expect(await commands.userMessages()).toEqual(["Persisted request"]);
   expect(await commands.knownRequest("admitted")).toBe(true);
-  // No container or available Faux auth exists. A duplicate still succeeds.
   await commands.submit({ text: "Different retry", requestId: "admitted" });
   expect(runtime.currentModel()).toEqual({ provider: "faux", id: "test" });
   const named = await setWorkspaceAgentTitle(agent, "Retained native title");
@@ -75,7 +74,6 @@ test("production dispatch reattaches native journal, deduplicates passively, ret
   expect((await (await durableWorkspaceOwner(workspaceId)).admission())?.closed).toContain(controller.id);
   await removeClosedWorkspaceAgent(named);
   expect(await listWorkspaceAgents(workspaceId)).toEqual([]);
-  // Deletion must fence the retained owner even when no mounted tabs remain.
   await removeWorkspaceAgentRuntimes(workspaceId);
   const retained = await durableWorkspaceOwner(workspaceId);
   const history = await retained.agent(named);
@@ -135,7 +133,6 @@ test.each(["close", "suspend", "delete"] as const)("%s drains first controller a
     prepare: async () => { entered.resolve(); await release.promise; return { model: { provider: "faux", modelId: "test" } }; },
     expand: async (_workspace, text) => text, ready: async () => {}, validateModel: async () => {},
   });
-  // No presentation promise exists for the lifecycle operation to await.
   const acquiring = getWorkspaceAgentController(agent);
   await entered.promise;
   expect(await owner.catalog()).toEqual([]);

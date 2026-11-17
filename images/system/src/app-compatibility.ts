@@ -1,6 +1,5 @@
 import { parseSystemVersion, requiredSystemVersionLabel, systemVersion } from "../../../packages/shared/src/system-version.ts";
 
-/** System never starts an app that relies on a newer System. The installer updates both. */
 export function assertAppCompatible(labels: Record<string, string> | null | undefined, version = systemVersion): void {
   const required = parseSystemVersion(labels?.[requiredSystemVersionLabel]);
   if (required > version)

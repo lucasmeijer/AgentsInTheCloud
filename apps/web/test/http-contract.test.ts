@@ -307,7 +307,6 @@ describe("HTTP contracts", () => {
     await createWorkspaceTemplateEnvironmentVariable(workspaceTemplate.id, { name: "REGION", value: "eu" });
     const schema = Type.Object({ workspace: Type.Object({ warnings: Type.Array(Type.Object({ kind: Type.String(), state: Type.String() })), dismissedWarnings: Type.Record(Type.String(), Type.String()) }) });
     const status = async () => Value.Parse(schema, await (await app.fetch(new Request("http://test.local/workspaces/abc12345", { headers: { accept: "application/json" } }))).json()).workspace;
-    // Dismiss directly, without first constructing the workspace presentation through GET.
     const warning = workspaceWarnings(registry.get("abc12345")!, await getWorkspaceTemplateConfiguration(workspaceTemplate.id))[0]!;
     const path = `/workspaces/abc12345/warnings/${warning.kind}/dismiss`;
     expect((await app.fetch(postJson(path, { state: "stale" }))).status).toBe(400);

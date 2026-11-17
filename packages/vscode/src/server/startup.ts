@@ -1,7 +1,6 @@
 import { shellQuote } from "@agents-in-the-cloud/core";
 import { workspaceRoot, workspaceVSCodePort } from "@agents-in-the-cloud/workspace";
 
-/** Even on its dedicated port, VS Code must not adopt or stop an unrelated listener. */
 export function vscodeStartupScript(workspaceFile: string): string {
   return `
     set -eu

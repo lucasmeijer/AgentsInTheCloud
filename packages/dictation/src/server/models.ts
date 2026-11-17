@@ -20,13 +20,11 @@ export const defaultDictationModel: DictationModelId = "nemotron-en";
 const settingsSchema = Type.Object({
   model: Type.Optional(Type.Union([
     ...dictationModels.map(({ id }) => Type.Literal(id)),
-    // Accept retired selections in older persisted settings only.
     Type.Literal("parakeet-tdt"),
     Type.Literal("parakeet-ctc"),
   ])),
 });
 
-// Keep the existing filename so saved Dictation model selections remain readable.
 function settingsPath(): string {
   return agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "transcription.json");
 }

@@ -21,7 +21,6 @@ import { readSystemVersion, requestSupervisorUpdate } from "./supervisor.ts";
 const updateSidebarContributionId = "agents-in-the-cloud-update";
 const pollIntervalMs = 5 * 60 * 1000;
 
-/** installer_required: Download was chosen, but this update needs a newer System, so only the installer can install it. */
 type UpdateState = "idle" | "checking" | "available" | "installer_required" | "pulling" | "ready_to_restart" | "failed" | "restarting";
 
 const installerCommand = "curl -fsSL https://agentsinthecloud.com/install.sh | bash";
@@ -34,9 +33,7 @@ interface StateSnapshot {
   target?: ImageMetadata;
   updateChannel: UpdateChannel;
   progressMessage?: string;
-  /** This app needs a newer System than the one running it: the installer finishes the update. */
   systemOutdated: boolean;
-  /** The offered update needs a newer System, so only the installer can install it. */
   targetNeedsInstaller: boolean;
 }
 
@@ -55,11 +52,9 @@ export interface UpdateManagerDeps {
 
 class UpdateConflictError extends Error {}
 
-/** Coordinates Updates for the System-managed installation, not Workspace packages or agent CLIs. */
 export class UpdateManager {
   private context: WorkspaceServerModuleContext | undefined;
   private runtime: SelfUpdateRuntime | undefined;
-  /** Read once: System only changes by reinstalling, which restarts the app. */
   private systemVersion: number | undefined;
   private state: UpdateState = "idle";
   private percent: number | undefined;
@@ -82,7 +77,6 @@ export class UpdateManager {
     if (this.runtime) this.systemVersion = await (this.deps.readSystemVersion ?? readSystemVersion)();
     this.updateSidebar();
     if (!this.runtime) return;
-    // The installer pulls System, and System pulls the app, from these repositories' channel tags.
     await this.deps.writeRepositories?.();
     await this.checkNow().catch((error) => console.error("Update check failed", error));
     const checkForUpdate = () => void this.checkNow().catch((error) => console.error("Update check failed", error));
@@ -124,7 +118,6 @@ export class UpdateManager {
     try {
       target = await (this.deps.fetchMetadata ?? fetchChannelImageMetadata)(channel);
     } catch (error) {
-      // A superseded channel's failures are as stale as its successful responses.
       if (generation !== this.channelGeneration || this.pullPromise || this.prepared || this.restarting) return;
       this.setState("failed", { error: errorMessage(error) });
       throw error;
@@ -136,7 +129,6 @@ export class UpdateManager {
     const remote = target.revision ?? target.digest;
     const available = Boolean(remote && current && remote !== current);
     if (!available) this.setState("idle", {}, options.announceCurrent ?? false);
-    // Keep pointing to the installer until it's dismissed or a different update appears.
     else if (this.state === "installer_required" && previous?.digest === target.digest) this.setState("installer_required");
     else this.setState("available");
   }
@@ -166,7 +158,6 @@ export class UpdateManager {
     if (!this.target || (this.state !== "available" && this.state !== "failed")) {
       throw new UpdateConflictError("No update is available to download. Check the selected channel first.");
     }
-    // Updates needing a newer System are offered like any other; only choosing one reveals the installer is needed.
     if (this.snapshot().targetNeedsInstaller) {
       this.setState("installer_required");
       return Promise.resolve();
@@ -240,7 +231,6 @@ function renderCheckForm(): string {
 
 function renderDownloadControl(snapshot: StateSnapshot): string {
   const content = {
-    // Updates the installer must install aren't downloaded here; choosing one explains how to get it.
     initialContent: { kind: "text" as const, text: snapshot.targetNeedsInstaller ? "Get update" : "Download update" },
     progressContent: { kind: "text" as const, text: "Downloading…" },
     variant: "primary" as const,
@@ -289,7 +279,6 @@ function renderInstallerCopy(): string {
   return copyButtonHtml({ label: "Copy installer command", caption: "Copy installer command", copyText: installerCommand });
 }
 
-/** Shown while this app runs on a System older than it needs, whatever else the updater is doing. */
 function renderSystemOutdated(snapshot: StateSnapshot): string {
   if (!snapshot.systemOutdated) return "";
   return warningBannerHtml({
@@ -299,7 +288,6 @@ function renderSystemOutdated(snapshot: StateSnapshot): string {
   });
 }
 
-/** Replaces the update row after Download was chosen for an update only the installer can install. */
 function renderInstallerRequired(): string {
   return warningBannerHtml({
     message: "To get this version, run the installer again on the computer AgentsInTheCloud is installed on. Existing workspaces will survive but be interrupted.",

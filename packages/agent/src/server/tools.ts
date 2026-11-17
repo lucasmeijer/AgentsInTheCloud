@@ -5,7 +5,6 @@ import { defineWorkspaceTool, type WorkspaceTool } from "./workspace-tool.ts";
 
 export interface WorkspaceAgentToolOptions {
   events?: AgentsInTheCloudEventBus;
-  /** Only AgentsInTheCloud's own transcript renders artifact-preview: URLs. */
   embeds?: boolean;
 }
 
@@ -55,7 +54,6 @@ function createPresentTool(workspaceId: string, options: WorkspaceAgentToolOptio
     name: "present",
     label: "Present",
     description: "Present one primary interactive surface to the user in AgentsInTheCloud. Use this when the user should look at or interact with while evaluating your work. AgentsInTheCloud will place the chosen surface in the preview area. Calling this again should update or replace the primary presentation rather than adding multiple competing presentations. Do not use this tool for static or inline artifacts." + (options.embeds ? presentEmbedHint : "") + presenters.map((presenter) => `${presenter.kind}: ${presenter.description}`).join(" "),
-    // Moonshot requires function parameters to be one top-level object, not a union.
     parameters: Type.Object({
       kind: Type.String({ enum: kinds, description: `Surface to present. One of: ${kinds.join(", ")}.` }),
       ...presenterParameters,

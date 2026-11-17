@@ -2,7 +2,6 @@ import { AgentsInTheCloudCoreError, withCommandSignal, type JsonValue } from "@a
 import { errorMessage, type DeleteCurrentWorkspaceResult, type WorkspaceDeletionAssessment } from "@agents-in-the-cloud/shared";
 import type { WorkspaceDeletionState, WorkspaceRegistry } from "./workspace-registry.ts";
 
-/** Owns deletion assessment, confirmation, retries, and restart recovery. */
 export function createWorkspaceDeletion(options: {
   registry: WorkspaceRegistry;
   inspect(id: string): Promise<WorkspaceDeletionAssessment>;

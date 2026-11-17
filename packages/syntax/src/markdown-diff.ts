@@ -15,14 +15,12 @@ export function renderMarkdownDiff(code: string, provisional = false): string {
   const cached = cache.get(code);
   if (cached) return cached.html;
   let patches: ParsedPatch[];
-  // Incomplete or malformed external input stays readable as a snippet.
   try {
     patches = parsePatchFiles(code, { throwOnError: true });
   } catch {
     return renderSnippet(code);
   }
   const files = patches.flatMap((patch) => patch.files);
-  // Metadata-only/binary changes remain verbatim instead of disappearing.
   if (!files.length || files.some((file) => !file.hunks.length)) return renderSnippet(code);
   const html = patches.map((patch) => {
     const metadata = patch.patchMetadata ? renderSnippet(patch.patchMetadata) : "";

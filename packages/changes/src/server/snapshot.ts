@@ -30,7 +30,6 @@ export interface ChangesSnapshot {
   baseLabel: string;
   target?: string;
   targetLabel: string;
-  /** Why the comparison a commit link asked for couldn't be shown. */
   notice?: string;
 }
 export class InvalidDiffEndpoints extends Error {}
@@ -49,11 +48,9 @@ export async function commitHistory(root: Repository, history: ChangesHistory, s
   return { commits: commits.slice(0, limit), hasMore: commits.length > limit };
 }
 
-/** Load history pages until each of these snapshots has a row, however deep it is. */
 export async function loadHistoryThrough(root: Repository, history: ChangesHistory, ids: readonly (string | null | undefined)[]): Promise<void> {
   const commits = history.topology.filter(commit => commit.id !== workingTree && commit.id !== stagedChanges).map(commit => commit.id);
   for (;;) {
-    // Commits outside the topology never get a row; don't page through all history looking for them.
     const missing = ids.filter(id => id != null && !history.commits.some(commit => commit.id === id)).map(id => commits.indexOf(id!)).filter(row => row >= 0);
     if (!missing.length || !history.hasMore) return;
     const page = await commitHistory(root, history, history.loaded, Math.max(50, Math.max(...missing) + 1 - history.loaded));
@@ -125,7 +122,6 @@ export async function captureHistory(root: Repository): Promise<ChangesHistory> 
   return history;
 }
 
-/** Endpoints are object IDs (or captured index/working-tree states), never moving Git expressions. */
 export async function captureChanges(root: Repository, endpoints?: DiffEndpoints, capturedHistory?: ChangesHistory): Promise<ChangesSnapshot> {
   const history = capturedHistory ?? await captureHistory(root);
   endpoints ??= history.endpoints;

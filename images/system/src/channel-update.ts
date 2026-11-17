@@ -10,7 +10,6 @@ const settingsSchema = Type.Object({
   releaseChannel: Type.Optional(Type.Union([Type.Literal("stable"), Type.Literal("latest")])),
   appRepository: Type.Optional(Type.String({ pattern: "^[a-z0-9.-]+(:[0-9]+)?(/[a-z0-9._-]+)+$" })),
 });
-// Apps from before appRepository was recorded were all published here.
 const upstreamAppRepository = "ghcr.io/lucasmeijer/agents-in-the-cloud";
 
 export async function prepareChannelUpdate(settingsPath: string, images: {

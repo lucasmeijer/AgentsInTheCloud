@@ -3,7 +3,6 @@ import { contentRowClasses, contentRowContentHtml } from "./content-row-markup.t
 
 export interface ContentRowElement {
   tag: "a" | "button" | "div" | "span";
-  /** Trusted integration attributes. No class or style; escape external values. */
   attributesHtml?: string;
 }
 
@@ -16,17 +15,12 @@ export interface ContentRowLabel {
 
 interface ContentRowSlots {
   label: ContentRowLabel;
-  /** Trusted leading visuals, never a replacement for the label. */
   leadingHtml?: string;
-  /** Trusted trailing status or metadata. */
   trailingHtml?: string;
-  /** Muted for secondary rows such as explanations; it brightens on hover like any row. */
   tone?: "default" | "muted" | "danger";
-  /** Fit the contents by default; fill the allocated lane for collection rows. */
   width?: "fit" | "fill";
 }
 
-/** Presentation is explicit, not inferred from text length or viewport geometry. */
 export type ContentRowContent = ContentRowSlots & (
   | { kind: "compact"; description?: never }
   | { kind: "multiline"; description?: string }
@@ -38,9 +32,7 @@ type ContentRowInteraction =
       element?: never;
       container?: { attributesHtml?: string };
       primary: ContentRowElement;
-      /** Separately actionable leading controls; do not nest them in the primary. */
       leadingActionsHtml?: string;
-      /** Controls revealed on hover, keyboard focus, or touch. */
       engagedActionsHtml?: string;
     };
 
@@ -50,7 +42,6 @@ function elementHtml(element: ContentRowElement, className: string, content: str
   return `<${element.tag} class="${className}"${attributesHtml(element.attributesHtml)}>${content}</${element.tag}>`;
 }
 
-/** Menu entries, navigation, informational rows and primary actions share one anatomy. */
 export function contentRowHtml(options: ContentRowOptions): string {
   const content = contentRowContentHtml(options);
   if (options.element) {
@@ -62,7 +53,6 @@ export function contentRowHtml(options: ContentRowOptions): string {
   return `<div class="${contentRowClasses(options, false, false)}"${attributesHtml(options.container?.attributesHtml)}>${leading}${primary}${actions}</div>`;
 }
 
-/** Browser-owned interactions use the same renderer as server HTML. */
 export function contentRowElement<T extends HTMLElement = HTMLElement>(options: ContentRowOptions): T {
   const template = document.createElement("template");
   template.innerHTML = contentRowHtml(options);

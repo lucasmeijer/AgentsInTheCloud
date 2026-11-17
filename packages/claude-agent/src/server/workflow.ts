@@ -5,26 +5,19 @@ import { claudeText, type ClaudeRow } from "./rows.ts";
 const phaseSchema = Type.Object({ type: Type.Literal("workflow_phase"), title: Type.String() });
 const agentSchema = Type.Object({
   type: Type.Literal("workflow_agent"), label: Type.String(), phaseTitle: Type.Optional(Type.String()),
-  /** `start` while queued or starting, then `progress`, and finally `done` or `error`. */
   state: Type.String(),
-  /** Its transcript's name; absent until it starts. */
   agentId: Type.Optional(Type.String()),
   model: Type.Optional(Type.String()), startedAt: Type.Optional(Type.Number()),
   lastToolName: Type.Optional(Type.String()), lastToolSummary: Type.Optional(Type.String()),
   tokens: Type.Optional(Type.Number()), toolCalls: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
-  /** The start of its answer, once it is done. */
   resultPreview: Type.Optional(Type.String()),
 });
 
-/** One agent of a workflow, as its latest progress frame described it. */
 export type ClaudeWorkflowAgent = Omit<Static<typeof agentSchema>, "type">;
-/** Where a workflow is: every phase its script declares, and every agent it has queued so far. */
 export interface ClaudeWorkflowProgress { phases: string[]; agents: ClaudeWorkflowAgent[] }
 
-/** The entries of a workflow's progress frame; each kind is parsed once it is told apart. */
 export const workflowProgressSchema = Type.Array(Type.Object({ type: Type.String() }));
 
-/** Claude Code describes a workflow in full on its task's progress frames. Kinds of entry it adds later are left out. */
 export function workflowProgress(entries: Static<typeof workflowProgressSchema>): ClaudeWorkflowProgress {
   return {
     phases: entries.filter(entry => entry.type === "workflow_phase").map(entry => Value.Parse(phaseSchema, entry).title),
@@ -35,7 +28,6 @@ export function workflowProgress(entries: Static<typeof workflowProgressSchema>)
   };
 }
 
-/** Claude Code frames what it gives a workflow's agent: a line for the model, then the text with every line indented. */
 const harnessFrame = /^\[Workflow harness — (user request|computed task)\][^\n]*\n/;
 
 /**

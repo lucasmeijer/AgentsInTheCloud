@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 export type MicrophoneLease = {
   stream: MediaStream;
   release(): void;
@@ -7,7 +5,6 @@ export type MicrophoneLease = {
 
 type RequestMicrophone = (constraints: MediaStreamConstraints) => Promise<MediaStream>;
 
-/** Reuses one permission-granted stream while disabling its track between uses. */
 export class SharedMicrophone {
   private stream?: MediaStream;
   private pending?: Promise<MediaStream>;

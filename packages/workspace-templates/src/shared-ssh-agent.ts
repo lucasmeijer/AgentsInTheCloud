@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { AgentsInTheCloudCoreError, isNotFoundError } from "@agents-in-the-cloud/core";
 
 const failure = Buffer.from([5]);
-const maxPacketLength = 256 * 1024; // OpenSSH's SSH_AGENT_MAX_LEN.
+const maxPacketLength = 256 * 1024;
 
 function packet(body: Buffer): Buffer {
   const length = Buffer.alloc(4);
@@ -30,8 +30,8 @@ async function* packets(socket: Socket): AsyncGenerator<Buffer> {
 }
 
 function permitted(body: Buffer): boolean {
-  if (body[0] === 11) return body.length === 1; // identities
-  if (body[0] === 13) return true; // sign; OpenSSH validates the payload
+  if (body[0] === 11) return body.length === 1;
+  if (body[0] === 13) return true;
   if (body[0] !== 27 || body.length < 5) return false;
   const length = body.readUInt32BE(1);
   return length === 24 && body.subarray(5, 5 + length).toString() === "session-bind@openssh.com";
@@ -132,7 +132,6 @@ export class SharedSshAgent {
   }
 
   private async synchronize(child: ChildProcess, workspaceTemplateId?: string): Promise<void> {
-    // Read persisted authorization for EVERY request, including cached-key signing.
     const keys = await this.loadKeys(workspaceTemplateId);
     const digest = createHash("sha256").update(JSON.stringify(keys)).digest("hex");
     if (digest === this.loadedKeys) return;
@@ -175,7 +174,6 @@ export class SharedSshAgent {
         if (!client.destroyed) client.write(packet(response));
       }
     } catch (error) {
-      // Fail closed, but make configuration/backend/protocol errors visible.
       console.error("[ssh-agent] Workspace agent connection failed:", error);
       if (!client.destroyed) client.end(packet(failure));
     } finally {
@@ -214,7 +212,6 @@ export class SharedSshAgent {
   }
 
   async remove(socketPath: string): Promise<void> {
-    // Destroy established connections as well as removing the listening socket.
     await this.exclusive(async () => {
       const listener = this.listeners.get(socketPath);
       if (!listener) return;
@@ -229,7 +226,7 @@ export class SharedSshAgent {
     for (const path of this.listeners.keys()) await this.remove(path);
     await this.exclusive(async () => {
       const child = this.child;
-      this.child = undefined; // Intentional shutdown, not a recoverable failure.
+      this.child = undefined;
       if (child?.pid && child.exitCode === null && child.signalCode === null) {
         const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
         child.kill("SIGTERM");

@@ -120,7 +120,6 @@ test("GitHub host keys are trusted without project configuration, including SSH 
 });
 
 async function startServer(hostKey: string, authorizedKey: string): Promise<number> {
-  // Requires passwordless sudo to install OpenSSH if needed and run its privilege-separated daemon.
   const sshd = Bun.which("sshd") ?? "/usr/sbin/sshd";
   if (!(await Bun.file(sshd).exists())) {
     await run(["sudo", "-n", "apt-get", "update", "-qq"]);

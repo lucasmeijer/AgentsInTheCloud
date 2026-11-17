@@ -8,15 +8,12 @@ type HtmlAutocompleteOptions = {
   optionSelector: string;
   request(input: HTMLInputElement | HTMLTextAreaElement, force?: boolean): HtmlAutocompleteRequest | undefined;
   loadHtml?(request: HtmlAutocompleteRequest, host: HTMLElement): string | Promise<string> | undefined;
-  /** Return false when selection starts an interaction that owns the open menu. */
   select(option: HTMLElement, input: HTMLInputElement | HTMLTextAreaElement, url: string): boolean | void;
   keydown?(event: KeyboardEvent, input: HTMLInputElement | HTMLTextAreaElement, url: string, actions: HtmlAutocompleteActions): boolean;
   loadingHtml?: string;
   triggerKeysWhenClosed?: string[];
-  /** Search only on an explicit button action or Enter, never on typing/caret movement. */
   explicitSearch?: boolean;
   fullscreenShortcut?(option: HTMLElement): boolean;
-  /** Return true when an event inside the menu has been handled. */
   menuEvent?(event: Event, input: HTMLInputElement | HTMLTextAreaElement): boolean | void;
 };
 
@@ -176,7 +173,6 @@ export function createHtmlAutocompleteController(Controller: StimulusControllerC
       const option = this.optionFromEvent(event);
       if (!option) return;
       event.preventDefault();
-      // WebKit cancels click after a prevented touch pointerdown, so select immediately.
       if (event.pointerType === "touch") this.insert(option);
     };
 
@@ -200,7 +196,6 @@ export function createHtmlAutocompleteController(Controller: StimulusControllerC
       this.close();
     };
 
-    // A focusable menu (tabindex="-1") keeps focus while its text is selected, so it stays open until focus leaves both.
     private readonly menuFocusout = (event: FocusEvent): void => {
       const relatedTarget = event.relatedTarget;
       if (relatedTarget instanceof Node && (relatedTarget === this.inputTarget || this.menuTarget.contains(relatedTarget))) return;

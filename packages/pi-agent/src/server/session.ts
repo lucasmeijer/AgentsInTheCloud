@@ -20,7 +20,6 @@ function buildExtension(): Promise<string> {
   })();
 }
 
-/** Install native instructions, MCP registration, and turn notifications with a session-private credential. */
 export async function preparePiSession(workspaceId: string, session: CliAgentSession, connection: CliAgentConnection): Promise<Record<string, string>> {
   const extension = await buildExtension();
   const config = JSON.stringify({ ...connection, turnSignalCommand: session.turnSignalCommand });

@@ -178,7 +178,6 @@ class AgentsInTheCloudFullscreenController extends Controller<HTMLElement> {
   }
 
   private showView(): void {
-    // A single Agent is already selected; its header is not a tab.
     if (!this.paneHeaderValue) this.element.click();
   }
 

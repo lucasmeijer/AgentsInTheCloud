@@ -34,7 +34,6 @@ test("ChatGPT sign-in excludes API-only models without switching providers", asy
   expect(availability.connection).toBe("connected");
   expect(availability.modelIds.has("gpt-5-nano")).toBe(false);
 
-  // Read current authentication on every resolution, including after reconnect.
   await credentials.modify("openai", async () => ({ type: "api_key", key: "sk-test" }));
   expect((await cheapestAvailableProviderModel(runtime, "openai"))!.id).toBe("gpt-5-nano");
 });

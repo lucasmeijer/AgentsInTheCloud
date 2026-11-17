@@ -107,7 +107,6 @@ export async function revealWorkspaceTemplateSecrets(scope: ConfigurationScope, 
   )));
 }
 
-/** Global secrets and the template's own, which replace global ones with the same name. */
 export async function revealEffectiveSecrets(workspaceTemplateId?: string, file = workspaceTemplatesFile(), keyFile?: string): Promise<WorkspaceTemplateSecretPlaintext[]> {
   const secrets = (await Promise.all(workspaceScopes(workspaceTemplateId).map((scope) => revealWorkspaceTemplateSecrets(scope, file, keyFile)))).flat();
   return [...new Map(secrets.map((secret) => [secret.envName, secret])).values()];

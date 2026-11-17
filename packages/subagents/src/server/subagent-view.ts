@@ -2,7 +2,6 @@ import { listWorkspaceAgents, type AgentRouteHandler } from "@agents-in-the-clou
 import { requestAcceptsJson } from "@agents-in-the-cloud/core";
 import { nativeSnapshot } from "./native-view-state.ts";
 
-/** The selected Agent's subagents and their messages, for automation. */
 export const handleSubagentRequest: AgentRouteHandler = async (request, url) => {
   const match = url.pathname.match(/^\/workspaces\/([^/]+)\/subagents$/);
   if (!match || request.method !== "GET" || !requestAcceptsJson(request)) return undefined;

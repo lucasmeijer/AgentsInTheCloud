@@ -60,7 +60,6 @@ export function registerSubscriptionCli(getRuntime: () => Promise<ModelRuntime>)
     const inference = url.pathname === "/v1/messages" && request.method === "POST";
     const hasLimits = response.headers.has("anthropic-ratelimit-unified-status");
     if (!inference && !hasLimits) return response;
-    // Only AgentsInTheCloud's connected subscription, not a login made inside the workspace.
     if (!(await usesConnectedSubscription(request, "anthropic"))) return response;
     observeAnthropicSubscriptionResponse(response.headers, inference && response.ok);
     return response;
@@ -149,12 +148,10 @@ fi` : `if [ -f ${path} ] && grep -qF ${shellQuote(file.marker)} ${path}; then rm
   }
 }
 
-/** An app-owned Codex home must use the configured subscription, never a workspace login. */
 export async function installCodexSubscriptionAuth(workspaceId: string, codexHome: string, runtime: Pick<ModelRuntime, "listCredentials">): Promise<void> {
   await installAppOwnedSubscriptionAuth(workspaceId, "openai-codex", "Codex", `${codexHome}/auth.json`, runtime);
 }
 
-/** An app-owned Claude config directory must use the configured subscription, never a workspace login. */
 export async function installClaudeSubscriptionAuth(workspaceId: string, configDirectory: string, runtime: Pick<ModelRuntime, "listCredentials">): Promise<void> {
   await installAppOwnedSubscriptionAuth(workspaceId, "anthropic", "Claude", `${configDirectory}/.credentials.json`, runtime);
 }

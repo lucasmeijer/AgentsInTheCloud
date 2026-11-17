@@ -7,7 +7,6 @@ export class TailscaleHttpsDisabledError extends Error {
   }
 }
 
-/** CertDomains is Tailscale's authoritative list of certificate-eligible names. */
 export function requireTailscaleHttps(host: string, certDomains: string[] | null | undefined): void {
   if (!certDomains?.includes(host.replace(/\.$/, ""))) {
     throw new TailscaleHttpsDisabledError();

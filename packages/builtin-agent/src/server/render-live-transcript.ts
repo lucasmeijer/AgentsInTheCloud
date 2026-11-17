@@ -4,7 +4,6 @@ import { renderModelContextEntries, renderTranscriptItem, renderWorkingSection, 
 import type { TranscriptItem, WorkingTranscriptItem } from "@agents-in-the-cloud/agent/server/transcript";
 import { StreamingMarkdownRenderer } from "@agents-in-the-cloud/markdown";
 
-/** Renders live messages' Markdown as they grow: completed blocks once, then only the mutable tail. */
 export class StreamingTexts {
   private readonly messages = new Map<string, { source: string; renderer: StreamingMarkdownRenderer; stableHtml: string; tailHtml: string; tailBlocks?: readonly string[] }>();
   constructor(private readonly workspaceId: string) {}
@@ -25,7 +24,6 @@ export class StreamingTexts {
     return cached;
   };
 
-  /** A finalized message gets a persisted identity: don't keep every old parser for a long conversation. */
   retainLive(items: readonly TranscriptItem[]): void {
     const live = new Set<string>();
     const collect = (list: readonly TranscriptItem[]) => { for (const item of list) {
@@ -53,14 +51,12 @@ export class LiveTranscriptRenderer {
         const collection = liveCollection(ids.workingItems(commentary, item.key), this.rows(commentary, workingCommentaryItems(item)));
         commentaryIslands = collection.html;
         children.push(collection);
-        // A turn whose items show inline, until it finishes and loads them lazily, keeps them as rows too.
         if (ctx.inlineWorkingItems && !ctx.readOnly && !workingItemsLoadLazily(ctx, item)) {
           const items = liveCollection(ids.workingItems(ctx, item.key), this.rows(ctx, item.items));
           itemIslands = items.html;
           children.push(items);
         }
       }
-      // Without a streaming renderer, a live message is re-rendered whole within its own row.
       const rendering = item.type === "text" && item.live && !(item.final && ctx.jsonFinalAnswers) && ctx.streamingText ? ctx.streamingText(item.key, item.text) : undefined;
       const key = ids.item(ctx, item.key);
       const fingerprint = item.type === "working" ? undefined : JSON.stringify(rendering ? { ...item, text: "" } : item);
@@ -81,10 +77,8 @@ export class LiveTranscriptRenderer {
     return this.renderRows(ctx, items, renderModelContextEntries(ctx, modelContext));
   }
 
-  /** A transcript whose rows are regions of their own, after `contextHtml` (what the model was given). */
   renderRows(ctx: AgentRenderContext, items: readonly TranscriptItem[], contextHtml: string): LiveRegion {
     const region = liveCollection(ids.transcript(ctx), [{ id: `${ids.transcript(ctx)}_context`, html: contextHtml }, ...this.rows(ctx, items)]);
-    // Notices are browser-owned ephemeral messages, never snapshot state.
     region.html += this.noticesMount(ctx);
     return region;
   }

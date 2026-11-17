@@ -2,7 +2,6 @@ import { Controller } from "@hotwired/stimulus";
 import { scrollGeometry } from "../scrollbar/scroll-geometry.ts";
 import type { TabStatus } from "./tab-strip-html.ts";
 
-/** Browser-owned status changes; server-owned states are rendered by tabHtml. */
 export function setTabStatus(tab: HTMLElement, state: Pick<TabStatus, "busy" | "requestingAttention">): void {
   const status = tab.querySelector<HTMLElement>(".tab-strip__status")!;
   status.querySelector<HTMLElement>(".running")!.hidden = !state.busy;
@@ -11,7 +10,6 @@ export function setTabStatus(tab: HTMLElement, state: Pick<TabStatus, "busy" | "
   status.setAttribute("aria-label", [state.busy && "Busy", state.requestingAttention && "Requesting attention"].filter(Boolean).join("; "));
 }
 
-/** Owns tab geometry, clipping and keyboard navigation. Scrollbars are shared. */
 export class TabStripController extends Controller<HTMLElement> {
   static targets = ["list"];
   declare listTarget: HTMLElement;
@@ -47,7 +45,6 @@ export class TabStripController extends Controller<HTMLElement> {
     this.frame = requestAnimationFrame(() => { this.frame = 0; this.layout(); });
   };
   private layout(): void {
-    // Hidden panes are measured when ResizeObserver reports that they are visible.
     if (!this.element.clientWidth) return;
     for (const item of this.items) {
       const primary = item.querySelector<HTMLElement>(".content-row__primary")!;

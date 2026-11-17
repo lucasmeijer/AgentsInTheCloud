@@ -1,6 +1,5 @@
 import { Controller } from "@hotwired/stimulus";
 
-/** Mount server-rendered diff HTML, including Turbo and fullscreen clones. */
 export class MarkdownDiffController extends Controller<HTMLElement> {
   connect(): void {
     if (this.element.shadowRoot) return;

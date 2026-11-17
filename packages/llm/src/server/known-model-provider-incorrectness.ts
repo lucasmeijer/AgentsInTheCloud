@@ -20,7 +20,6 @@ const openaiSubscriptionDisallowedModelIds = new Set([
   "o3-mini", "o3-pro", "o4-mini",
 ]);
 
-/** Credential-aware availability, including known errors in Pi's catalogue. */
 export async function availableProviderModels(runtime: Pick<ModelRuntime, "getAvailable" | "checkAuth">, provider?: string) {
   const models = await runtime.getAvailable(provider);
   if (!models.some((model) => model.provider === "openai")) return models;
@@ -29,7 +28,6 @@ export async function availableProviderModels(runtime: Pick<ModelRuntime, "getAv
   return models.filter((model) => model.provider !== "openai" || !openaiSubscriptionDisallowedModelIds.has(model.id));
 }
 
-/** Cheapest model usable with this connection, rather than the full catalogue. */
 export async function cheapestAvailableProviderModel(runtime: Pick<ModelRuntime, "getAvailable" | "checkAuth">, provider: string) {
   return (await availableProviderModels(runtime, provider)).toSorted((a, b) => a.cost.input - b.cost.input)[0];
 }

@@ -75,7 +75,6 @@ test("retained discovery requires an existing viewer and cannot fall through to 
   for (const viewer of ["missing", "deleted", "../workspaces", "/absolute", "..", "viewer/child"]) {
     await expect(retainedDurableHistories(viewer)).rejects.toThrow();
   }
-  // A real projectless viewer need not have an init.json or running container.
   await mkdir(join(directory, "workspaces", "viewer", "metadata"), { recursive: true });
   expect((await retainedDurableHistories("viewer")).map(item => item.workspaceId)).toEqual(["deleted"]);
   await rm(join(directory, "workspaces", "viewer"), { recursive: true });

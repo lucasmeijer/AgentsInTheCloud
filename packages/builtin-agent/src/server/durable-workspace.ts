@@ -20,17 +20,13 @@ export type DurableAgentRecord = {
   label: string;
   title: string;
   readOnly?: boolean;
-  /** Delegated collaborators share the journal, not root tab metadata. */
   parentId?: string;
   rootId?: string;
   taskName?: string;
-  /** A one-shot agent: the code mode call that runs it. Read-only, and no part of delegation. */
   oneShotCallId?: string;
-  /** Retained branch IDs; durableId is the selected immutable fork. */
   branches?: ConversationId[];
 };
 
-/** A script's one-shot agent: listed with the Agent's children, but read-only and no part of delegation. */
 export function isOneShotAgent(record: Pick<DurableAgentRecord, "oneShotCallId">): boolean {
   return record.oneShotCallId !== undefined;
 }
@@ -46,7 +42,6 @@ const previousWorkspaceAgentsSchema = Type.Object({
 
 type WorkspaceAgentCatalog = { workspaceId: string; agents: DurableAgentRecord[] };
 
-/** Application identity is independent of Durable's storage-local numeric IDs. */
 export const WorkspaceAgents = defineDoc<WorkspaceAgentCatalog>({
   kind: "agents-in-the-cloud.workspace",
   version: 2,
@@ -106,7 +101,6 @@ export async function openDurableWorkspace(directory: string, workspaceId: strin
     let closing: Promise<void> | undefined;
     return {
       harness,
-      /** Idempotent creation: catalog, conversation, and initial settings commit together. */
       async agent(record: Omit<DurableAgentRecord, "durableId">, agent: AgentChange = {}) {
         const id = await harness.commit(async (tx) => {
           const workspace = await tx.doc(WorkspaceAgents);
@@ -122,7 +116,6 @@ export async function openDurableWorkspace(directory: string, workspaceId: strin
       },
       close(): Promise<void> {
         return closing ??= (async () => {
-          // Do not release the writer lease if storage shutdown fails.
           await harness.close(BACKGROUND_CONTEXT);
           await release();
         })();

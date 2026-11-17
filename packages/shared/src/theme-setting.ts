@@ -5,12 +5,10 @@ import { parseThemeSettings, type AgentsInTheCloudTheme } from "./theme.ts";
 
 export { agentsInTheCloudThemes, isAgentsInTheCloudTheme, themeAppearance, type AgentsInTheCloudTheme } from "./theme.ts";
 
-// AgentsInTheCloud System reads this file directly, so its location is part of that contract.
 function themeSettingPath(): string {
   return agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "theme.json");
 }
 
-/** Synchronous because every page render embeds the theme. */
 export function readThemeSetting(): AgentsInTheCloudTheme {
   let text: string | undefined;
   try {
@@ -18,7 +16,6 @@ export function readThemeSetting(): AgentsInTheCloudTheme {
   } catch (error) {
     if (!isNotFoundError(error)) throw error;
   }
-  // An AgentsInTheCloud running inside a workspace looks different from the host by default.
   return parseThemeSettings(text, process.env.ATELIER_HOST_UID ? "cappuccino" : "nord");
 }
 

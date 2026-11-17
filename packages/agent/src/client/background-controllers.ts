@@ -1,7 +1,6 @@
 import { slidePageChange } from "@agents-in-the-cloud/design-system/page-slide/client";
 import type { WorkspaceClientControllerConstructor as StimulusControllerConstructor } from "@agents-in-the-cloud/shared";
 
-/** Slides the pane to a drill-in activity's page, and back to the conversation. */
 export function createAgentBackgroundController(Controller: StimulusControllerConstructor) {
   return class AgentBackgroundController extends Controller {
     static targets = ["page", "frame"];
@@ -12,9 +11,7 @@ export function createAgentBackgroundController(Controller: StimulusControllerCo
     declare readonly frameTarget: HTMLElement & { src: string | null };
 
     private openedFromUrl?: string;
-    /** The pages opened from one another, such as a workflow's then one of its agents', so Back returns through them. */
     private trail: string[] = [];
-    /** A link to this pane with `background=<key>`, such as one revealing a subagent's message, opens that activity's page, once. */
     connect(): void {
       const params = new URL(location.href).searchParams;
       const key = params.get("background");
@@ -27,7 +24,6 @@ export function createAgentBackgroundController(Controller: StimulusControllerCo
       if (!(event.currentTarget instanceof HTMLAnchorElement)) throw new Error("A background activity opens from a link");
       event.preventDefault();
       const href = event.currentTarget.href;
-      // A page opened from another page returns to it; one opened from the list returns to the conversation.
       const from = this.pageTarget.hidden ? undefined : this.frameTarget.src;
       this.trail = from ? [...this.trail, from] : [];
       void slidePageChange(() => this.element, () => this.show(href), "forward");
@@ -57,7 +53,6 @@ export function createAgentBackgroundController(Controller: StimulusControllerCo
       }, "back");
     }
 
-    /** A link into the conversation, such as "Started by", returns to it first, whichever pages led here; one into the page's own transcript, or to another activity's page, doesn't. */
     pageClicked(event: Event): void {
       const link = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-action~="agent-pane#reveal"]') : null;
       if (link?.dataset.agentPaneAgentParam === this.element.dataset.agentPaneAgentIdValue) this.close();
@@ -65,7 +60,6 @@ export function createAgentBackgroundController(Controller: StimulusControllerCo
   };
 }
 
-/** Reloads the frame of a running activity while it is shown, so its output or transcript stays current. */
 export function createAgentBackgroundRefreshController(Controller: StimulusControllerConstructor) {
   return class AgentBackgroundRefreshController extends Controller {
     declare readonly element: HTMLElement;

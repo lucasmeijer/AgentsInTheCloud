@@ -28,7 +28,6 @@ interface TmuxSessionMetadata {
 }
 
 interface WorkspaceTerminalCreateOptions {
-  /** Preferred Terminal view and tmux session title. If already used, a numeric suffix is added. */
   title?: string;
   command?: string;
   cwd?: string;
@@ -87,7 +86,6 @@ function newTerminal(terminals: WorkspaceTerminal[], id: string, title: string, 
   return terminal;
 }
 
-/** A shell, or `command` on its own: when it exits, so does the terminal. */
 export async function createWorkspaceTerminal(workspaceId: string, options: WorkspaceTerminalCreateOptions = {}): Promise<WorkspaceTerminal> {
   const cwd = normalizeCwd(options.cwd);
   return mutateTerminals(workspaceId, async () => {

@@ -53,7 +53,6 @@ const dockerLabelsSchema = Type.Record(Type.String(), Type.String());
 const nonBlankStringSchema = Type.String({ pattern: "\\S" });
 const stringArraySchema = Type.Array(Type.String());
 export const workspaceRoot = "/work";
-// Reserved for VS Code. The adapter still verifies ownership before using it.
 export const workspaceVSCodePort = 24800;
 
 interface WorkspaceListResult { workspaces: Array<{ id: string; title: string | null; parked?: boolean; init?: WorkspaceInitInstruction; imageOutdated?: boolean }> }
@@ -98,7 +97,6 @@ async function ensureWorkspaceFilesystem(id: string): Promise<void> {
 
 async function waitForWorkspaceStartup(id: string): Promise<string> {
   const timeoutSeconds = Math.ceil(workspaceStartupTimeoutMs / 1000);
-  // The helper starts with the container, so wait for it rather than failing at once.
   const result = await runInWorkspace(id, { argv: ["sh", "-c", `deadline=$(( $(date +%s) + ${timeoutSeconds} )); while [ "$(date +%s)" -le "$deadline" ]; do if test -f /.agents-in-the-cloud/ready; then cat /.agents-in-the-cloud/startup.log; exit 0; fi; if test -S /run/systemd/private && systemctl is-failed --quiet agents-in-the-cloud-tmux.service agents-in-the-cloud-init.service agents-in-the-cloud-gateway.service; then break; fi; sleep 0.05; done; tail -n 120 /.agents-in-the-cloud/startup.log; journalctl --no-pager -n 120 -u agents-in-the-cloud-tmux.service -u agents-in-the-cloud-init.service -u agents-in-the-cloud-gateway.service; exit 1`], user: "root" }, { waitForReady: true, signal: AbortSignal.timeout(workspaceStartupTimeoutMs + 30_000) });
   const log = result.stdout.toString().trim();
   if (result.exitCode === 0) return log;
@@ -402,7 +400,6 @@ function workspaceInitScript(plan: WorkspaceDockerPlan): string {
     workspaceInitStepScript("gateway-credential", "chown root:root /etc/agents-in-the-cloud-workspace-gateway-token; chmod 600 /etc/agents-in-the-cloud-workspace-gateway-token"),
     workspaceInitStepScript("align-user", alignWorkspaceUserScript()),
     workspaceInitStepScript("agents-in-the-cloud-dir", `install -d -o agents-in-the-cloud -g agents-in-the-cloud /.agents-in-the-cloud`),
-    // Start after UID/GID alignment, before repository hooks can create sessions.
     workspaceInitStepScript("tmux", "systemctl start agents-in-the-cloud-tmux.service"),
     ...plan.initScripts.map((script, index) => workspaceInitStepScript(`init-${index + 1}`, script)),
     "startup_log_step gateway.start",
@@ -436,12 +433,9 @@ export async function createWorkspace(options: { id: string; events: AgentsInThe
       await mkdir(sockets, { recursive: true });
       activePlan.mounts.push({ type: "volume", target: "/data" });
       activePlan.mounts.push({ type: "bind", source: "/data/erofs-cache", target: "/data/erofs-cache", readonly: true });
-      // Writable so the workspace helper can listen here too.
       activePlan.mounts.push({ type: "bind", source: dockerHostAgentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspace-sockets", id), target: workspaceParentSocketDirectory });
       await events.emit("workspace_plan_prepare", { workspaceId: id, init, context, workHostPath: source.worktreePath, workContainerPath: workspaceRoot, plan: activePlan });
-      // Host modules authorize seeding before any repository-requested config is exported.
       await applyRepoWorkspaceManifest(id, source.worktreePath, activePlan);
-      // Gate once, after all modules have contributed their image requests.
       if (!activePlan.privileged) activePlan.preloadImages = [];
       return activePlan;
     });
@@ -471,7 +465,6 @@ export async function createWorkspace(options: { id: string; events: AgentsInThe
       await prepareWorkspaceRuntime(id, (detail) => run.report({ detail }), (progress) => run.report(progress));
     }, "retry-or-continue");
   } catch (error) {
-    // Cancellation hands ownership to deletion, which reviews files before removing them.
     if (run.signal.aborted) throw error;
     try {
       const removed = await runDocker(["rm", "-f", "--volumes", workspaceContainerName(id)]);
@@ -518,12 +511,10 @@ async function workspaceGateway(id: string): Promise<WorkspaceGateway> {
   return await waitForCommand(gateway);
 }
 
-/** Resolve any workspace-local web app through the workspace gateway on its dedicated bridge. */
 export async function workspacePortBackend(id: string, port: number, pathAndSearch: string, protocol = "http:"): Promise<WorkspaceHttpAppBackend> {
   if (!isWorkspaceAppPort(port)) throw invalidArguments(`Invalid workspace app port ${port}: use 1–65535, except reserved gateway port ${workspaceGatewayPort}`);
   if (protocol !== "http:" && protocol !== "https:") throw invalidArguments("Workspace apps must use HTTP or HTTPS");
   const path = pathAndSearch.startsWith("/") ? pathAndSearch : `/${pathAndSearch}`;
-  // Concatenation, not URL resolution: // in an app path must never change hosts.
   const target = new URL(`${protocol}//127.0.0.1:${port}${path}`);
   return { kind: "http", target, gateway: await workspaceGateway(id) };
 }
@@ -538,7 +529,6 @@ export async function workspaceImageOutdated(id: string, container = workspaceCo
   return expectedImageId === undefined || actualImage.stdout.trim() !== expectedImageId;
 }
 
-/** Discovery can skip image inspection so server startup only reads workspace identity. */
 export async function listWorkspaces(options: { inspectImages?: boolean; events?: AgentsInTheCloudEventBus } = {}): Promise<WorkspaceListResult> {
   const context = getAgentsInTheCloudRuntimeContext();
   const listed = await requireDocker(["ps", "-a", "--filter", `label=${workspaceTypeLabel}=workspace`, "--filter", `label=${namespaceLabel}=${namespace()}`, "--format", `{{.ID}}\t{{.Label "${workspaceIdLabel}"}}`]);
@@ -576,7 +566,6 @@ export async function deleteWorkspace(id: string, options: DeleteWorkspaceOption
     await options.events?.emit("workspace_delete_inspect", { workspaceId: id, issues });
     if (issues.length > 0) throw new AgentsInTheCloudCoreError("workspace_delete_blocked", formatDeleteBlockedMessage(id, issues), { workspaceId: id, issues });
   }
-  // Join workspace consumers while their container and persisted files still exist.
   await options.events?.emit("workspace_deleting", { workspaceId: id });
   if (containerExists) await requireDocker(["rm", "-f", "--volumes", workspaceContainerName(id)]);
   const networks = await requireDocker(["network", "ls", "--quiet", "--filter", `name=^${workspaceNetworkName(id).replaceAll(".", "\\.")}$`]);
@@ -612,7 +601,6 @@ function workspaceContainerLifecycle(id: string, checkpointRequired: boolean) {
   });
 }
 
-/** Complete interrupted configuration before starting; never rerun planning hooks. */
 export async function ensureWorkspaceStarted(id: string): Promise<string> {
   const labels = await validateWorkspaceContainer(id);
   const lifecycle = workspaceContainerLifecycle(id, labels[workspaceConfigurationLabel] === "1");
@@ -621,7 +609,6 @@ export async function ensureWorkspaceStarted(id: string): Promise<string> {
   return log;
 }
 
-/** Give the gateway 15 seconds to boot before reporting a recoverable startup failure. */
 async function checkWorkspaceGateway(id: string): Promise<void> {
   await workspaceGateway(id);
   const result = await runInWorkspace(id, { argv: ["sh", "-c", `deadline=$(( $(date +%s) + 15 )); while [ "$(date +%s)" -lt "$deadline" ]; do if test "$(curl --noproxy '*' --silent --max-time 1 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:${workspaceGatewayPort}/)" = 401; then exit 0; fi; sleep 0.05; done; exit 1`], user: "root" });
@@ -650,7 +637,6 @@ export async function setWorkspaceParked(id: string, parked: boolean): Promise<n
   return null;
 }
 
-/** Repeated on resume and app start; the persisted list never rereads template settings. */
 export async function prepareWorkspaceRuntime(id: string, report: (detail: string) => void = () => {}, activity: (progress: WorkspaceProvisionProgress) => void = () => {}): Promise<void> {
   report("Checking workspace gateway");
   await checkWorkspaceGateway(id);

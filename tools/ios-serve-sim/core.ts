@@ -38,7 +38,6 @@ const environment = (root: string) =>
 export const remoteCommand = (args: string[], root: string) =>
   `${environment(root)}; exec serve-sim ${args.map(shellQuote).join(' ')}`;
 
-// User-scoped, pinned tools: no Homebrew, sudo, or changes to shell profiles.
 export const installScript = (installationRoot: string) => `set -eu
 [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ] || { echo 'serve-sim requires an Apple Silicon Mac' >&2; exit 1; }
 xcrun simctl help >/dev/null

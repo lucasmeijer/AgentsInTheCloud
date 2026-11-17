@@ -2,7 +2,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceDockerPlan } from "./types.ts";
 
-/** Snapshot Docker support and setup; runtime units are owned by the image. */
 export async function prepareWorkspaceSystemd(plan: WorkspaceDockerPlan, directory: string, init: string): Promise<void> {
   await mkdir(directory, { recursive: true });
   const source = join(directory, "init.sh");
@@ -14,7 +13,6 @@ export async function prepareWorkspaceSystemd(plan: WorkspaceDockerPlan, directo
   // docker cp cannot create a file's missing parent directory in a stopped container.
   // Copy the directory into /etc so provisioning owns its creation, too.
   plan.containerFiles.push({ source: configuration, target: "/etc" });
-  // systemd needs a writable cgroup mount; Docker can grant one without privileged mode.
   plan.extraArgs.push(...(plan.privileged ? ["--privileged"] : ["--security-opt", "writable-cgroups=true"]));
   plan.extraArgs.push("--cgroupns=private", "--tmpfs", "/run", "--stop-signal", "SIGRTMIN+3");
 }

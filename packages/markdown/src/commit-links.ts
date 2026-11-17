@@ -5,18 +5,15 @@ import { changesCommitUrl, commitLinkPrefix, escapeHtml, isCommitHash, parseComm
 const liveName = (endpoint: string) => endpoint === "working" ? "Uncommitted changes" : "Staged changes";
 const hash = (endpoint: string) => `<code>${escapeHtml(shortCommit(endpoint))}</code>`;
 
-/** What the link shows before (or instead of) its server-loaded label. */
 function commitLinkContent({ base, target }: CommitLinkTarget): string {
   if (base === undefined) return isCommitHash(target) ? hash(target) : liveName(target);
   const hashes = [base, target].filter(isCommitHash);
   if (hashes.length === 2) return `${hash(base)}..${hash(target)}`;
   if (hashes.length === 0) return "Unstaged changes";
-  // Ancestry puts the live snapshot last, whichever order the link names them in.
   return `${hash(hashes[0]!)}..${liveName(isCommitHash(base) ? target : base)}`;
 }
 
 function renderCommitLink(workspaceId: string, target: CommitLinkTarget): string {
-  // Only commits have a subject or range size to look up; live snapshots are labelled by name.
   const loadsLabel = [target.base, target.target].every(endpoint => endpoint === undefined || isCommitHash(endpoint));
   const label = loadsLabel
     ? ` data-controller="commit-link" data-commit-link-url-value="${escapeHtml(changesCommitUrl(workspaceId, "commit-label", target))}" data-action="turbo:before-morph-element->commit-link#preserve"`

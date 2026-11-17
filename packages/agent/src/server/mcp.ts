@@ -43,13 +43,10 @@ export async function revokeAgentMcp(workspaceId: string, agentId: string): Prom
 export interface CliAgentConnection {
   url: string;
   token: string;
-  /** Full guidance for the CLI's native prompt, with .agents-in-the-cloud/AGENTS.md; deliberately omitted from its MCP response. */
   instructions: string;
 }
 
-/** Prepare the relay, native instructions, and credential as one CLI connection. */
 export async function prepareCliAgentConnection(workspaceId: string, agentId: string, applicationInstructions?: string): Promise<CliAgentConnection> {
-  // CLIs discover the root AGENTS.md themselves, by their own rules.
   const [, appended, agentsFiles] = await Promise.all([startMcpRelay(workspaceId), agentInstructions(workspaceId, agentId, applicationInstructions), loadWorkspaceAgentsFiles(workspaceId, { includeRoot: false })]);
   const instructions = [appended, ...agentsFiles.map(formatProjectInstructions)].join("\n\n");
   return { url: "http://127.0.0.1:2988/mcp", token: credentialStore().issue({ workspaceId, agentId, instructionDelivery: "system-prompt" }), instructions };
@@ -73,7 +70,6 @@ exit 1`);
   if (result.exitCode !== 0) throw new Error(result.stderr.trim() || "Could not start workspace MCP relay");
 }
 
-/** CLI agents run outside AgentsInTheCloud's runtime, so their turn boundaries arrive as authenticated loopback requests. */
 async function handleTurnBoundary(request: Request, workspaceId: string | undefined, started: boolean, reason: AgentTurnFinishReason = "stop"): Promise<Response> {
   const identity = authenticateAgentRequest(request, credentialStore().authenticate, workspaceId);
   if (identity instanceof Response) return identity;

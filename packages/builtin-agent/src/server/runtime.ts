@@ -23,7 +23,6 @@ const suspendedWorkspaceIds = new Set<string>();
 let stopping = false;
 const lifecycle = new Map<string, Promise<void>>();
 
-/** Serialize disposal with mounts: a new mount must never inherit a closing owner. */
 function lifecycleCommand(workspaceId: string, run: () => Promise<void>): Promise<void> {
   const previous = lifecycle.get(workspaceId) ?? Promise.resolve();
   const result = previous.then(run, run);
@@ -48,7 +47,6 @@ async function unloadRuntime(workspaceId: string, agentId: string): Promise<void
   await (await runtime).dispose();
 }
 
-/** Roll back a failed close after the durable session remained published. */
 export function restoreWorkspaceAgentRuntime(workspaceId: string, agentId: string): void {
   const key = runtimeKey(workspaceId, agentId);
   if (!nativeClosedAgentKeys.has(key)) closedAgentKeys.delete(key);
@@ -87,7 +85,6 @@ export function getWorkspaceAgentPresentation(agent: WorkspaceAgentInfo, options
   return runtime;
 }
 
-/** Explicit user close, distinct from unloading a runtime. */
 export function closeWorkspaceAgent(workspaceId: string, agentId: string): Promise<void> {
   closedAgentKeys.add(runtimeKey(workspaceId, agentId));
   return lifecycleCommand(workspaceId, () => closeAgent(workspaceId, agentId));
@@ -105,7 +102,6 @@ async function closeAgent(workspaceId: string, agentId: string): Promise<void> {
   await unloadRuntime(workspaceId, agentId);
 }
 
-/** Stop is allowed while parked; it does not need an execution/UI mount. */
 export function stopDurableWorkspaceAgent(agent: WorkspaceAgentInfo, options: WorkspaceAgentOptions = {}): Promise<void> {
   return lifecycleCommand(agent.workspaceId, async () => {
     await Promise.allSettled([controllerAcquisitions.get(runtimeKey(agent.workspaceId, agent.agentId))]);
@@ -113,7 +109,6 @@ export function stopDurableWorkspaceAgent(agent: WorkspaceAgentInfo, options: Wo
   });
 }
 
-/** Update live composer controls without replacing drafts or existing model selections. */
 export async function refreshConfiguredAgentRuntimes(): Promise<void> {
   const defaultModel = await resolveNewWorkspaceAgentModel();
   await Promise.all([...presentations.values()].map(async (pending) => {
@@ -121,13 +116,11 @@ export async function refreshConfiguredAgentRuntimes(): Promise<void> {
   }));
 }
 
-/** Skills and templates are workspace-wide, including other mounted conversations. */
 export async function refreshWorkspaceCompletionCatalogs(workspaceId: string): Promise<void> {
   const matching = [...presentations.entries()].filter(([key]) => key.startsWith(`${workspaceId}\u0000`));
   await Promise.all(matching.map(async ([, pending]) => (await pending).refreshCompletionCatalog()));
 }
 
-/** Host parking/shutdown suspends execution, unlike permanent close/delete. */
 export function suspendWorkspaceAgentRuntimes(workspaceId: string): Promise<void> {
   suspendedWorkspaceIds.add(workspaceId);
   return lifecycleCommand(workspaceId, () => suspendRuntimes(workspaceId));
@@ -159,7 +152,6 @@ function assertWorkspaceAgentAvailable(agent: WorkspaceAgentInfo): void {
   if (closedAgentKeys.has(runtimeKey(agent.workspaceId, agent.agentId))) throw new AgentsInTheCloudCoreError("agent_not_found", `Agent not found: ${agent.agentId}`);
 }
 
-/** Execution does not require a mounted transcript or composer. */
 export function getWorkspaceAgentController(agent: WorkspaceAgentInfo, options: WorkspaceAgentOptions = {}): Promise<DurableAgentController> {
   assertWorkspaceAgentAvailable(agent);
   const pending = lifecycle.get(agent.workspaceId);
@@ -181,7 +173,6 @@ async function drainControllerAcquisitions(workspaceId: string): Promise<void> {
   await Promise.allSettled([...controllerAcquisitions].filter(([key]) => key.startsWith(`${workspaceId}\u0000`)).map(([, pending]) => pending));
 }
 
-// The journal has exactly one writer, shared by every mounted tab in a workspace.
 let ownerEvents: WorkspaceAgentOptions["events"];
 export function configureDurableOwnerEvents(events: NonNullable<WorkspaceAgentOptions["events"]>) { ownerEvents = events; }
 
@@ -190,7 +181,6 @@ const suspensions = new Map<string, Promise<void>>();
 export async function durableWorkspaceOwner(workspaceId: string, options: WorkspaceAgentOptions = {}): Promise<DurableAgentRuntime> {
   return retainedDurableWorkspaceOwner(await workspaceDurableJournalDirectory(workspaceId), workspaceId, options);
 }
-/** The directory is resolved by the scoped history service, never accepted from HTTP. */
 export function retainedDurableWorkspaceOwner(directory: string, workspaceId: string, options: WorkspaceAgentOptions = {}, load?: Parameters<typeof openDurableAgentRuntime>[3]): Promise<DurableAgentRuntime> {
   const suspension = suspensions.get(workspaceId);
   if (suspension) return suspension.then(() => retainedDurableWorkspaceOwner(directory, workspaceId, options, load));
@@ -223,7 +213,6 @@ export async function suspendAllDurableWorkspaceOwners() {
   await Promise.all([...new Set([...owners.values()].map(owner => owner.workspaceId))].map(suspendDurableWorkspaceOwner));
 }
 
-/** Lookup must not create a new root or prepare prompts just to reject bad input. */
 export async function existingDurableController(agent: WorkspaceAgentInfo, options: WorkspaceAgentOptions = {}) {
   if (!existsSync(join(await workspaceDurableJournalDirectory(agent.workspaceId), "main.jsonl"))) return undefined;
   const owner = await durableWorkspaceOwner(agent.workspaceId, options);

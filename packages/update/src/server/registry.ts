@@ -6,7 +6,6 @@ import { Value } from "typebox/value";
 
 export type HttpFetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
-/** requiredSystemVersion is 0 for images from before System versions existed. */
 export interface ImageMetadata { digest: string; revision?: string; requiredSystemVersion: number }
 
 interface RegistryAuth { realm: string; service?: string; scope?: string }
@@ -85,7 +84,6 @@ export function selectManifestFromIndex(index: Static<typeof registryIndexSchema
   return manifest.digest;
 }
 
-/** Shared registry protocol for update discovery and download planning. */
 async function fetchRegistryImage(base: string, version: string, fetcher: HttpFetcher, platform: { os: string; architecture: string }) {
   const accept = [
     "application/vnd.oci.image.index.v1+json",
@@ -144,12 +142,10 @@ function parseReference(reference: string) {
   return { registry, name, version, base: `${protocol}://${host}/v2/${name}` };
 }
 
-/** Read only manifests and configuration; no image layers are downloaded here. */
 export async function resolveImage(reference: string, fetcher: HttpFetcher = fetch, platform = { os: "linux", architecture: currentArch() }): Promise<PlannedImage> {
   const { registry, name, version, base } = parseReference(reference);
   const image = await fetchRegistryImage(base, version, fetcher, platform);
   const dependencies = Value.Parse(Type.Array(imageReferenceSchema), JSON.parse(image.labels["eagerly-preload"] ?? "[]"));
-  // Preserve an explicitly selected index digest so Docker also registers that declared reference.
   const pinnedDigest = reference.includes("@") ? version : image.digest;
   if (!/^sha256:[a-f0-9]{64}$/.test(pinnedDigest)) throw new Error("Invalid image digest");
   return { reference: `${registry}/${name}@${pinnedDigest}`, layers: image.layers, dependencies };

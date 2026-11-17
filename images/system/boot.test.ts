@@ -19,13 +19,11 @@ CMD ["httpd", "-f", "-p", "127.0.0.1:3000", "-h", "/www"]
 
 const minutes = (count: number) => count * 60_000;
 const exec = (...args: string[]) => command(["docker", "exec", container, ...args], undefined, minutes(2));
-/** Fetches from inside the System container, where its ports listen. */
 async function fetchInSystem(url: string, init?: { method: "POST"; body: { localPort: number } }): Promise<{ status: number; body: string }> {
   const request = init ? `{method:"POST",headers:{"content-type":"application/json"},body:${JSON.stringify(JSON.stringify(init.body))}}` : "{}";
   return JSON.parse(await exec("bun", "-e", `const r=await fetch(${JSON.stringify(url)},${request});console.log(JSON.stringify({status:r.status,body:await r.text()}));`));
 }
 const status = async () => JSON.parse((await fetchInSystem("http://127.0.0.1:3001/status")).body);
-/** One request line over the private host socket, the way the app sends it. */
 async function hostRequestLine(line: string): Promise<any> {
   return JSON.parse(await exec("bun", "-e", `const s=require("node:net").createConnection("/run/agents-in-the-cloud-host/control.sock");let t="";s.on("data",d=>t+=d);s.on("end",()=>console.log(t.trim()));s.write(${JSON.stringify(`${line}\n`)});`));
 }
@@ -36,7 +34,6 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean, des
   while (Date.now() < end) {
     last = await read().catch((error: Error) => error);
     if (!(last instanceof Error) && done(last)) return last;
-    // A System that crashed won't recover; don't wait out the deadline.
     if (await command(["docker", "inspect", "-f", "{{.State.Running}}", container]) !== "true") break;
     await Bun.sleep(100);
   }
@@ -59,19 +56,14 @@ afterAll(async () => {
 }, minutes(1));
 
 test("System boots, starts its app, and serves the host socket", async () => {
-  // The supervisor starts System's Docker daemon, so it answering means the supervisor survived boot.
   await until(() => exec("docker", "info"), () => true, "System's Docker daemon starts");
   expect((await fetchInSystem("http://127.0.0.1:3001/status")).status).toBe(200);
-  // The host socket is up before Docker, so check it while the app starts.
   const hostChecks = Promise.all([
-    // Sampling measures CPU over a second.
     hostRequest({ operation: "sample" }),
     hostRequest({ operation: "private-network-access", destinations: [] }),
-    // Host terminals are gone.
     hostRequestLine(JSON.stringify({ operation: "list" })),
   ]);
 
-  // Load the app image instead of pulling it, then register the port like the installer does.
   const save = Bun.spawn(["docker", "save", appImage], { stdout: "pipe" });
   const load = Bun.spawn(["docker", "exec", "-i", container, "docker", "load"], { stdin: save.stdout, stdout: "ignore", stderr: "inherit" });
   expect([await save.exited, await load.exited]).toEqual([0, 0]);
@@ -82,9 +74,7 @@ test("System boots, starts its app, and serves the host socket", async () => {
 
   const [app, workspace] = await Promise.all([
     fetchInSystem("http://127.0.0.1:3000/up"),
-    // Workspaces are containers in System's Docker daemon.
     exec("docker", "run", "--rm", appImage, "echo", "workspace ran"),
-    // The app reaches System over its mount of the host socket.
     exec("docker", "exec", "agents-in-the-cloud", "test", "-S", "/run/agents-in-the-cloud-host/control.sock"),
   ]);
   expect(app).toEqual({ status: 200, body: "ready" });

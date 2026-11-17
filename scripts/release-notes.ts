@@ -36,10 +36,8 @@ async function findRelease(run: Run, tag: string) {
   }
 }
 
-/** Reserve the ID and validate credentials before channel promotion. Drafts are invisible to users. */
 export async function prepareReleaseNotes(run: Run, notes: ReleaseNotes, revision: string): Promise<void> {
   const tag = `${releaseTagPrefix}${notes.id}`;
-  // A pre-existing tag must identify this exact commit, even without a release.
   const ref = await api(run, `git/ref/tags/${tag}`, refSchema);
   if (ref !== undefined && (ref.object.type !== "commit" || ref.object.sha !== revision)) throw new Error(`Tag ${tag} already identifies another revision`);
   const release = await findRelease(run, tag);
@@ -50,11 +48,9 @@ export async function prepareReleaseNotes(run: Run, notes: ReleaseNotes, revisio
     if (!release.draft && ref === undefined) throw new Error("Published release tag is missing");
     return;
   }
-  // The digest is filled in after building; this draft is never exposed as history.
   await api(run, "releases", githubReleaseSchema, "POST", { tag_name: tag, target_commitish: revision, name: notes.id, body: releaseBody({ id: notes.id, notesPath: notes.path, revision, notesRevision: notes.sourceRevision, digest: `sha256:${"0".repeat(64)}` }, notes.notes), draft: true, prerelease: false });
 }
 
-/** Idempotent completion after stable's registry readback succeeds. */
 export async function publishReleaseNotes(run: Run, notes: ReleaseNotes, revision: string, digest: string): Promise<void> {
   const tag = `${releaseTagPrefix}${notes.id}`;
   const release = Value.Parse(githubReleaseSchema, await findRelease(run, tag));

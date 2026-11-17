@@ -29,7 +29,6 @@ test("the nft element list matches the checked ranges", () => {
 test("private network access may only open LAN, VPN and tailnet addresses", () => {
   for (const ip of ["10.0.0.1", "10.255.255.255", "100.64.0.1", "100.100.100.100", "192.168.1.1", "fd00::1", "fd7a:115c:a1e0::1", "fc00::1"])
     expect(isPrivateNetworkAddress(ip), ip).toBe(true);
-  // Docker networks, the System host, cloud metadata and the public internet stay out of reach.
   for (const ip of ["172.16.0.1", "172.17.0.1", "172.31.255.255", "127.0.0.1", "169.254.169.254", "0.0.0.0", "224.0.0.1", "8.8.8.8", "::1", "fe80::1", "::ffff:10.0.0.1", "2001:4860:4860::8888", "db.internal", ""])
     expect(isPrivateNetworkAddress(ip), ip).toBe(false);
 });

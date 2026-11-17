@@ -16,14 +16,12 @@ export interface ButtonOptions {
   attributesHtml?: string;
 }
 
-/** Renders a native action control with canonical anatomy and accessibility. */
 export function buttonHtml(options: ButtonOptions): string {
   const presentation = buttonPresentation(options.variant, options.content);
   const disabled = options.disabled ? " disabled" : "";
   return `<button class="${presentation.className}" type="${options.type}"${presentation.accessibilityHtml}${disabled}${attributesHtml(options.attributesHtml)}>${presentation.contentHtml}</button>`;
 }
 
-/** Creates the canonical control for browser-owned UI. */
 export function buttonElement(options: ButtonOptions): HTMLButtonElement {
   const template = document.createElement("template");
   template.innerHTML = buttonHtml(options);

@@ -1,4 +1,3 @@
-// Each case runs in its own process: a parent can stop a synchronous regex.
 import { spyOn } from "bun:test";
 import { performance } from "node:perf_hooks";
 import * as realSyntax from "../src/index.ts";
@@ -14,7 +13,6 @@ let characters = 0;
 let maxHighlightMs = 0;
 let observing = false;
 function observe(code: string, operation: () => HighlightedCode): HighlightedCode {
-  // Count the public request once if one observed entrypoint calls the other.
   if (observing) return operation();
   const start = performance.now();
   observing = true;
@@ -29,7 +27,6 @@ function observe(code: string, operation: () => HighlightedCode): HighlightedCod
 function highlight(request: HighlightRequest): HighlightedCode {
   return observe(request.code, () => realHighlight(request));
 }
-// Observe the real implementation without changing production code or checking markup.
 spyOn(realSyntax, "highlightCodeHtml").mockImplementation(highlight);
 spyOn(realSyntax, "highlightCodeHtmlForPath").mockImplementation((code, path) => observe(code, () => realHighlightForPath(code, path)));
 
@@ -72,7 +69,6 @@ switch (path) {
     const { DiffHunksRenderer, parseDiffFromFile } = await import("@pierre/diffs");
     const { changesDiffOptions, toolDiffOptions } = await import("../src/pierre.ts");
     const options = path === "review" ? changesDiffOptions : toolDiffOptions;
-    // Use the actual renderer defaults, including its long-line tokenization limit.
     run = async (text) => {
       const renderer = new DiffHunksRenderer(options);
       try {

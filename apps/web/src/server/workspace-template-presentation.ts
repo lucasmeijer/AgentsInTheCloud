@@ -5,7 +5,6 @@ import { escapeHtml } from "@agents-in-the-cloud/shared";
 
 interface TemplateChoice { id: string; title: string; swatchColor?: string }
 
-/** Deterministic swatch color: one of 360 hues at three lightness steps, from an FNV-1a hash of the template id. */
 export function workspaceTemplateSwatchColor(workspaceTemplateId: string): string {
   let hash = 0x811c9dc5;
   for (const char of workspaceTemplateId) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193) >>> 0;
@@ -18,7 +17,6 @@ export function workspaceTemplateIconHtml(workspaceTemplate?: Pick<TemplateChoic
     : '<span class="workspace-template-icon is-empty" aria-hidden="true"></span>';
 }
 
-/** Shared template choice: swatch, selection control, and engaged settings action. */
 export function workspaceTemplateChoiceHtml(template: TemplateChoice | undefined, options: {
   emptyLabel: string;
   primaryAttributesHtml: string;

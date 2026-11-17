@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 export function notifyInputListeners(input: HTMLInputElement | HTMLTextAreaElement): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }

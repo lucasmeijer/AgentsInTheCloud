@@ -59,14 +59,12 @@ export async function startLightingTuner(destination: string, port = 3100) {
         throw new Error('Could not upgrade the lighting preview WebSocket');
       }
       const headers = new Headers(request.headers);
-      // Translate only requests that passed the tuner's own same-origin gate.
       for (const name of ['forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'x-agents-in-the-cloud-public-origin', 'x-agents-in-the-cloud-origin-context']) headers.delete(name);
       headers.set('host', upstreamUrl.host);
       headers.set('origin', origin);
       headers.set('accept-encoding', 'identity');
       const response = await fetch(new Request(upstreamUrl, { method: request.method, headers, body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body, redirect: 'manual' }));
       const outgoing = new Headers(response.headers);
-      // Bun fetch decodes upstream content. Do not forward its original encoded byte headers.
       outgoing.delete('content-encoding');
       outgoing.delete('content-length');
       return new Response(response.body, { status: response.status, headers: outgoing });

@@ -3,7 +3,6 @@ import { themeAppearance, type AgentsInTheCloudTheme } from "@agents-in-the-clou
 
 export const claudeThemeName = "agents-in-the-cloud";
 
-// Claude's own diff and selection backgrounds; the palette has no role for them.
 const pinnedBackgrounds = {
   dark: {
     selectionBg: "rgb(38,79,120)",

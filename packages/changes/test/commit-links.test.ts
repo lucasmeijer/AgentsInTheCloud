@@ -85,7 +85,6 @@ test("a dismissed notice stays dismissed on refreshes that keep the comparison",
   const opened = await openCommitLink(repo, await captureChanges(repo), link(ids[1]!));
   const kept = await refreshChanges(repo, opened);
   expect(kept.notice).toBe(opened.notice!);
-  // What the dismiss route does to the live snapshot.
   kept.notice = undefined;
   expect((await refreshChanges(repo, kept)).notice).toBeUndefined();
 });

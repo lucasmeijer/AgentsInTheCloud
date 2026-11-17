@@ -45,7 +45,6 @@ const workspaceSourceMetadataSchema = Type.Object({
 });
 type WorkspaceSourceMetadata = Static<typeof workspaceSourceMetadataSchema>;
 
-// Process-local: multiple server processes sharing a data directory would need a file lock.
 const withTemplateLock = createKeyedOperationQueue();
 const reflinkSupportByDir = new Map<string, Promise<boolean>>();
 const regularCopyWarnings = new Set<string>();
@@ -66,7 +65,6 @@ function templateRepoPath(key: string): string {
   return join(templateDir(key), "repo");
 }
 
-/** The last cached checkout for this template, if a workspace has populated it. */
 export async function cachedWorkspaceTemplateSourcePath(workspaceTemplateId: string): Promise<string> {
   const { gitUrl, branch } = await getWorkspaceTemplateConfiguration(workspaceTemplateId);
   return templateRepoPath(templateKey(gitUrl, branch));

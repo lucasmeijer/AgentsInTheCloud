@@ -3,7 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Keep dependency mocks and runtime configuration isolated from other test files.
 async function homeScenario(script: string): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-home-"));
   try {

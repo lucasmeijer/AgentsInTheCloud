@@ -50,7 +50,6 @@ await Promise.all(
 );
 await mkdir("/run/agents-in-the-cloud-system", { recursive: true });
 await writeFile("/run/agents-in-the-cloud-system/access-v1", "");
-// Retain the serialized accessMode field and external access API spelling.
 type State = { accessMode?: "localhost" | "tailscale"; localPort?: number; currentImage?: string; runningContainers?: string[]; uninstall?: UninstallState };
 const persisted: State = (await Bun.file(`${stateDir}/state.json`).exists())
   ? JSON.parse(await readFile(`${stateDir}/state.json`, "utf8"))
@@ -206,7 +205,6 @@ async function pullImage(reference: string, description: string) {
   }
 }
 async function prepareImage(reference: string, options: { pullApp: boolean; pullDependencies: boolean }): Promise<string> {
-  // Resolve the exact local image ID once. No subsequent tag lookup can change the update.
   if (options.pullApp && !(await docker("image", "ls", "-q", reference)))
     await pullImage(reference, "Downloading AgentsInTheCloud");
   const image = JSON.parse(await docker("image", "inspect", reference))[0];
@@ -233,13 +231,11 @@ function accessOrigin(): string | undefined {
 }
 function configureRoutes(target: number): Promise<void> {
   routeTarget = target;
-  // Serialize Serve mutations, always using the most recent desired destination.
   const previous = routing;
   routing = (async () => {
     try {
       await previous;
     } catch {
-      /* Previous caller reports failure; this is its retry. */
     }
     while (tailscaleSelected() && tailnetHost && !stopping) {
       const key = `${tailnetHost}:${routeTarget}`;
@@ -409,7 +405,6 @@ const server = Bun.serve({
       return Response.json({ mode: persisted.accessMode, localPort: persisted.localPort, connectionState, authUrl, origin: accessOrigin(), error: connectionFailure ?? networkError });
     }
     if (url.pathname === "/status") {
-      // Check again at the handoff: startup health alone can become stale.
       const appResponding = healthy && await appIsHealthy();
       return Response.json({
         ...installationStatus({
@@ -590,7 +585,6 @@ const uninstallControl = Bun.serve({
     if (!Value.Check(Type.Object({ token: Type.String({ pattern: "^[a-f0-9]{64}$" }) }, { additionalProperties: false }), body))
       return new Response("Expected the reviewed uninstall inventory token", { status: 400 });
     if (persisted.uninstall?.state === "complete") return new Response(null, { status: 202 });
-    // Reserve before yielding, so health recovery and updates cannot restart the app.
     uninstalling = true;
     busy = true;
     healthy = false;
@@ -718,7 +712,6 @@ async function initialize() {
   for (const id of persisted.runningContainers ?? []) await docker("start", id);
   persisted.runningContainers = [];
   await persist();
-  // Tailscale login may happen after app boot. Its network state is independent.
   void (async () => {
     connectionStateSince = lastNetworkSuccess = Date.now();
     let lastAccess = "";

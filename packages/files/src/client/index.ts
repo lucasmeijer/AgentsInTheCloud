@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { isWorkspacePaneVisible, type WorkspaceClientController, type WorkspaceClientControllerConstructor, type WorkspaceClientModule } from "@agents-in-the-cloud/shared";
 import { installFileEditorControllers } from "./editor-controllers.ts";
 type UploadResult = { kind: "ok" | "conflict" | "error" | "cancelled"; message?: string };
@@ -255,7 +253,6 @@ function createFilesViewController(Controller: WorkspaceClientControllerConstruc
     private readonly becameVisible = (): void => { this.refresh(); };
 
     refresh(): void {
-      // Submit the current filter into its Turbo Frame; never replace the editor.
       this.element.querySelector<HTMLFormElement>(".files-filter")?.requestSubmit();
       this.element.querySelector<HTMLElement>('[data-controller="file-editor"]')?.dispatchEvent(new Event("agents-in-the-cloud:file-editor-refresh"));
     }

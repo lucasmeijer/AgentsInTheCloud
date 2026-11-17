@@ -12,7 +12,6 @@ const rowSchema = Type.Object({
 });
 const imageSchema = Type.Object({ type: Type.Literal("image"), mimeType: Type.String(), data: Type.String() });
 
-/** Pi sessions are trees. Show only the current leaf's ancestry, never abandoned branches. */
 export function piTranscriptRecords(jsonl: string): TranscriptRecord[] {
   const entries = Array.from(nativeJsonlRows(jsonl, rowSchema));
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
@@ -47,7 +46,6 @@ export async function loadPiTranscriptImage(workspaceId: string, sessionId: stri
   });
 }
 
-/** Session storage is private to this tab, not the workspace's most recent agent. */
 export async function piResumePath(workspaceId: string, sessionId: string): Promise<string | undefined> {
   const file = await latestNativeSessionFile(sessionDirectory(workspaceId, sessionId));
   return file?.replace(join(getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir, "workspaces", workspaceId, "home-local"), "/home/agents-in-the-cloud");

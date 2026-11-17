@@ -1,4 +1,3 @@
-// Containers share Docker's host kernel, including when that host is a VM.
 export function filesystemFailure(filesystems: string): string | undefined {
   const available = new Set(filesystems.trim().split(/\s+/));
   const missing = ["erofs", "overlay"].filter((name) => !available.has(name));

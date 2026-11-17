@@ -8,7 +8,6 @@ export const rendering = createNativeAgentRendering<CodexRuntime>({
   channelName: "codex-agent",
   routeSegment: "codex-agents",
   transcript: runtime => projectCodexTurns(runtime.state.turns, runtime.state.completedItems, { answer: activity => codexSubagentAnswer(runtime, activity) }, runtime.state.itemStarts),
-  // Codex has no way to stop one sub-agent, so they aren't stoppable.
   background: { activities: codexBackgroundActivities, detail: codexBackgroundDetail, route: codexBackgroundRoute },
   stats(runtime) {
     const usage = runtime.state.usage;

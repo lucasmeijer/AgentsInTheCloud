@@ -46,7 +46,6 @@ test("lost HTTP response retries admitted input after attachment staging is cons
   let admissions = 0;
   let accepted: Awaited<ReturnType<typeof controller.submit>>;
   const events = createAgentsInTheCloudEventBus();
-  // The route boundary uses an actual native execution controller. No HTML or UI assertions.
   const countedController = {
     ...controller,
     async submit(input: Parameters<typeof controller.submit>[0]) {
@@ -68,7 +67,6 @@ test("lost HTTP response retries admitted input after attachment staging is cons
   expect(await findStagedAttachment(draft, attachment.id)).toBeUndefined();
   expect((await accepted!.wait(BACKGROUND_CONTEXT)).status).toBe("done");
   await suspendAllDurableWorkspaceOwners();
-  // Reopen the same journal; retry must remain passive, even when execution is unavailable.
   owner = await retainedDurableWorkspaceOwner(agent.path, agent.workspaceId, {}, {
     harness: async () => ({ models, registry: createRegistry() }),
     prepare: async () => { throw new Error("Must not prepare prompts on retry"); },

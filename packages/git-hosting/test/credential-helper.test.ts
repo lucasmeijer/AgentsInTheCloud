@@ -31,7 +31,6 @@ describe("git credential helper", () => {
   });
 
   test("ignores store and erase requests", async () => {
-    // The helper may exit before reading its input, so let Bun feed stdin and tolerate the closed pipe, as git does.
     const proc = Bun.spawn(["sh", "-c", gitCredentialHelperShellBody, "agents-in-the-cloud-git-credential", "store"], { env: { GH_TOKEN: "github-secret" }, stdin: new Blob(["protocol=https\nhost=github.com\n\n"]), stdout: "pipe" });
     expect(await new Response(proc.stdout).text()).toBe("");
     expect(await proc.exited).toBe(0);

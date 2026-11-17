@@ -35,7 +35,6 @@ async function ctr(container: string, ...args: string[]) {
   return exec(container, "ctr", "--namespace", "moby", ...args);
 }
 
-// Containerd records cache-backed layers as snapshot labels rather than symlinks.
 async function cachedLayerBlobs(container: string) {
   const keys = (await ctr(container, "snapshots", "--snapshotter", "erofs", "ls")).trim().split("\n").slice(1).map((line) => line.split(/\s+/)[0]!);
   const blobs: string[] = [];
@@ -164,7 +163,6 @@ try {
 
   console.log(`${platform}: same transfer path for a registry multi-platform index`);
   await ctr(producer, "content", "fetch", "--platform", platform, registryPinned);
-  // This exact Alpine platform was already cached as the local fixture's base.
   const registryArchive = await archiveContents(await exportArchive(registryPinned));
   const registryRef = await transfer(registryPinned);
   assert.equal(registryRef, `${registry}@${registryArchive.descriptor.digest}`);

@@ -73,7 +73,6 @@ interface WorkspaceAttachContext {
 export interface WorkspaceAgentTabSummary {
   id: string;
   title: string;
-  /** Use the workspace title when this is the only tab. */
   untitled?: boolean;
 }
 
@@ -85,7 +84,6 @@ export interface WorkspaceAgentPane {
   live?: { regions(): readonly import("./live-presentation.ts").LiveRegion[]; subscriberId: string };
 }
 
-/** Durable Agent-tab seam: cheap shell metadata plus on-demand body rendering. */
 export interface WorkspaceAgentTabProvider {
   list(context: { workspaceId: string }): Promise<readonly WorkspaceAgentTabSummary[]>;
   render(context: { workspaceId: string; agentId: string }): Promise<WorkspaceAgentPane>;
@@ -93,15 +91,11 @@ export interface WorkspaceAgentTabProvider {
 }
 
 export interface WorkspaceWorkViewPresentation {
-  /** Trusted decorative markup from the contributing module. */
   iconHtml?: string;
-  /** Cheap, side-effect-free metadata used to render the Workspace shell. */
   reference: WorkspaceWorkViewReference;
   sourceKey: string;
   label: string;
-  /** Trusted, server-rendered label content for Work views with cached dynamic summaries. */
   kind: "resource" | "contextual";
-  /** Whether this view joins the initial presentation when the Workspace has no saved view layout. */
   initiallyOpen?: boolean;
   availability?: WorkspaceWorkViewAvailability;
   actionsHtml?: string;
@@ -125,16 +119,13 @@ export interface WorkspaceModuleWorkViewAdapter<Reference extends WorkspaceWorkV
   type: Reference["type"];
   parseReference(value: JsonValue): Reference;
   identity(reference: Reference): string;
-  /** Expensive body rendering is called only by the Work-view hydration endpoint. */
   render(context: { workspaceId: string; reference: Reference }): Promise<string> | string;
   close?(context: { workspaceId: string; reference: Reference }): Promise<void> | void;
 }
 
 interface WorkspaceCommandUiSurface {
   iconHtml?: string;
-  /** Related command whose shortcut opens this view (when launching and opening differ). */
   shortcutCommandId?: string;
-  /** Where the server-rendered web UI should place this command. */
   placement: "work-launcher" | "agent-action";
   label?: string;
 }
@@ -155,10 +146,8 @@ export interface WorkspaceCommandContribution<Input = Record<string, never>> {
   label: string;
   description?: string;
   scope: WorkspaceCommandScope;
-  /** Runtime schema for validation and future typed form/palette generation. */
   inputSchema?: TSchema;
   surfaces?: WorkspaceCommandSurfaces;
-  /** Type carrier only; command metadata stays serializable. */
   readonly __input?: Input;
 }
 
@@ -189,21 +178,16 @@ export const emptyWorkspaceCommandInputSchema = { type: "object", additionalProp
 
 export interface WorkspaceModuleCommandHandler<Input = unknown> {
   id: string;
-  /** JSON Schema used to validate automation input and advertise the command in OpenAPI. */
   inputSchema?: TSchema;
   execute(context: WorkspaceModuleCommandContext<Input>): Promise<WorkspaceModuleCommandResult> | WorkspaceModuleCommandResult;
 }
 
-/** One active module dialog, shared by module routes and the AgentsInTheCloud shell. */
 export const workspaceModuleModalFrameId = "workspace_module_modal_host";
 
 export interface WorkspaceModuleRouteContext {
-  /** Full themed page with the host's fingerprinted assets. */
   renderPage?(body: string): Response;
   events?: AgentsInTheCloudEventBus;
-  /** Refresh server-owned Work-view presentation, opening the view if needed. */
   openWorkView(workspaceId: string, reference: WorkspaceWorkViewReference, options?: { select?: boolean }): Promise<Response>;
-  /** Render a full AgentsInTheCloud page with this server-rendered dialog body in the shared modal frame. */
   renderModalPage(dialogHtml: string): Promise<Response>;
 }
 
@@ -215,7 +199,6 @@ export type WorkspaceDeletionAssessment =
   | { status: "clear" }
   | { status: "blocked"; fingerprint: string; details: JsonValue };
 
-/** Supplies the local-change check and read-only evidence used by workspace deletion. */
 export interface WorkspaceDeletionReview {
   inspect(workspaceId: string): Promise<WorkspaceDeletionAssessment>;
   renderEvidence(workspaceId: string, details: JsonValue): string;
@@ -245,7 +228,6 @@ export interface WorkspaceAppRef {
 export interface WorkspaceHttpAppBackend {
   kind: "http";
   target: URL;
-  /** Host the app expects, such as a *.localhost subdomain; defaults to localhost. */
   appHost?: string;
   gateway?: WorkspaceGateway;
   adaptRequestHeaders?(headers: Headers, request: Request): Promise<Headers> | Headers;
@@ -259,7 +241,6 @@ interface WorkspaceFetchAppBackend {
 
 export type WorkspaceAppBackend = WorkspaceHttpAppBackend | WorkspaceFetchAppBackend;
 
-/** Resolve one durable workspace-app identity to its backend for this request. */
 export type WorkspaceServerAppResolver = (
   app: WorkspaceAppRef,
   requestUrl: URL,
@@ -275,7 +256,6 @@ export interface WorkspaceServerProvisioningHook {
 }
 
 export interface GlobalSidebarContributionRegistry {
-  /** Set server-rendered sidebar HTML for a module contribution; empty/undefined clears it. */
   set(contributionId: string, html?: string, regions?: readonly import("./live-presentation.ts").LiveRegion[]): void;
 }
 
@@ -284,7 +264,6 @@ interface SettingsActionContext {
   url: URL;
 }
 
-/** A section of app-level Settings, distinct from template configuration and per-Agent choices. */
 export interface SettingsContribution {
   id: string;
   label: string;
@@ -300,7 +279,6 @@ export interface DeleteCurrentWorkspaceResult {
   details?: unknown;
 }
 
-/** Host-generated input; every Agent type must accept text, images and file notes. */
 export interface WorkspaceAgentInput {
   text: string;
   images: { mimeType: string; data: string }[];
@@ -309,7 +287,6 @@ export interface WorkspaceAgentInput {
 
 export interface AgentWorkspaceParameters {
   agentTypeId?: string;
-  /** Filled by AgentsInTheCloud before prepareWorkspace and workspace_created. */
   input?: WorkspaceAgentInput;
   initialPrompt?: string;
   initialPromptMode?: "composer";
@@ -330,14 +307,12 @@ export interface WorkspaceServerModuleContext {
     requestAttention(workspaceId: string): void;
   };
   globalSidebarContributions: GlobalSidebarContributionRegistry;
-  /** Add a Work view without selecting it or requesting attention. */
   createWorkView(workspaceId: string, reference: WorkspaceWorkViewReference): Promise<void>;
   presentWorkView(workspaceId: string, reference: WorkspaceWorkViewReference): Promise<void>;
   invalidateWorkspace(workspaceId: string): void;
   deleteCurrentWorkspace(workspaceId: string, force: boolean): Promise<DeleteCurrentWorkspaceResult>;
   registerSocketHandler(handler: WorkspaceServerSocketHandler): void;
   publishWorkspacePort(workspaceId: string, port: number, protocol?: "http" | "https", hostname?: string): Promise<string>;
-  /** Origin serving workspace files; append an absolute path to load a file. */
   publishWorkspaceFiles(workspaceId: string): Promise<string>;
   registerWorkspaceAppResolver(resolver: WorkspaceServerAppResolver): void;
   registerProvisioningHook(hook: WorkspaceServerProvisioningHook): void;
@@ -349,7 +324,6 @@ export interface WorkspaceModule {
    * Render immediately; module-owned Turbo requests load any remote state. */
   renderWorkspacePaneActions?(): string;
   cableChannels?: import("./cable.ts").CableChannelAdapter[];
-  /** Declarative lazy surfaces. The host owns loading, publication, subscriptions and invalidation. */
   liveSurfaces?: { name: string; load(context: { workspaceId: string; key: string }): Promise<readonly import("./live-presentation.ts").LiveRegion[]> }[];
   openApiPaths?: Record<string, import("@agents-in-the-cloud/core").JsonObject>;
   id: string;
@@ -384,19 +358,15 @@ export interface WorkspaceClientSurfaceVisibilityContext {
 }
 
 export const phoneLayoutMediaQuery = "(max-width: 700px), (hover: none) and (pointer: coarse)";
-/** The composer rules are about available space, not touch: mobile is a viewport of 700px or less. */
 export const mobileComposerMediaQuery = "(max-width: 700px)";
 
-/** Asks an Agent's composer to send a prompt without touching its draft. */
 export const agentComposerSendPromptEvent = "agent-composer:send-prompt";
 export interface AgentComposerSendPromptDetail { text: string }
 
-/** Adds a quote to the end of an Agent's draft, leaving the caret under it, after the comment's first typed text. */
 export const agentComposerQuoteEvent = "agent-composer:quote";
 export interface ComposerQuote { source: string; text: string; code: boolean }
 export interface AgentComposerQuoteDetail { quote: ComposerQuote; comment: string }
 
-/** Text selected inside an embedded frame, or null once it is deselected. The rectangle is in the frame's own viewport. */
 export const frameSelectionEvent = "agents-in-the-cloud:frame-selection";
 export type FrameSelectionDetail = { text: string; code: boolean; rect: { left: number; top: number; right: number; bottom: number } } | null;
 
@@ -405,7 +375,6 @@ export type FrameSelectionDetail = { text: string; code: boolean; rect: { left: 
 export const frameScrollEvent = "agents-in-the-cloud:frame-scroll";
 export interface FrameScrollDetail { deltaY: number }
 
-/** Enter inserts a newline everywhere; only ⌘↩ (Ctrl+↩ on Windows and Linux) sends. */
 export function composerSubmitKey(event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey">): boolean {
   return event.key === "Enter" && (event.metaKey || event.ctrlKey);
 }
@@ -456,7 +425,6 @@ export interface WorkspacePaletteProvider {
 
 export const recentWorkspaceTemplateStorageKey = "agents-in-the-cloud:recent-workspace-template-id";
 
-/** The hot path for starting work: a launch composer seeded from the current workspace's template. */
 export const launchComposerCommand = {
   id: "agent.open-launch-composer",
   label: "New workspace",
@@ -481,7 +449,6 @@ export interface WorkspaceClientHooks {
   registerPaletteProvider(provider: WorkspacePaletteProvider): void;
   registerCommand(command: WorkspaceClientCommand): void;
   registeredCommands(): WorkspaceClientCommand[];
-  /** Supplies commands that depend on the current page, evaluated whenever commands are looked up. */
   registerCommandProvider(provider: () => WorkspaceClientCommand[]): void;
 }
 
@@ -519,14 +486,12 @@ export { isApplePlatform } from "./platform.ts";
 
 export type { CableChannelAdapter, CableChannelSubscription } from "./cable.ts";
 
-/** Public context for contextual Work views. The shell owns the backing attribute and event. */
 export function selectedWorkspaceAgent(element: Element): string | undefined {
   return element.closest<HTMLElement>("[data-workspace-selected-agent]")?.dataset.workspaceSelectedAgent || undefined;
 }
 export const workspaceAgentSelectionEvent = "agents-in-the-cloud:workspace-agent-selected";
 
 export interface AgentLaunchFooterContext {
-  /** Show the submitted settings without editing or resolving current preferences. */
   readOnly?: boolean;
   frameId: string;
   formId: string;
@@ -536,9 +501,7 @@ export interface AgentLaunchFooterContext {
 export interface WorkspaceAgentLaunch {
   renderFooter(context: AgentLaunchFooterContext): Promise<string>;
   prepare(parameters?: JsonObject): Promise<WorkspaceCreationContext | undefined>;
-  /** Validate Agent type settings; the host owns prompt, attachments and submission identity. */
   submit(form: FormData): Promise<{ prepare(): Promise<WorkspaceCreationContext> } | { response: Response }>;
-  /** New-workspace provisioning only; never invoked to fill an empty pane. Input is host-prepared. */
   prepareWorkspace(workspaceId: string, context?: WorkspaceCreationContext): Promise<void>;
   refreshConfiguration?(frameId: string): Promise<string>;
 }

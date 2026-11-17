@@ -7,15 +7,12 @@ import { callEndDetails, codemodeCallEntry, type CallEnd, type CallStart } from 
 import { oneShotAgentEntry } from "./one-shot-agent.ts";
 import { codemodeScriptFileEntry } from "./script-file.ts";
 
-/** What a one-shot agent used, in its call's details once it has finished. */
 const usageDetailsSchema = Type.Object({ usage: Type.Object({ outputTokens: Type.Number(), cost: Type.Number() }) });
 
-/** Each script's calls, from their records, the one-shot agents its calls ran, and the script files scripts ran. */
 export function codemodeTranscript(view: Pick<ConversationView, "entries">): Partial<AgentTranscriptSnapshot> {
   // Each script's calls by key, in the order they started. A rerun after a restart records
   // them again: the first start and the last end count.
   const scripts = new Map<string, Map<string, { start?: CallStart; end?: CallEnd }>>();
-  // The one-shot agent each call ran, by the call's ID.
   const childAgents = new Map<string, string>();
   const scriptFiles: NonNullable<AgentTranscriptSnapshot["scriptFiles"]> = [];
   for (const entry of view.entries) {

@@ -26,7 +26,6 @@ export const agentsInTheCloudClientModule: WorkspaceClientModule = {
         try {
           const response = await fetch(action, { method: "POST", headers: { Accept: "text/vnd.turbo-stream.html" }, credentials: "same-origin" });
           if (response.headers.get("x-agents-in-the-cloud-reload") === "true") {
-            // The app origin now points at the System supervisor, not workspace routes.
             window.location.replace("/");
             return;
           }

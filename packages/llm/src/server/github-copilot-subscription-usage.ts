@@ -3,7 +3,6 @@ import { Value } from "typebox/value";
 import type { OAuthCredential } from "@earendil-works/pi-ai";
 import { fetchSubscriptionUsageJson, subscriptionUsageMessages, SubscriptionUsageError, type Fetcher, type SubscriptionUsage } from "./subscription-usage.ts";
 
-// Token-billed accounts send some counts as decimal strings.
 const count = Type.Union([Type.Number(), Type.String({ pattern: "^-?\\d+(?:\\.\\d+)?$" })]);
 const quotaSchema = Type.Object({
   unlimited: Type.Optional(Type.Boolean()),
@@ -22,7 +21,6 @@ const payloadSchema = Type.Object({
   quota_reset_date: date,
   quota_reset_date_utc: date,
   quota_snapshots: Type.Optional(Type.Union([Type.Record(Type.String(), Type.Union([quotaSchema, Type.Null()])), Type.Null()])),
-  // Older Free accounts report remaining and monthly counts instead of snapshots.
   limited_user_quotas: quotaCounts,
   monthly_quotas: quotaCounts,
   limited_user_reset_date: date,
@@ -46,7 +44,6 @@ function allowance(limitName: string, meteredFeature: string | null, quota: Stat
 
 function allowances(payload: Payload): Allowance[] {
   const snapshots = payload.quota_snapshots ?? {};
-  // premium_models replaces premium_interactions on newer accounts; both describe the same allowance.
   const premium = snapshots.premium_models ?? snapshots.premium_interactions;
   const premiumName = payload.token_based_billing ? "AI credits" : "Premium requests";
   const reported = [
@@ -63,7 +60,6 @@ function allowances(payload: Payload): Allowance[] {
   });
 }
 
-/** Copilot allowances run for a calendar month up to the reset, which is not always the 1st. */
 function monthBefore(reset: Date): Date {
   const start = new Date(Date.UTC(reset.getUTCFullYear(), reset.getUTCMonth() - 1, 1, reset.getUTCHours(), reset.getUTCMinutes(), reset.getUTCSeconds()));
   const daysInMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0)).getUTCDate();
@@ -86,7 +82,6 @@ function detail({ limitName, unlimited, entitlement, remaining, overagePermitted
  * It needs the GitHub sign-in token Pi keeps as `refresh`, not the short-lived Copilot token. */
 export async function fetchGitHubCopilotSubscriptionUsage(credential: OAuthCredential, fetcher: Fetcher = fetch): Promise<SubscriptionUsage> {
   const messages = subscriptionUsageMessages("GitHub Copilot");
-  // Pi stores provider-specific fields, like the enterprise server, untyped on the credential.
   const signIn: unknown = credential;
   if (!Value.Check(signInSchema, signIn)) throw new SubscriptionUsageError("GitHub Copilot credentials are unavailable. Reconnect GitHub Copilot.");
   const { refresh, enterpriseUrl } = signIn;
@@ -106,9 +101,7 @@ export async function fetchGitHubCopilotSubscriptionUsage(credential: OAuthCrede
     plan: payload.copilot_plan ?? null,
     checkedAt: new Date().toISOString(),
     allowed: null,
-    // Running out of premium requests still leaves the included models, so it isn't a blocked account.
     limitReached: null,
-    // Without a reset date there is no period to pace against; the counts still show as details.
     windows: reset ? reported.filter(({ unlimited, entitlement }) => !unlimited && entitlement > 0).map(({ limitName, meteredFeature, usedPercent }) => ({
       limitName, meteredFeature, kind: "primary" as const, usedPercent,
       durationSeconds: Math.round((reset.getTime() - monthBefore(reset).getTime()) / 1000), resetsAt: reset.toISOString(),

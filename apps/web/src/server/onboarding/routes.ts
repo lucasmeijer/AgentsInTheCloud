@@ -28,7 +28,6 @@ function onboardingDialogHtml(bodyHtml: string, footerHtml?: string): string {
   });
 }
 
-// Leaving the code step goes to models when they still need setting up, otherwise out of onboarding.
 function skipRowHtml(needsModelsStep: boolean): string {
   const content = { width: "fill", kind: "multiline", label: { kind: "text", text: "Somewhere else" }, leadingHtml: `<div class="settings-provider-icon onboarding-skip-icon">${Icons.Next}</div>` } as const;
   return needsModelsStep
@@ -84,7 +83,6 @@ export async function handleOnboardingRequest(request: Request, url: URL): Promi
     const html = await renderOnboardingDialog({ includeCompleted: true, provider: providerId ? gitHostingProvider(providerId) : undefined });
     const acceptsStream = request.headers.get("accept")?.includes("text/vnd.turbo-stream.html") ?? false;
     if (acceptsStream) return turboStreamResponse(update("onboarding_modal_host", html));
-    // Onboarding is a modal flow, not a standalone page.
     return Response.redirect(new URL("/", url).toString(), 303);
   }
   return undefined;

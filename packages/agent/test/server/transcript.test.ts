@@ -219,7 +219,6 @@ describe("persisted run boundaries", () => {
     expect(items[1]).toMatchObject({ key: "initial:working", startedAt: 900, completedAt: 3000, items: [{ text: "Before steering" }] });
     expect(items[2]).toEqual({ type: "user", key: "steer", text: "Focus here", images: [], rewindEntryId: "steer", timestamp: 3000 });
     expect(items[3]).toMatchObject({ key: "steer:working", inputEntryIds: ["steer"], startedAt: 3000, hasFinalAnswer: true, items: [{ text: "After steering" }] });
-    // Only the run's end, not an answer, finishes the block.
     expect(items[3]).not.toHaveProperty("completedAt");
     expect(items[4]).toMatchObject({ text: "Final answer", final: true });
   });
@@ -274,7 +273,6 @@ test("a new persisted run after an interrupted run stops the old block rather th
 test("a finished tool call's outcome reads the same for every tool row", () => {
   expect(toolOutcomeLabel({ exitCode: 0 }, false)).toBe("");
   expect(toolOutcomeLabel({ exitCode: 2 }, false)).toBe("exitcode 2");
-  // A timed-out or stopped command is not an error result, but it did not succeed.
   expect(toolOutcomeLabel({ timedOut: true, exitCode: 0 }, false)).toBe("timed out");
   expect(toolOutcomeLabel({ aborted: true }, true)).toBe("aborted");
   expect(toolOutcomeLabel(undefined, true)).toBe("failed");

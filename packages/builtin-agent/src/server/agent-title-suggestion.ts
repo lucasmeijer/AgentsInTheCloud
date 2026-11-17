@@ -91,7 +91,6 @@ function suggestAgentTitle(agent: { workspaceId: string; agentId?: string }, use
   const suggest = async (): Promise<boolean> => {
     let titleModelRef = options.agentModel;
     try {
-      // The persisted title also suppresses automatic naming after a server restart.
       if (agent.agentId) {
         const currentAgent = (await listWorkspaceAgents(agent.workspaceId)).find((candidate) => candidate.agentId === agent.agentId);
         if (!currentAgent) throw new Error(`Agent not found: ${agent.agentId}`);
@@ -116,13 +115,11 @@ function suggestAgentTitle(agent: { workspaceId: string; agentId?: string }, use
       const responseText = textFromResponse(response);
       const title = normalizeSlug(responseText);
       if (!title) {
-        // "error" means the prompt names no task, which is expected rather than a failure.
         if (responseText.toLowerCase() === "error") return false;
         return fail(titleModelRef, "model returned an unusable Agent title", { responseText, stopReason: response.stopReason });
       }
       if (!agent.agentId) {
         await serializeTitleOperation(agent.workspaceId, async () => {
-          // Recheck after the LLM returns: a manual title always wins.
           if (await getWorkspaceTitle(agent.workspaceId) !== null) return;
           await setWorkspaceTitle(agent.workspaceId, title);
           await options.events?.emit("workspace_title_changed", { workspaceId: agent.workspaceId, title });

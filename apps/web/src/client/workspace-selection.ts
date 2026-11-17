@@ -65,7 +65,6 @@ class WorkspaceSelectionController extends Controller<HTMLElement> {
     if (historyMode === "push" && new URL(href, location.href).href !== location.href) history.pushState({}, "", href);
     workspaceNavigationController()?.setActiveWorkspace(workspaceId);
     const mount = this.mountTargets.find(item => item.dataset.workspaceId === workspaceId);
-    // A command acknowledgement can precede the shell snapshot containing its mount.
     if (!mount) return;
     this.hideMounts();
     this.emptyTargets.forEach(element => { element.hidden = true; });
@@ -126,7 +125,6 @@ class WorkspaceSelectionController extends Controller<HTMLElement> {
       || (attention.get(a.dataset.workspaceId!) ?? Infinity) - (attention.get(b.dataset.workspaceId!) ?? Infinity)
       || Number(b.dataset.lastActivatedAt ?? 0) - Number(a.dataset.lastActivatedAt ?? 0));
     this.retained = new Set(candidates.slice(0, this.maxPreloadedValue));
-    // The visible workspace goes live first; preloads would compete with it.
     const visible = this.mountTargets.find(mount => mount.classList.contains("visible"));
     const visibleLoading = visible !== undefined && !(liveSurfaceReady(visible) && (this.presentation(visible)?.intendedSurfacesReady() ?? true));
     for (const mount of candidates) {
@@ -142,7 +140,6 @@ class WorkspaceSelectionController extends Controller<HTMLElement> {
   }
   private readonly changed = (): void => {
     const selected = this.mountTargets.find(mount => mount.dataset.workspaceId === this.intended);
-    // Approval ends selection; container teardown can continue in the background.
     if (this.intended && selected?.querySelector('[data-deletion-status="deleting"]')) {
       this.unselectWorkspace(this.intended);
       return;

@@ -17,9 +17,7 @@ test("an Agent's subagents nest under the one that started them; closed ones lea
   }, "root");
   expect(activities.map(({ key, running, parentKey, progress, startedBy, details }) => ({ key, running, parentKey, progress, startedBy: startedBy?.itemKey, task: details.Task }))).toEqual([
     { key: "writer", running: true, parentKey: undefined, progress: undefined, startedBy: "call_spawn", task: "Task for writer" },
-    // A nested subagent starts in its parent's transcript, not this Agent's.
     { key: "checker", running: true, parentKey: "writer", progress: "Waiting to start", startedBy: undefined, task: "Task for checker" },
-    // Its latest task, not an earlier one.
     { key: "researcher", running: false, parentKey: undefined, progress: undefined, startedBy: "call_followup", task: "Task for researcher" },
     { key: "auditor", running: false, parentKey: undefined, progress: "Stopped", startedBy: "call_reaudit", task: "Task for auditor" },
   ]);

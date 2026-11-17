@@ -14,7 +14,6 @@ export async function readTextIfExists(path: string): Promise<string | undefined
   }
 }
 
-/** Writes through a sibling temporary file so readers never observe a partial file. */
 export async function writeFileAtomic(path: string, data: string | Uint8Array, options: { mode?: number } = {}): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${crypto.randomUUID()}`;

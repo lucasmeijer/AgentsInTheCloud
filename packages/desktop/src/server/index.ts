@@ -66,7 +66,6 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
   initialize(context) {
     context.registerWorkspaceAppResolver(async (app, url) => {
       if (app.appKey !== "desktop") return undefined;
-      // Only the remote-display transport is exposed. Never proxy CDP or VNC.
       if (url.pathname === "/websockify") return workspacePortBackend(app.workspaceId, 6080, "/");
       return { kind: "fetch", fetch: (request) => request.method === "GET"
         ? desktopViewerResponse(new URL(request.url), () => desktopRuntime.status(app.workspaceId))

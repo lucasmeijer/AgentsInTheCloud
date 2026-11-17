@@ -84,7 +84,6 @@ test("nested socket publication routes HTTP and WebSocket directly, retains orig
     const headers = { origin };
     const response = await fetch(`${actual}/products?sort=true&x=a%20b`, { method: "POST", headers, body: "payload=one&two=2" });
     expect(await response.text()).toBe("POST /products?sort=true&x=a%20b payload=one&two=2");
-    // Neither ingress hop may preserve workspace-controlled cross-origin grants.
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
     expect(response.headers.get("timing-allow-origin")).toBeNull();
     const redirect = await fetch(`${actual}/redirect`, { headers, redirect: "manual" });
@@ -117,7 +116,6 @@ test("nested socket publication routes HTTP and WebSocket directly, retains orig
     await inner.stop(); await outer.stop();
     outer = await startIngress(join(directory, "outer"), outerPort, parent, { o1234: outerGateway.url, other: foreignGateway.url });
     inner = await startIngress(join(directory, "inner"), innerPort, createParentAgentsInTheCloudPublisher(outer.socket("o1234")), { i4321: innerGateway.url });
-    // No navigate/publication request: restored listeners immediately serve traffic.
     expect(await (await fetch(`${actual}/restored?x=2`)).text()).toBe("GET /restored?x=2 ");
     expect(await inner.ingress.publishPort("i4321", dev.port!)).toBe(origin);
   } finally {

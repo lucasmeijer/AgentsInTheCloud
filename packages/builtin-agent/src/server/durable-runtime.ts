@@ -148,7 +148,6 @@ export async function openDurableAgentRuntime(
       if (nextBusy === busy) return;
       if (nextBusy) {
         startNotificationTurn(renderContext, statusChanged);
-        // A turn answers the suggestion; the next one follows it.
         suggesting?.abort();
         suggesting = undefined;
         promptSuggestion = undefined;
@@ -164,7 +163,6 @@ export async function openDurableAgentRuntime(
         void suggestPrompt().catch(error => console.error("Could not suggest a prompt", error));
       }
     }
-    /** Guesses the next prompt with the turn's own request, plus one instruction, so it reads the turn's prompt cache. */
     async function suggestPrompt() {
       if (identity.readOnly || identity.parentId || suggestionCacheMisses >= promptSuggestionCacheMissLimit) return;
       const { model: ref, thinkingLevel } = await conversation.agent(context);
@@ -179,14 +177,11 @@ export async function openDurableAgentRuntime(
       if (!provider || busy) return;
       const abort = new AbortController();
       suggesting = abort;
-      // The same session id selects the turn's prompt cache; SSE leaves the turn's WebSocket continuation alone.
       const requestOptions: SimpleStreamOptions = { signal: abort.signal, sessionId: provider.sessionId, transport: "sse" };
-      // Measured on every openai-codex and xai model: any other thinking level, even one step lower, misses the cache.
       if (thinkingLevel !== "off") requestOptions.reasoning = thinkingLevel;
       const reply = await harnessOptions.models.completeSimple(model, {
         messages: [...agentDelegation?.requestMessages(messages, conversation.id) ?? messages, promptSuggestionRequest(Date.now())],
       }, requestOptions);
-      // A finished reply was paid for even when a turn has since answered it; a closed, deleted or suspended conversation takes no writes.
       if (reply.stopReason !== "aborted" && !suspended && !deleted && !closed.has(conversation.id)) {
         await harness.commit(async tx => { addModelUsage((await tx.doc(UsageDoc, conversation.id)).models, `${reply.provider}/${reply.model}`, reply.usage); }, context);
         await recordDurableSubscriptionActivity(harnessOptions.models, reply);
@@ -207,7 +202,6 @@ export async function openDurableAgentRuntime(
       observation = undefined;
       await previous?.stop();
       assertOpen();
-      // Only the documents matter here, not the transcript.
       const watch = await conversation.watch(context, { min: 1 });
       if (suspended) { await watch.stop(); assertOpen(); }
       observation = watch;
@@ -400,7 +394,6 @@ export async function openDurableAgentRuntime(
           }, context);
         });
       },
-      /** Fence immediately, persist before cancellation, retain passive history. */
       close() {
         assertOpen();
         closed.add(conversation.id);
@@ -416,7 +409,6 @@ export async function openDurableAgentRuntime(
           throw error;
         });
       },
-      /** Canonical committed state, including partials and queued input. No scheduling. */
       watch: (...args: Parameters<Conversation["watch"]>) => conversation.watch(...args),
       history: (...args: Parameters<Conversation["entries"]>) => conversation.entries(...args),
       context: (...args: Parameters<Conversation["context"]>) => conversation.context(...args),
@@ -430,7 +422,6 @@ export async function openDurableAgentRuntime(
           return new Response("not found", { status: 404 });
         })();
       },
-      /** Commit searchable metadata without creating a second history file. */
       setTitle(title: string) {
         return command(() => harness.commit(async (tx) => {
           const catalog = await tx.doc(WorkspaceAgents);
@@ -468,14 +459,12 @@ export async function openDurableAgentRuntime(
       configure(change: SettingsChange) {
         return command(() => configure(change));
       },
-      /** Setup may fill an empty selection, but must never replace a user's choice. */
       configureDefaultModel(model: NonNullable<AgentChange["model"]>) {
         return command(async () => {
           if ((await conversation.agent(context)).model) return;
           await configure({ model });
         });
       },
-      /** Withdraw only this inbox input; consumption and cancellation race atomically. */
       cancelQueuedInput(submissionId: string) {
         return command(async () => {
           const inbox = await harness.snapshot(InboxDoc, conversation.id, context);
@@ -492,7 +481,6 @@ export async function openDurableAgentRuntime(
           const outcome = await harness.commit(async tx => {
             const input = (await tx.doc(InboxDoc, conversation.id)).items.find(item => String(item.id) === submissionId);
             if (!input || input.mode === "write") return "gone";
-            // Steering on an idle agent would place this input ahead of older follow-ups.
             if (!(await tx.doc(LiveDoc, conversation.id)).run) return "stranded";
             if (input.mode !== "followUp") return "gone";
             input.mode = "steer";
@@ -503,13 +491,11 @@ export async function openDurableAgentRuntime(
             await load.validateModel((await conversation.agent(context)).model);
             await readyForExecution();
             assertAdmission();
-            // An idle conversation with queued items runs a boundary for the next submission, placing queued input in order.
             await conversation.submit({ type: "write", entry: { kind: durableQueueResumeEntry.kind, model: [] } }, context);
           }
           return true;
         });
       },
-      /** Cancel one live tool and its owned work, without withdrawing the turn or queued input. */
       abortTool(callId: string, note?: string) {
         return command(async () => {
           const live = await harness.snapshot(LiveDoc, conversation.id, context);
@@ -520,7 +506,6 @@ export async function openDurableAgentRuntime(
           if (message) {
             await harness.commit(async tx => {
               const current = (await tx.doc(LiveDoc, conversation.id)).tools?.find(tool => tool.callId === callId);
-              // Upstream rebuilds an aborted tool's result from the slot, keeping its diagnostics.
               if (current && current.status !== "done") {
                 current.diagnostics ??= [];
                 current.diagnostics.push({ severity: "error", code: "cancelled_by_user", message: `The user manually cancelled this tool with the following note:\n${message}` });
@@ -531,7 +516,6 @@ export async function openDurableAgentRuntime(
           return true;
         });
       },
-      /** Explicit Stop withdraws queued input and cancels owned work. */
       stop() {
         return command(async () => {
           // Persist before probing Docker/providers. Recovery applies this exact
@@ -554,7 +538,6 @@ export async function openDurableAgentRuntime(
           return conversation.compact(instructions, context);
         });
       },
-      /** Reset context, retaining searchable history and the current settings. */
       reset() {
         return command(async () => {
           await assertIdle();
@@ -580,7 +563,6 @@ export async function openDurableAgentRuntime(
   observers.add(async () => { await catalogWatch!.stop(); });
 
   return {
-    /** Atomic passive import. No prompts, submissions, model calls, or task replay. */
     async importHistory(identity: Pick<DurableAgentRecord, "agentId" | "label" | "title">, entries: readonly EntryDraft[]) {
       assertOpen();
       return harness.commit(async tx => {
@@ -596,14 +578,11 @@ export async function openDurableAgentRuntime(
       }, context);
     },
     async admission() { assertOpen(); return harness.snapshot(WorkspaceAdmission, context); },
-    /** Trusted native module access; public routes expose only scoped operations. */
     get harness() { return harness; },
-    /** Discover retained histories without preparing prompts or starting work. */
     async catalog() {
       assertOpen();
       return (await harness.snapshot(WorkspaceAgents, context))!.agents;
     },
-    /** Reuse one host command line per AgentsInTheCloud UUID; reopening never rebuilds its prompt. */
     agent(record: AgentIdentity, initial: Pick<AgentChange, "model" | "thinkingLevel"> = {}) {
       assertOpen();
       let pending = agents.get(record.agentId);
@@ -628,7 +607,6 @@ export async function openDurableAgentRuntime(
       }
       return pending;
     },
-    /** Permanent admission fence; journal remains available for history and recovery. */
     delete() {
       assertOpen();
       deleted = true;
@@ -644,14 +622,12 @@ export async function openDurableAgentRuntime(
         throw error;
       });
     },
-    /** Host restart resumes durable tasks, never submits a synthetic user prompt. */
     async resume() {
       const catalog = (await harness.snapshot(WorkspaceAgents, context))!;
       await Promise.all(catalog.agents.filter(record => !record.readOnly && !closed.has(record.durableId)).map(record => this.agent(record)));
       await readyForExecution();
       harness.resume();
     },
-    /** Host shutdown/unload: stop observation and scheduling, not the task's effects. */
     async suspend() {
       suspended = true;
       await Promise.all([...observers].map(stop => stop()));

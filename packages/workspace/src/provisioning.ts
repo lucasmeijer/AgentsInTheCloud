@@ -3,9 +3,7 @@ import { errorMessage, type WorkspaceProvisionFailurePolicy } from "@agents-in-t
 
 export interface WorkspaceProvisionProgress {
   detail?: string;
-  /** The step's output so far, or once it finished; it may have terminal colors. */
   output?: string;
-  /** Where to watch the terminal process the step runs, while it runs. */
   terminalSocketPath?: string;
 }
 export type WorkspaceProvisionStepStatus = "running" | "done" | "failed" | "warning";
@@ -26,7 +24,6 @@ export interface WorkspaceProvisionSnapshot {
 
 declare module "@agents-in-the-cloud/core" {
   interface AgentsInTheCloudEventMap {
-    /** Output from the operation executing in this workspace, never lifecycle state. */
     workspace_provision_progress: WorkspaceProvisionProgress & { workspaceId: string };
   }
 }
@@ -44,7 +41,6 @@ export interface WorkspaceProvisioning {
   resume(workspaceId: string, action: "retry" | "continue"): string;
   delete(workspaceId: string): void;
   cancel(workspaceId: string): Promise<void>;
-  /** Stop admitting runs and wait for executing work; a paused failed step is already idle. */
   drain(): Promise<void>;
 }
 
@@ -60,7 +56,6 @@ interface ProvisioningState {
   pending?: { stepId: string; retryable: boolean; continuable: boolean; resolve(action: "retry" | "continue"): void };
 }
 
-/** Owns execution order, progress, and failed-step decisions. Consumers render snapshots, not event patches. */
 export function createWorkspaceProvisioning(options: { events?: AgentsInTheCloudEventBus; onChange?: (workspaceId: string) => void; stepTimeoutMs?: number } = {}): WorkspaceProvisioning {
   const runs = new Map<string, ProvisioningState>();
   const executing = new Set<ProvisioningState>();
@@ -86,7 +81,6 @@ export function createWorkspaceProvisioning(options: { events?: AgentsInTheCloud
       stopping = true;
       await Promise.all([...executing].filter((run) => !run.pending).map(async (run) => {
         if (run.status !== "cancelled") await run.idle.promise;
-        // Pausing already resolved idle; cancellation still has to unwind cleanup.
         if (run.status === "cancelled") await run.settled.promise;
       }));
     },

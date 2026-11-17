@@ -3,7 +3,6 @@ import type { Context } from "@earendil-works/chord";
 import { InboxDoc, type InboxState, type Conversation, type EntryId, type EntryRecord } from "@earendil-works/pi-durable";
 import { sessionImageResponse } from "./session-images.ts";
 
-/** Stable image addressing across all model messages of an immutable entry. */
 export function durableEntryContent(entry: EntryRecord) {
   return (entry.model ?? []).flatMap<TextContent | ImageContent | ThinkingContent | ToolCall>((message) => Array.isArray(message.content)
     ? message.content

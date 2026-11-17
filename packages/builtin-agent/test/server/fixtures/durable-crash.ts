@@ -26,7 +26,6 @@ registry.install(defineExtension({
       await appendFile(join(directory, "executions.txt"), "executed\n");
       update?.({ content: [], details: { started: true } });
       process.stdout.write("effect-started\n");
-      // The parent kills this process without running any shutdown handlers.
       return await new Promise<never>((_resolve, reject) => {
         signal!.addEventListener("abort", () => reject(signal!.reason), { once: true });
       });
@@ -39,7 +38,6 @@ const conversation = await workspace.agent({ agentId: "crash-tab", label: "Agent
 });
 await conversation.submit({ type: "input", content: "Run the operation", requestId: "crash-request" }, BACKGROUND_CONTEXT);
 if (replay === "generation") {
-  // Watches show a partial at once; only a stored one survives the crash.
   const observation = workspace.harness.observeCommits({
     advance(publication) {
       if (!JSON.stringify(publication.changes).includes("Committed")) return;
@@ -49,5 +47,4 @@ if (replay === "generation") {
     end() {},
   });
 }
-// Keep the fixture alive even if the provider has no more active I/O.
 setInterval(() => {}, 60_000);

@@ -2,13 +2,10 @@ function iconHtml(paths: string): string {
   return `<svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 }
 
-/** Product mark for app branding. Accessible names belong on the containing UI. */
 export const agentsInTheCloudBrandIconHtml = '<img class="agents-in-the-cloud-brand-icon" src="/agents-in-the-cloud-brand.png" width="24" height="24" alt="" aria-hidden="true">';
 
-/** The social-card A robot identifies Builtin agents, distinct from app branding. */
 export const builtinAgentIconHtml = '<img class="builtin-agent-icon" src="/builtin-agent.png" width="20" height="24" alt="" aria-hidden="true">';
 
-/** Canonical decorative icons. Accessible names belong on the control or content that contains them. */
 export const Icons = {
   Agent: iconHtml('<path d="M9 4h6M12 4V2M6 8h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/>'),
   Subagents: iconHtml('<path d="M7 5V3M5 3h4M3 7h8a1 1 0 0 1 1 1v6H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM17 12v-2m-2 0h4M13 14h8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/><path d="M5 10h.01M9 10h.01M15 18h.01M19 18h.01" stroke-width="2.6"/>'),

@@ -5,7 +5,6 @@ export type { ChangeBucket };
 
 interface CompiledPattern { glob: Bun.Glob; target: "name" | "path" }
 
-/** Gitignore-style: no slash matches the file name anywhere, a trailing slash matches a folder anywhere, and other slashes match from the repository root. */
 function compile(pattern: string): CompiledPattern {
   if (pattern.endsWith("/") && !pattern.slice(0, -1).includes("/")) return { glob: new Bun.Glob(`**/${pattern}**`), target: "path" };
   if (!pattern.includes("/")) return { glob: new Bun.Glob(pattern), target: "name" };
@@ -13,7 +12,6 @@ function compile(pattern: string): CompiledPattern {
   return { glob: new Bun.Glob(anchored.endsWith("/") ? `${anchored}**` : anchored), target: "path" };
 }
 
-/** The index of the first bucket a path belongs to, or undefined for the main work. */
 export function changeBucketMatcher(buckets: readonly ChangeBucket[]): (path: string) => number | undefined {
   const compiled = buckets.map(bucket => ({
     include: bucket.patterns.filter(pattern => !pattern.startsWith("!")).map(compile),
@@ -28,7 +26,6 @@ export function changeBucketMatcher(buckets: readonly ChangeBucket[]): (path: st
 
 export interface BucketTotals { name: string; files: number; additions: number; deletions: number }
 
-/** Main work first, then every bucket in order, including empty ones. */
 export interface ChangeTotals { main: BucketTotals; buckets: BucketTotals[]; bucketOf: Map<string, number | undefined> }
 
 export function bucketTotals(buckets: readonly ChangeBucket[], files: readonly { path: string; additions: number; deletions: number }[]): ChangeTotals {
@@ -47,7 +44,6 @@ export function bucketTotals(buckets: readonly ChangeBucket[], files: readonly {
   return { main, buckets: totals, bucketOf };
 }
 
-/** The workspace's buckets from its template and the global settings, read fresh so saved settings apply on the next render. */
 export async function workspaceChangeBuckets(workspaceId: string): Promise<ChangeBucket[]> {
   return await effectiveChangeBuckets(workspaceTemplateIdOfInit(await getWorkspaceInit(workspaceId)));
 }

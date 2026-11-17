@@ -36,7 +36,6 @@ describe("streaming Markdown parsing copies", () => {
   });
 });
 
-// These checks concern temporary source repair, not rendered UI markup.
 test("leaves incomplete equations untouched instead of inventing emphasis closers", () => {
   for (const source of ["$$\nx*y", "\\[\nx*y", "The answer is $x*y", "The answer is \\(x*y"]) {
     expect(repairStreamingMarkdownTail(source)).toBe(source);

@@ -29,9 +29,7 @@ const rowSchema = Type.Object({
 type ClaudeBlock = Static<typeof blockSchema>;
 
 type ProjectedToolCall = { name: string; args: unknown };
-/** Claude's file and shell tools render like AgentsInTheCloud's own. */
 export function claudeToolCall(block: Pick<ClaudeBlock, "name" | "input">): ProjectedToolCall {
-  // Claude's Bash timeout is in milliseconds and defaults to two minutes; AgentsInTheCloud's is in seconds.
   if (block.name === "Bash") return { name: "bash", args: Value.Check(bashInputSchema, block.input) ? { ...block.input, timeout: (block.input.timeout ?? 120_000) / 1000 } : block.input };
   if (block.name === "Read") return { name: "read", args: block.input };
   if (block.name === "Write") return { name: "write", args: block.input };
@@ -53,7 +51,6 @@ function resultText(value: ClaudeBlock["content"]): string {
   return value.filter((block) => block.type === "text").map((block) => block.text ?? "").filter(Boolean).join("\n");
 }
 
-/** Claude Code's native JSONL is untrusted, append-only input; never turn it into a Pi session. */
 export function claudeTranscriptRecords(jsonl: string): TranscriptRecord[] {
   const rows = Array.from(nativeJsonlRows(jsonl, rowSchema));
   // Claude can rewind and fork. Display the ancestry of the last mainline message,

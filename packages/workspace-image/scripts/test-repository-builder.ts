@@ -19,7 +19,6 @@ async function command(args: string[]) {
 
 async function inside(base: string) {
   const resources = await initializeResources();
-  // The real app receives this path as a bind mount; the harness runs in System.
   await symlink(resources.buildClientsCgroup, "/run/agents-in-the-cloud-system/build-client-processes");
   await installWorkspaceFirewall(resources.buildClientsCgroupParent, resolverAddresses(await readFile("/etc/resolv.conf", "utf8")));
   const received: string[] = [];
@@ -50,7 +49,6 @@ async function inside(base: string) {
     return command(["docker", "ps", "-aq", "--filter", "label=com.agents-in-the-cloud.role=repository-builder"]);
   }
   try {
-    // Positive control: the old integrated System builder can read the fixture.
     await command(["docker", "tag", base, "agents-in-the-cloud-workspace"]);
     const control = join(root, "old-builder");
     await mkdir(control);
@@ -70,7 +68,6 @@ async function inside(base: string) {
     const cacheSource = 'ARG STEP\nRUN --mount=type=cache,target=/build-cache sh -ec \'echo "$STEP"; test -f /build-cache/marker || cat /proc/sys/kernel/random/uuid > /build-cache/marker; cp /build-cache/marker /mount-marker\'';
     const warm = await build(cacheSource, ["--build-arg", "STEP=warm"]);
     const mountMarker = await imageFile(warm.tag, "/mount-marker");
-    // Recreate the daemon container, not its persistent volume: mimics runtime replacement.
     await command(["docker", "stop", "--time", "120", await builderName()]);
     await command(["docker", "rm", await builderName()]);
     const restored = await build(cacheSource, ["--build-arg", "STEP=restored"]);
@@ -143,7 +140,6 @@ async function inside(base: string) {
       assert.equal(received.length, before, "isolated build reached management fixture");
     }
     await assert.rejects(build("RUN --network=host true", ["--no-cache"]), /network.host is not allowed/);
-    // Failed requests and cancellations must not make subsequent builds fall back.
     const final = await build("RUN echo isolated > /marker");
     assert.equal(await imageFile(final.tag, "/marker"), "isolated");
     // Exercise the application's resolver too, not just the builder module.
@@ -209,10 +205,8 @@ async function outside(systemImage: string, base: string) {
     for (const address of ["10.201.0.2/32", "169.254.169.254/32"]) await docker("exec", name, "ip", "route", "add", address, "via", "11.201.0.2");
     await docker("exec", name, "mkdir", "/audit");
     await docker("cp", join(directory, "test.js"), `${name}:/audit/test.js`);
-    // Bundling relocates repository-builder.ts's relative runtime-image URL.
     await docker("cp", new URL("../runtime-image", import.meta.url).pathname, `${name}:/runtime-image`);
     await command(["bash", "-o", "pipefail", "-c", `docker save ${shellQuote(base)} | docker exec -i ${shellQuote(name)} docker load`]);
-    // Run visibly: package output remains captured by the build, PASS lines stream.
     const child = Bun.spawn(["docker", "exec", "-e", "ATELIER_DATA_DIR=/data/app", name, "bun", "/audit/test.js", "--inside", base], { stdout: "inherit", stderr: "inherit" });
     assert.equal(await child.exited, 0);
   } finally {

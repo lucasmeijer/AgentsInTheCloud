@@ -28,7 +28,6 @@ async function prepare(id: string, registry: WorkspaceRegistry, operations: Work
   if (current()) await operations.runtimePrepared?.(id);
 }
 
-/** Preparation failures retain the container and pause until retry or explicit bypass. */
 export function prepareWorkspaceForUse(id: string, registry: WorkspaceRegistry, operations: WorkspacePreparationOperations): Promise<void> {
   return operations.provisioning.run(id, (run) => prepare(id, registry, operations, run));
 }
@@ -39,7 +38,6 @@ interface ReprovisionOperations extends WorkspacePreparationOperations {
   imageOutdated(id: string): Promise<boolean>;
 }
 
-/** Run after HTTP startup. Each workspace completes its own startup independently. */
 export async function reprovisionWorkspaces(
   registry: WorkspaceRegistry,
   operations: ReprovisionOperations,

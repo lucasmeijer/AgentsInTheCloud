@@ -3,7 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Keep transport mocks and workspace metadata isolated from other packages.
 async function scenario(script: string) {
   const directory = await mkdtemp(join(tmpdir(), "claude-runtime-"));
   try {

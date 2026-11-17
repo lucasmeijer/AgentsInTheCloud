@@ -6,7 +6,6 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 export type { WorkspaceWorkViewReference } from "@agents-in-the-cloud/shared";
 
-/** Resource module contribution and type adapter for one Work view kind. */
 export interface WorkspaceWorkViewContribution<Reference extends WorkspaceWorkViewReference = WorkspaceWorkViewReference> {
   type: Reference["type"];
   parseReference(value: JsonValue): Reference;
@@ -96,7 +95,6 @@ export function createWorkspacePresentationStore(options: WorkspacePresentationS
     }
     const workViews = storedWorkViews.flatMap((entry, index) => {
       if (!isJsonObject(entry)) throw presentationError(workspaceId, `Work view ${index} must be an object`);
-      // Retired Work views must not prevent a Workspace from loading.
       if (isJsonObject(entry.reference) && (entry.reference.type === "review" || entry.reference.type === "subagents")) return [];
       return [{ reference: parseReference(workspaceId, entry.reference, true) }];
     });
@@ -135,7 +133,6 @@ export function createWorkspacePresentationStore(options: WorkspacePresentationS
     },
     async dismissWarning(workspaceId, kind, warningState) {
       await serialized(workspaceId, async () => {
-        // A warning can be dismissed before modules initialize their Work views.
         const state = await read(workspaceId) ?? { version: 1, workViews: [], dismissedWarnings: {}, workViewsInitialized: false };
         state.dismissedWarnings[kind] = warningState;
         await write(workspaceId, state);

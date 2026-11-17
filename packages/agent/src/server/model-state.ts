@@ -23,14 +23,12 @@ export async function resolveNewWorkspaceAgentModel(): Promise<ModelRef | undefi
   return selectAvailableEnabledModel(await enabledModelOptionViews());
 }
 
-/** Why any catalogue model, enabled or not, can't run; undefined when it can. */
 export async function catalogueModelUnavailableReason(model: ModelRef): Promise<string | undefined> {
   const runtime = await createPiModelRuntime();
   if (!runtime.getModel(model.provider, model.id)) return "Not in the provider’s catalogue";
   return modelUnavailableReason((await providerAvailability(runtime, [model.provider])).get(model.provider)!, model, runtime);
 }
 
-/** Omit current to select the saved default; null represents a session without a model. */
 export async function enabledModelOptionViews(current?: ModelRef | null, runtime?: Pick<Awaited<ReturnType<typeof createPiModelRuntime>>, "getAvailable" | "checkAuth" | "getModel">): Promise<AgentModelOptionView[]> {
   runtime ??= await createPiModelRuntime();
   const models = await getAgentEnabledModels();

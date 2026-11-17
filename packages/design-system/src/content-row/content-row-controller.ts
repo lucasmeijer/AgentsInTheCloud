@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 
 const contentRowSelector = ".content-row--compact";
@@ -70,7 +68,6 @@ export class ContentRowController extends Controller<HTMLElement> {
   };
 }
 
-/** Updates the plain label of an existing Content row without exposing its anatomy. */
 export function setContentRowLabel(element: HTMLElement, text: string): void {
   element.querySelector<HTMLElement>(labelTextSelector)!.textContent = text;
 }

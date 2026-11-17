@@ -1,8 +1,6 @@
 import { registerLiveSurfaces } from "./live-surface.ts";
-/// <reference lib="dom" />
 
 import { Application as StimulusApplication, Controller as StimulusController } from "@hotwired/stimulus";
-// Turbo does not publish TypeScript declarations, but Bun resolves and bundles its browser module.
 import { registerDesignSystemControllers } from "@agents-in-the-cloud/design-system/client";
 import {
   installSoftwareKeyboardTracking,

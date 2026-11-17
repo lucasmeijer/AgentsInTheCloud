@@ -19,7 +19,6 @@ test("blocks render the whole document, one element each", () => {
   expect(blocks).toHaveLength(9);
   const betweenBlocks = (html: string) => html.replace(/>\s*\n\s*</g, "><");
   expect(betweenBlocks(blocks.join(""))).toBe(betweenBlocks(renderProvisionalMarkdown("workspace", source)));
-  // References resolve against the whole document, not the block alone.
   expect(blocks[1]).toContain('href="https://example.com/ref"');
 });
 

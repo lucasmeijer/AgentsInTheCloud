@@ -31,7 +31,6 @@ export async function workspaceKnownHosts(workspaceId: string): Promise<string> 
   return await readTextIfExists(workspaceTrustPath(workspaceId)) ?? "";
 }
 
-/** Workspace-local OpenSSH sends the keys it observed on its own network path. The socket identifies the workspace. */
 export async function requestWorkspaceSshTrust(workspaceId: string, host: string, port: number, input: string): Promise<string> {
   if (!/^[a-zA-Z0-9._:-]+$/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) throw invalidArguments("Invalid SSH server address");
   const address = port === 22 ? host : `[${host}]:${port}`;
@@ -43,11 +42,9 @@ export async function requestWorkspaceSshTrust(workspaceId: string, host: string
   if (!records.length || records.length > 20 || input.length > 20_000) throw invalidArguments("No SSH host keys were returned");
   const trusted = `${await readFile(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "ssh-agents", workspaceId, "known_hosts"), "utf8")}${await workspaceKnownHosts(workspaceId)}`;
   const hostRecords = trusted.split("\n").filter(line => line.split(/\s+/)[0]?.split(",").includes(address));
-  // A match among the server's advertised algorithms is enough: servers may add key types over time.
   if (records.some(record => hostRecords.includes(record.line))) return trusted;
   const existing = [...pending.values()].find(item => item.request.workspaceId === workspaceId && item.request.host === host && item.request.port === port);
   if (existing) {
-    // The identity changed while someone was reviewing it. Invalidate the old request.
     if (existing.request.records.map(record => record.line).join("\n") !== records.map(record => record.line).join("\n")) {
       pending.delete(existing.request.id);
       clearTimeout(existing.timer);

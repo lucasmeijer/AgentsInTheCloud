@@ -23,6 +23,5 @@ export async function startPrivateTmux(run: RunTerminalProcessCommand, tmuxDirec
     await tmux("kill-session", "-t", `=${keepalive}`);
     throw new Error(`Tests must use their own tmux server, not ${socket}`);
   }
-  // By its socket, so stopping can only ever reach this server.
   return { stop: async () => { await Bun.spawn(["tmux", "-S", socket, "kill-server"], { stderr: "ignore" }).exited; } };
 }

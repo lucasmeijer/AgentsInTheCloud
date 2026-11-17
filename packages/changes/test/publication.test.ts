@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { ChangesPublication } from "../src/server/publication.ts";
 
 interface Snapshot { name: string }
-/** Turn refreshes return the queued captures in order, or "turn" once they run out. */
 function publication(turnCaptures: Promise<Snapshot>[] = []) {
   const published: string[] = [];
   const subject = new ChangesPublication<Snapshot>({ name: "initial" }, {
@@ -90,7 +89,6 @@ test("a superseded save shows its change even when the selection that superseded
   const save = subject.publishSelection(subject.select(), async () => ({ name: "saved" }));
   const other = subject.publishSelection(subject.select(), () => later.promise);
   expect(await save).toBeUndefined();
-  // As the save route does: the workspace changed, and the response shows what's shown once that settles.
   await subject.changed();
   const shown = subject.settled();
   later.reject(new Error("git failed"));

@@ -19,32 +19,25 @@ import { agentTypeId, label, prepareClaude, settings } from "./setup.ts";
 import { createClaudeStore, type ClaudeAgentRecord } from "./store.ts";
 import { liveRegions } from "./render.ts";
 
-/** A background task of Claude Code's: a command, subagent, monitor, workflow or other kind of work. */
 export interface ClaudeTask {
   id: string;
-  /** Claude Code's task type, such as `local_bash`, `local_agent`, `monitor` or `local_workflow`. */
   type: string;
   description: string;
   subagentType?: string;
   parentTaskId?: string;
-  /** Not activity, such as a watcher; Claude won't report on it. */
   ambient: boolean;
   toolUseId?: string;
   startedAt?: number;
   workflowName?: string;
-  /** A workflow's script. */
   script?: string;
-  /** Its latest one-line status, such as a subagent's progress summary. */
   summary?: string;
   lastToolName?: string;
   usage?: { tokens: number; toolUses: number };
-  /** A workflow's phases and agents, as its latest progress frame described them. */
   workflow?: ClaudeWorkflowProgress;
 }
 
 const taskOutputSchema = Type.Object({ output: Type.String(), total_bytes: Type.Number(), truncated: Type.Boolean() });
 
-/** Claude records prompts under the UUID they were sent with, so retries can find them. */
 function promptUuid(requestId: string): string {
   if (uuidPattern.test(requestId)) return requestId.toLowerCase();
   const hex = createHash("sha256").update(requestId).digest("hex");
@@ -56,24 +49,17 @@ export class ClaudeRuntime {
   instructions = "";
   models: ModelInfo[] = [];
   private commands: SlashCommand[] = [];
-  /** Prompt templates win over Claude's own same-named commands, such as its bundled /simplify. */
   private templateNames = new Set<string>();
-  /** Slash commands and prompt templates; turns can add templates, so each finished turn reloads them. */
   completionCatalog = "";
   failure?: Error;
-  /** Claude's guess at the next prompt, offered in the empty composer until a prompt is sent. */
   promptSuggestion?: string;
-  /** Claude Code's own measure of how full its context window is. */
   contextPercent: number | null = null;
   private transport?: ClaudeTransport;
   private connecting?: Promise<void>;
   private disposed = false;
   private closing = false;
-  /** A turn is running, or a queued prompt will start one. */
   private running = false;
-  /** Claude Code's live background tasks, as it last listed them, with what their events added. */
   tasks: ClaudeTask[] = [];
-  /** What task events say about a task, kept until it leaves the live set; it may start before it joins. */
   private taskEvents = new Map<string, Partial<ClaudeTask>>();
   private interrupting = false;
   private busy = false;
@@ -81,15 +67,11 @@ export class ClaudeRuntime {
   readonly presentation = createLivePresentation(() => liveRegions(this), 50);
   private constructor(readonly workspaceId: string, readonly record: ClaudeAgentRecord, private readonly save: () => void, private readonly events: AgentsInTheCloudEventBus) {}
   get agentId() { return this.record.id; }
-  /** Claude is in a turn. Background work keeps going after it, without holding up the conversation. */
   get isTurnRunning() { return !this.failure && this.running; }
-  /** Not yet settled: Claude is in a turn or will report on background work in one. */
   get isBusy() { return !this.failure && (this.running || this.reportedTasks.length > 0); }
-  /** Background commands and subagents Claude is waiting on; it reports on them once they finish. Ambient tasks, such as watchers, are not. */
   private get reportedTasks() { return this.tasks.filter(task => !task.ambient); }
   private changed() {
     if (this.disposed) return;
-    // A turn answers the suggestion; the next one arrives after it.
     if (this.running) this.promptSuggestion = undefined;
     const busy = this.isBusy;
     if (busy !== this.busy) {
@@ -108,7 +90,6 @@ export class ClaudeRuntime {
     this.completionCatalog = renderSlashCommandCatalog(templates, [], "cli", [...claudeAgentCommands, ...claudeNativeCommands(this.commands, this.templateNames)]);
     this.presentation.invalidate();
   }
-  /** Claude Code's own commands are sent as prompts, never expanded as prompt templates. */
   isClaudeCommand(text: string) {
     const name = text.trim().match(/^\/(\S+)/)?.[1];
     return Boolean(name && !this.templateNames.has(name) && this.commands.some(command => command.name === name || command.aliases?.includes(name)));
@@ -142,12 +123,10 @@ export class ClaudeRuntime {
     });
   }
   get sessions() { return claudeSessionDirectory(this.workspaceId, this.agentId); }
-  /** Saved history alone; showing it needs nothing from the workspace container. */
   private async prepareState() {
     const { sessionId, forkedFrom } = this.record;
     const exists = await hasClaudeSession(this.sessions, sessionId);
     if (exists && forkedFrom) { delete this.record.forkedFrom; this.save(); }
-    // A fork has no history of its own until Claude records its first message.
     const source = exists ? sessionId : forkedFrom;
     this.state.hydrate(source ? await readClaudeRows(this.sessions, source) ?? [] : []);
   }
@@ -181,7 +160,6 @@ export class ClaudeRuntime {
       }, message => this.receive(message), error => { this.failure = error; this.changed(); });
       const initialized = await this.transport.query.initializationResult();
       if (this.disposed || this.closing) { await this.transport.close(); return; }
-      // Claude only names its models by version once a few starts have built up its account state, so they are named as everywhere else in AgentsInTheCloud.
       const registry = await createPiModelRuntime();
       this.models = initialized.models.map(model => model.value === "default" ? model : { ...model, displayName: registry.getModel("anthropic", model.resolvedModel ?? model.value)?.name ?? model.displayName });
       this.commands = initialized.commands;
@@ -210,7 +188,6 @@ export class ClaudeRuntime {
       this.record.submissions.push({ id: requestId, digest });
       this.save();
       const uuid = promptUuid(requestId);
-      // Claude absorbs a prompt sent while it works into its running turn, or queues it as the next one.
       this.state.add(this.running ? { kind: "steer", uuid, timestamp: Date.now(), content } : { kind: "user", uuid, timestamp: Date.now(), content, meta: false });
       this.running = true;
       // SAFETY: Content blocks match the API's text and base64 image parameters.
@@ -259,7 +236,6 @@ export class ClaudeRuntime {
       }
     });
   }
-  /** The switch and the command's outcome are saved together; reconnecting afterwards is a connection matter. */
   private async switchSession(session: { sessionId: string; forkedFrom?: string }, submission: NonNullable<ClaudeAgentRecord["commandSubmissions"]>[number]): Promise<ClaudeCommandResult> {
     await this.transport?.close();
     this.record.sessionId = session.sessionId;
@@ -270,7 +246,6 @@ export class ClaudeRuntime {
     await this.startConnection();
     return { kind: "done", message: submission.message };
   }
-  /** Switching conversations restarts Claude, which would end its background work too. */
   private requireIdle(action: string) {
     if (this.isBusy) throw invalidArguments(`Stop Claude before ${action}`);
   }
@@ -281,7 +256,6 @@ export class ClaudeRuntime {
       this.interrupting = true;
       await this.transport!.query.interrupt();
     }
-    // Stopped tasks end quietly, without a turn to report on them.
     await Promise.all(this.reportedTasks.map(task => this.transport!.query.stopTask(task.id)));
   }
   async stopTask(taskId: string) {
@@ -289,7 +263,6 @@ export class ClaudeRuntime {
     this.assertOpen();
     await this.transport!.query.stopTask(taskId);
   }
-  /** The end of a background command's or monitor's output. */
   async taskOutput(taskId: string) {
     await this.activate();
     this.assertOpen();
@@ -297,7 +270,6 @@ export class ClaudeRuntime {
     const query = this.transport!.query as Query & { getTaskOutput(taskId: string): Promise<JsonValue> };
     return Value.Parse(taskOutputSchema, await query.getTaskOutput(taskId));
   }
-  /** The selected entry of Claude Code's own model catalog. */
   get selectedModel(): ModelInfo | undefined {
     const id = this.record.model ? parseModelRef(this.record.model)?.id : undefined;
     return id ? this.models.find(model => model.value === id || model.resolvedModel === id) : this.models.find(model => model.value === "default");
@@ -343,7 +315,6 @@ export class ClaudeRuntime {
   private receive(message: SDKMessage) {
     if (this.disposed) return;
     if (message.type === "conversation_reset") {
-      // /clear continues in a new native conversation.
       this.record.sessionId = message.new_conversation_id;
       delete this.record.forkedFrom;
       this.save();
@@ -353,7 +324,6 @@ export class ClaudeRuntime {
       this.commands = message.commands;
       void this.refreshCompletionCatalog().catch(error => console.error("Could not refresh Claude Code completions", error));
     } else if (message.type === "system" && message.subtype === "background_tasks_changed") {
-      // The full live set, replacing the last one.
       const live = new Set(message.tasks.map(task => task.task_id));
       for (const task of this.tasks) if (!live.has(task.id)) this.taskEvents.delete(task.id);
       this.tasks = message.tasks.map(task => ({
@@ -379,7 +349,6 @@ export class ClaudeRuntime {
         kind: "task", uuid: message.uuid, timestamp: Date.now(), runId: message.run_id ?? message.uuid, toolUseId: message.tool_use_id, status: message.status, summary: message.summary,
         usage: message.usage && { tokens: message.usage.total_tokens, toolUses: message.usage.tool_uses, durationMs: message.usage.duration_ms },
       });
-      // The finished task leaves the background set before that turn starts.
       this.running = true;
     } else if (message.type === "result") {
       this.running = (message.queued_turn_count ?? 0) > 0;
@@ -391,17 +360,14 @@ export class ClaudeRuntime {
       void this.refreshHistory().catch(error => console.error("Could not read Claude Code history", error));
       void this.refreshContextUsage().then(() => this.changed()).catch(error => console.error("Could not read Claude Code context usage", error));
     } else if (message.type === "prompt_suggestion") {
-      // The setting is read when Claude connects; turning it off since then still hides new suggestions.
       void readPromptSuggestionsEnabled().then(enabled => {
         if (!enabled || this.running) return;
         this.promptSuggestion = message.suggestion;
         this.changed();
       }).catch(error => console.error("Could not read the Suggested prompts setting", error));
     } else if (message.type === "stream_event" || message.type === "assistant") {
-      // A queued prompt started its own turn.
       this.running = true;
     }
-    // A foreground task ends without ever joining the live set.
     if (message.type === "system" && message.subtype === "task_notification" && !this.tasks.some(task => task.id === message.task_id)) this.taskEvents.delete(message.task_id);
     this.state.receive(message);
     this.changed();
@@ -409,7 +375,6 @@ export class ClaudeRuntime {
   private async refreshContextUsage() {
     this.contextPercent = (await this.transport!.query.getContextUsage({ detail: "summary" })).percentage;
   }
-  /** History adds what streaming does not report: absorbed prompts, command echoes and real timestamps. */
   private async refreshHistory() {
     const sessionId = this.record.sessionId;
     const rows = await readClaudeRows(this.sessions, sessionId);

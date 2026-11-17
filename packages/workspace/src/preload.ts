@@ -82,7 +82,6 @@ export function createImagePreloader(run: Command = command, docker: typeof requ
         publish({ detail: "Checking cached image layers" });
         const image = await docker(["image", "inspect", reference, "--format", "{{json .RootFS.Layers}}"]);
         const diffIDs: string[] = JSON.parse(image.stdout) ?? [];
-        // Avoid launching ctr at all when every layer is already cached.
         const present = await Promise.all(diffIDs.map(async (diffID) => {
           const match = /^sha256:([a-f0-9]{64})$/.exec(diffID);
           if (!match) throw new Error(`Unsupported image layer digest: ${diffID}`);
@@ -142,7 +141,6 @@ export function createImagePreloader(run: Command = command, docker: typeof requ
     },
     async install(images: PreparedImage[], workspaceId: string, report: (detail: string) => void = () => {}, activity: Report = () => {}): Promise<void> {
       if (!images.length) return;
-      // containerd is sufficient for importing snapshots; socket activation keeps Docker asleep.
       report("Starting workspace containerd");
       await inWorkspace(workspaceId, ["systemctl", "start", "containerd.service"]);
       for (const image of images) {

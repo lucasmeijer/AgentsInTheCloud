@@ -1,6 +1,5 @@
 import { createLivePresentation, createPublishedRefresh, type LiveRegion, type LiveRegionDigests } from "@agents-in-the-cloud/shared";
 
-/** I/O publishes a committed value shared by HTTP rendering and Cable snapshots. */
 export function createLiveResource<T>(load: () => Promise<T>, render: (state: T) => readonly LiveRegion[], onError: (error: Error) => void) {
   let state: T | undefined;
   let subscribers = 0;
@@ -19,7 +18,6 @@ export function createLiveResource<T>(load: () => Promise<T>, render: (state: T)
   }
   return {
     read,
-    /** What a page shows for `state`; see `placeLiveRegions`. */
     regions: render,
     async subscribe(listener: (html: string) => void, shown?: LiveRegionDigests) {
       subscribers++;

@@ -4,7 +4,6 @@ interface AgentTypeChoice { id: string; label: string; iconHtml: string }
 
 const agentOrder = ["builtin", "pi", "claude", "claude-cli", "codex", "codex-cli"];
 
-/** Shared agent type rows; callers retain ownership of selection forms and actions. */
 export function renderAgentTypePicker(agentTypes: readonly AgentTypeChoice[], options: {
   attributes: (agentType: AgentTypeChoice) => string;
 }): string {

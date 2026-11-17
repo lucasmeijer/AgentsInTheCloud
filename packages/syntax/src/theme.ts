@@ -13,7 +13,6 @@ export const agentsInTheCloudTheme: Theme = {
   style: {
     foreground: "foreground",
     background: "background",
-    // Pierre's editor paints selections in the first player's colour.
     players: [{ selection: "selection" }],
     syntax: {
       attribute: "attribute",

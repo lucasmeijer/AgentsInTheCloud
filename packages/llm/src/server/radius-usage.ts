@@ -7,7 +7,6 @@ const payloadSchema = Type.Object({
   current_period: Type.Object({ ends_at: Type.String(), actual_charged: Type.Number({ minimum: 0 }) }),
 });
 
-/** Radius bills prepaid organization credits, so it reports a balance rather than allowance windows. */
 export async function fetchRadiusUsage(accessToken: string, fetcher: Fetcher = fetch): Promise<SubscriptionUsage> {
   const payload = await fetchSubscriptionUsageJson("https://radius.pi.dev/v1/billing", {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },

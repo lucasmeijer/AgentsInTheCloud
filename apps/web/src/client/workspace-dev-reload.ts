@@ -48,7 +48,6 @@ class DevReloadController extends Controller {
         this.revision = value.revision;
       }
     } catch {
-      // Server restarts temporarily make the development endpoint unavailable.
     }
     if (this.connected) this.timer = setTimeout(() => void this.poll(), 1_000);
   }

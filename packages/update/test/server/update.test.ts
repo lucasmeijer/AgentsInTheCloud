@@ -91,7 +91,6 @@ test("an update needing a newer System is offered normally; choosing it points t
     expect(html).toContain("curl -fsSL https://agentsinthecloud.com/install.sh | bash");
     expect(html).not.toContain("Get update");
   }
-  // Background checks keep the installer guidance for the same update.
   await instance.checkNow();
   expect(instance.snapshot().state).toBe("installer_required");
 

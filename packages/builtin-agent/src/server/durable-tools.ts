@@ -63,17 +63,14 @@ export function durableWorkspaceTool<TParams extends TSchema>(
 }
 
 let photon: Promise<ImageProcessor> | undefined;
-/** Resizes and converts images for the model, in a worker that starts with the first image `read` meets. */
 const images: ImageProcessor = {
   async prepare(bytes, mimeType, limits) { return (await (photon ??= createNodePhotonImages())).prepare(bytes, mimeType, limits); },
 };
 
-/** `tool`, run on the files `env` reaches. */
 function onFiles<TParams extends object>(tool: ToolRegistration<TParams>, env: ExecutionEnv): ToolRegistration<TParams> {
   return { ...tool, execute: (args, api, context) => tool.execute(args, { ...api, env }, context) };
 }
 
-/** pi-durable's read, write and edit on the files `env` reaches. Only the observational read reruns after a crash. */
 export function createDurableFileTools(env: ExecutionEnv): ToolRegistration<any>[] {
   return [
     { ...onFiles(createReadTool({ images }), env), replay: "safe" },
@@ -82,7 +79,6 @@ export function createDurableFileTools(env: ExecutionEnv): ToolRegistration<any>
   ];
 }
 
-/** File/image and presentation capabilities ready for the native Durable registry. */
 export function createDurableWorkspaceTools(workspaceId: string, options: WorkspaceAgentToolOptions = {}): ToolRegistration<any>[] {
   return [
     ...createDurableFileTools(new WorkspaceFileSystem(workspaceId)),

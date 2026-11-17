@@ -76,7 +76,6 @@ test("Claude Code receives inference-scoped OAuth placeholders", () => {
   expect(file.path).toBe(".claude/.credentials.json");
   const auth = JSON.parse(file.content).claudeAiOauth;
   expect(auth.accessToken).toBe(file.marker);
-  // Claude Code treats "" as a dead refresh token and reports an expired login.
   expect(auth.refreshToken).toBeNull();
   expect(auth.scopes).toContain("user:inference");
   expect(auth.expiresAt).toBeGreaterThan(Date.now());
@@ -145,7 +144,6 @@ test("a nested installation's Pi gets subscription placeholders the parent's pro
     xai: { type: "oauth", access: "xai-access", refresh: "xai-refresh", expires: 1 },
     openai: { type: "api_key", key: "sk-openai" },
   });
-  // Far-future expiry and no refresh token: Pi never refreshes these itself.
   expect(seeded).toEqual({
     anthropic: { type: "oauth", access: expect.stringContaining("sk-ant-oat"), refresh: "", expires: 4070908800000 },
     "openai-codex": { type: "oauth", access: expect.any(String), refresh: "", expires: 4070908800000, accountId: "agents-in-the-cloud-subscription-codex-account" },

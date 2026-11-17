@@ -1,6 +1,5 @@
 import { focusLikelyOpensSoftwareKeyboard, type WorkspaceClientControllerConstructor } from "@agents-in-the-cloud/shared";
 
-/** Preserve editor focus on submit and keep touch controls in place until click. */
 export function createComposerFocusController(Controller: WorkspaceClientControllerConstructor) {
   return class ComposerFocusController extends Controller {
     preserveInputFocus(event: MouseEvent): void {

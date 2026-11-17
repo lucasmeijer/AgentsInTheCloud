@@ -104,7 +104,6 @@ describe("title request options", () => {
     expect(request.max_tokens).toBe(64);
   });
 
-  // Models that cannot turn thinking off spent the whole answer budget thinking at their default effort.
   test("use the lowest effort and leave answer room on models that always think", async () => {
     const request = await titleRequest("claude-sonnet-5-5");
     expect(request.messages.at(-1)?.output_config).toEqual({ effort: "low" });

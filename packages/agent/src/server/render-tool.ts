@@ -49,7 +49,6 @@ function bashSummary(tool: ToolView): string {
 function toolSummaryHtml(tool: ToolView): string {
   if (isBashTool(tool.name)) return bashSummary(tool);
   if (tool.name === "codemode") return codemodeSummary(tool);
-  // Code mode's `models.*` calls name the model they run.
   if (codemodeModelCall.test(tool.name) && Value.Check(modelCallArgumentsSchema, tool.args)) return tool.args.model.id;
   if (tool.name === "read") {
     const image = tool.resultImages?.[0];
@@ -224,7 +223,6 @@ function renderBashResultViews(ctx: AgentRenderContext, key: string, tool: ToolV
   return `<section class="agent-tool-region agent-bash-output">${comparisonHeader("Result", "As emitted")}<div class="agent-region-pane region-primary-pane">${fullscreenSourceRegion("Result", copyableToolBody(resultHtml, "colored result"), fullResult)}</div><div class="agent-region-pane region-model-pane">${fullscreenSourceRegion("As seen by model", copyableToolBody(modelHtml, "model result"), `<pre class="agent-tool-result agent-tool-region-body">${escapeHtml(model || "(no output)")}</pre>`)}</div></section>`;
 }
 
-/** Source as the model wrote it, beside a readable version when formatting changed it. */
 function readableSourceRegion(title: string, label: string, className: string, original: string, readable?: string): string {
   if (readable === undefined) return sourceRegionHtml(title, copyableToolBody(original, label), className);
   return `<section class="${className}">${comparisonHeader(title, "Readable", "Original")}<div class="agent-region-pane region-primary-pane">${fullscreenSourceRegion(title, copyableToolBody(readable, `readable ${label}`), readable)}</div><div class="agent-region-pane region-model-pane">${fullscreenSourceRegion("Original", copyableToolBody(original, `original ${label}`), original)}</div></section>`;
@@ -250,16 +248,12 @@ function renderBashDetail(ctx: AgentRenderContext, key: string, tool: ToolView, 
   const commandHtml = renderBashCommand(command, tool.status === "streaming");
   if (tool.status === "streaming") return `<div class="agent-tool-detail">${commandHtml}</div>`;
   if (tool.status === "running") {
-    // The viewer owns its generated DOM and the awaiting-output visibility state.
     const terminal = tool.terminalProcessId ? `<section id="${domId(ids.item(ctx, key), "terminal", ctx.workspaceId, tool.terminalProcessId)}" data-turbo-permanent class="agent-tool-region agent-bash-output agent-terminal-awaiting-output"><div class="agent-region-header">Live terminal</div><div class="agent-terminal-viewport"><div class="agent-tool-term observable-terminal-host" data-controller="agent-term" data-agent-term-url-value="${escapeHtml(terminalProcessSocketPath(ctx.workspaceId, tool.terminalProcessId))}"></div></div></section>` : "";
     return `<div class="agent-tool-detail agent-bash-detail">${commandHtml}${terminal}</div>`;
   }
   return `<div class="agent-tool-detail agent-bash-detail">${commandHtml}${renderBashResultViews(ctx, key, tool, count)}</div>`;
 }
 
-// Code mode: the script, a row per tool call it made, and its result.
-
-/** One call of the result's `details.calls`, as pi's coding agent and pi-durable both record them. */
 const codemodeCallSchema = Type.Object({
   id: Type.Union([Type.String(), Type.Number()]),
   name: Type.String(),
@@ -268,7 +262,6 @@ const codemodeCallSchema = Type.Object({
   durationMs: Type.Optional(Type.Number()),
   error: Type.Optional(Type.String()),
 });
-/** Arguments of code mode's `models.*` calls, which name the model they run. */
 const modelCallArgumentsSchema = Type.Object({ model: Type.Object({ id: Type.String() }) });
 const codemodeHeader = /^Script (completed|failed)\nWall time ([\d.]+) seconds\nOutput:\n\n?/;
 
@@ -285,7 +278,6 @@ function codemodeCalls(tool: ToolView): ToolView[] {
     try {
       args = JSON.parse(call.args);
     } catch {
-      // The preview is cut for display, so long arguments are not JSON anymore.
     }
     return [{
       callId: `${tool.callId}/${call.id}`, name: call.name, args,
@@ -297,7 +289,6 @@ function codemodeCalls(tool: ToolView): ToolView[] {
   });
 }
 
-/** Code mode's internal tools behind `models.*`, such as `pi.codemode.models.classify`, as scripts call them. */
 function codemodeCallName(name: string): string {
   return name.replace(/^pi\.codemode\./, "");
 }
@@ -309,7 +300,6 @@ function codemodeOutput(tool: ToolView): { text: string; wallMs?: number } {
   return header ? { text: text.slice(header[0].length).trim(), wallMs: Number(header[2]) * 1000 } : { text };
 }
 
-/** A script file as a call ran it: its path and the start of its contents' hash, like `/work/audit.js @ 3f9c2a1`. */
 function scriptFileLabel(file: ScriptFileView, path = file.path): string {
   return `${path} @ ${file.sha256.slice(0, 7)}`;
 }
@@ -326,7 +316,6 @@ function codemodeSummary(tool: ToolView): string {
   ]);
 }
 
-/** A finished call whose result was not recorded: its arguments and error. */
 function renderNestedCallRecord(call: ToolView): string {
   const command = isBashTool(call.name) ? stringArg(toolArgs(call), "command") : undefined;
   const bodyClass = "agent-tool-code agent-tool-region-body";
@@ -339,7 +328,6 @@ function renderNestedCallRecord(call: ToolView): string {
 }
 
 
-/** What a script's calls did: how many, how many still run, and what the agents they ran used. */
 function executionSummary(calls: readonly ToolView[]): string {
   const running = calls.filter(call => call.status === "running" || call.status === "streaming").length;
   const failed = calls.filter(call => call.status === "error").length;
@@ -356,24 +344,20 @@ function executionSummary(calls: readonly ToolView[]): string {
   ]);
 }
 
-/** One part of a script's card, such as its source or result, behind a row of its own. */
 function codemodeSectionHtml(className: string, label: string, open: boolean, bodyHtml: string): string {
   return `<div class="agent-codemode-section ${className}">${disclosureHtml({ summary: { kind: "compact", width: "fill", label: { kind: "text", text: label } }, open, bodyHtml })}</div>`;
 }
 
-/** A JavaScript script, highlighted, beside its readable version when there is one. */
 export function scriptSourceRegion(code: string, readable: string | undefined): string {
   const bodyClass = "agent-tool-code agent-tool-region-body";
   return readableSourceRegion("Script", "script", "agent-tool-region agent-script", codeBlockHtml(code, "script.js", bodyClass), readable === undefined ? undefined : codeBlockHtml(readable, "script.js", bodyClass));
 }
 
-/** Text output, or the object or array it holds, such as a script's return value, as indented and highlighted JSON. */
 function outputHtml(output: string, textClass: string, codeClass: string): string {
   let value: unknown;
   try {
     value = JSON.parse(output);
   } catch {
-    // Other output shows as text.
   }
   return isJsonObject(value) || Array.isArray(value)
     ? codeBlockHtml(JSON.stringify(value, null, 2), "output.json", codeClass)
@@ -385,10 +369,8 @@ function outputHtml(output: string, textClass: string, codeClass: string): strin
  * the script streams its source does, and while it runs its calls do.
  */
 function renderCodemodeDetail(ctx: AgentRenderContext, key: string, tool: ToolView): string {
-  // A call naming a script file shows the file as the call ran it.
   const code = tool.scriptFile?.code ?? stringArg(toolArgs(tool), "code") ?? "";
   const scriptLabel = tool.scriptFile ? `Script · ${scriptFileLabel(tool.scriptFile)}` : "Script";
-  // Like bash commands: keep the source layout while it streams, so lines do not jump.
   const script = codemodeSectionHtml("agent-codemode-script", scriptLabel, tool.status === "streaming",
     `<div class="agent-tool-detail">${scriptSourceRegion(code, tool.status === "streaming" ? undefined : formatCodemodeScriptForDisplay(code))}</div>`);
   const calls = codemodeCalls(tool);

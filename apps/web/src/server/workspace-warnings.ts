@@ -15,11 +15,9 @@ export const outdatedImageMessage = "Some new features might not be available in
 const warningTitles = {
   preparation: "Workspace preparation needs attention",
   image: "Workspace image needs attention",
-  // The naming message explains itself; a title would only add height.
   naming: undefined,
 } satisfies Record<WorkspaceWarningKind, string | undefined>;
 
-/** Current warning conditions. Stable state tokens scope acknowledgement to the specific problem. */
 export function workspaceWarnings(entry: WorkspaceEntry, workspaceTemplate: WorkspaceTemplateConfiguration | undefined): WorkspaceWarning[] {
   const warnings: WorkspaceWarning[] = [];
   function add(kind: string, title: string | undefined, message: string, state: string, action?: WorkspaceWarning["action"]): void {
@@ -28,7 +26,6 @@ export function workspaceWarnings(entry: WorkspaceEntry, workspaceTemplate: Work
   if (isGitWorkspaceTemplateInit(entry.init)) {
     const workspaceTemplateId = workspaceTemplateIdFromInit(entry.init);
     const configuration = workspaceTemplate!;
-    // Older workspaces have no fingerprint; do not claim to know whether their settings changed.
     if (entry.init.configurationFingerprint && entry.init.configurationFingerprint !== configuration.configurationFingerprint) {
       // The kind is persisted with dismissals, so it keeps its original name.
       // This identifier is persisted with dismissed warnings; keep it stable.

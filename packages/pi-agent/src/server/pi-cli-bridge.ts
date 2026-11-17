@@ -68,7 +68,6 @@ export interface PiCliConfiguration {
   enabledModels: string[];
 }
 
-/** Export resolved model configuration, never raw models.json (which may contain secrets or commands). */
 export async function createPiCliConfiguration(runtime: Runtime, enabledModels: EnabledModel[]): Promise<PiCliConfiguration> {
   const result: PiCliConfiguration = { auth: {}, models: { providers: {} }, enabledModels: [] };
   const available = await availableProviderModels(runtime);
@@ -76,7 +75,6 @@ export async function createPiCliConfiguration(runtime: Runtime, enabledModels: 
   for (const model of available) {
     const auth = await runtime.getAuth(model);
     if (!auth) throw new Error(`Provider disconnected while preparing Pi: ${model.provider}`);
-    // Ambient host credentials have no safe file representation. Do not advertise them in Pi.
     if (unsupportedAuth(model, auth)) continue;
     const baseUrl = endpoint(model, auth).href.replace(/\/$/, "");
     const style = model.api === "openai-codex-responses" ? "codex"
@@ -96,7 +94,6 @@ export async function createPiCliConfiguration(runtime: Runtime, enabledModels: 
   return result;
 }
 
-/** Resolve current endpoints on each CONNECT, including OAuth endpoint overrides. */
 export async function piCliCredentialHosts(runtime: Runtime): Promise<string[]> {
   const hosts = new Set<string>();
   for (const model of await availableProviderModels(runtime)) {
@@ -107,11 +104,9 @@ export async function piCliCredentialHosts(runtime: Runtime): Promise<string[]> 
   return [...hosts];
 }
 
-/** Resolve only markers addressed to a currently configured endpoint. OAuth refresh stays in ModelRuntime. */
 export function createPiCliCredentialTransform(getRuntime: () => Promise<Runtime>): SecretRequestTransform {
   return async (request, registerSecret) => {
     const url = new URL(request.url);
-    // Pi model APIs use headers or query parameters for credentials, never paths.
     if (url.pathname.match(markerPattern) || url.pathname.includes("agents-in-the-cloud-pi-no-key")) {
       throw new HttpRequestBlockedError("Pi credentials cannot be injected into URL paths");
     }
@@ -143,7 +138,6 @@ export function createPiCliCredentialTransform(getRuntime: () => Promise<Runtime
         try { marker = Value.Parse(markerSchema, JSON.parse(Buffer.from(match[1]!, "base64url").toString())); }
         catch { throw new HttpRequestBlockedError("Invalid Pi credential placeholder"); }
         const { model, auth } = await resolve({ provider: marker.provider, id: marker.model });
-        // Provider API keys are shared by its models, including providers with multiple API endpoints.
         const candidates = marker.field === "header" ? [model] : await availableProviderModels(runtime, marker.provider);
         const allowed = candidates.some((candidate) => endpoint(candidate, auth).origin === url.origin);
         if (!allowed) throw new HttpRequestBlockedError(`Pi credentials are not allowed for ${url.origin}`);
@@ -156,7 +150,6 @@ export function createPiCliCredentialTransform(getRuntime: () => Promise<Runtime
           try {
             replacement = codexAccountId(auth.auth.apiKey!);
           } catch {
-            // Credential parsing errors must not include any part of a real token in proxy diagnostics.
             throw new HttpRequestBlockedError("Could not resolve the Pi Codex account; reconnect the provider in AgentsInTheCloud");
           }
         }
@@ -174,12 +167,10 @@ export function createPiCliCredentialTransform(getRuntime: () => Promise<Runtime
       const replaced = await replace(value);
       if (replaced) headers.set(name, replaced);
     }
-    // Pi signs Claude subscription requests as Claude Code; this is the Pi TUI.
     if (subscription) {
       headers.delete("x-app");
       headers.set("user-agent", "pi");
     }
-    // Query-encoded API keys are supported without enabling substitution for unrelated workspace secrets.
     const query = new URLSearchParams();
     for (const [name, value] of url.searchParams) query.append(await replace(name), await replace(value));
     url.search = query.toString();

@@ -7,7 +7,6 @@ import { seedConfigInstallScript } from "./startup-scripts.ts";
 
 let seededPiAuth: ((auth: JsonObject) => JsonObject) | undefined;
 
-/** Rewrites the host's Pi credentials before they are copied into a workspace. */
 export function registerSeededPiAuth(transform: (auth: JsonObject) => JsonObject): void {
   seededPiAuth = transform;
 }
@@ -29,7 +28,6 @@ export async function applySeedConfigManifest(manifest: RepoWorkspaceManifest, p
   ] as const) {
     if (target) entries.push({ source: agentsInTheCloudDataPath(runtime, "pi-config", `${name}.json`), staging: `/.agents-in-the-cloud/seed-pi-${name}.json`, target });
   }
-  // The repository manifest key and filenames retain their persisted spelling.
   const workspaceTemplatesJson = manifest.seedAgentsInTheCloudConfig?.projectsJson;
   if (workspaceTemplatesJson) {
     // Sanitize on the host: neither encrypted credentials nor the master key may

@@ -55,7 +55,6 @@ function limitModelLines(text: string): LimitedModelLines {
   return { text: lines.join("\n"), linesTruncated };
 }
 
-/** Fits a terminal process's plain `text` for the model, and its `ansi` output for display. */
 export function formatBashOutput(text: string, ansi: string, fullOutputPath: string) {
   const modelLines = limitModelLines(text);
   const modelLimited = truncateTail(modelLines.text, { maxLines: DEFAULT_MAX_LINES - modelTrailerLines, maxBytes: DEFAULT_MAX_BYTES - modelTrailerBytes });

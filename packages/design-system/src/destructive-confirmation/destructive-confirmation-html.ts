@@ -5,16 +5,13 @@ import { attributesHtml } from "../html.ts";
 import { Icons } from "../icons/icons-html.ts";
 
 export interface DestructiveConfirmationOptions {
-  /** Stable, page-unique identity, including across live updates. */
   id: string;
-  /** Initial control which arms the confirmation. Must be type="button". */
   trigger: Omit<ButtonOptions, "type"> & { type: "button" };
   confirmCaption: string;
   cancelCaption: string;
   confirmFormAction?: string;
 }
 
-/** Keeps the opt-out in place and the native submit button in the top layer. */
 export function destructiveConfirmationHtml(options: DestructiveConfirmationOptions): string {
   const { trigger } = options;
   const id = escapeHtml(options.id);

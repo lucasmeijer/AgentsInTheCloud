@@ -74,7 +74,6 @@ async function searchProjects(query: string, token: string | undefined, personal
   }));
 }
 
-/** Projects you are a member of first, then public gitlab.com projects. */
 export async function searchGitLabProjects(query: string, token: string | undefined): Promise<GitHostingRepositorySearch> {
   const trimmed = query.trim();
   const [personal, publicProjects] = await Promise.all([

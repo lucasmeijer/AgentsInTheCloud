@@ -10,7 +10,6 @@ export function closeWebSocket(socket: Pick<WebSocket, "close">, code: number, r
 
 export const maxSocketBufferedBytes = 8 * 1024 * 1024;
 
-/** Bound the other direction too: browser input must not queue without limit. */
 export function forwardToUpstream(
   upstream: Pick<WebSocket, "bufferedAmount" | "send" | "close">,
   downstream: Pick<WebSocket, "close">,

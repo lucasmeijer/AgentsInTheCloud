@@ -40,7 +40,6 @@ export class ScrollbarController extends Controller<HTMLElement> {
   // Bound to pointermove, not pointerover: scrolling content under a stationary
   // cursor must not change which viewport owns the visible tracks.
   hover(event: PointerEvent): void {
-    // Touch tracks follow scrolling instead of the pointer.
     if (this.drag || event.pointerType === "touch") return;
     clearTimeout(this.settle);
     this.settle = 0;
@@ -67,16 +66,13 @@ export class ScrollbarController extends Controller<HTMLElement> {
     if (!this.frame) this.update();
   }
   wheel(event: WheelEvent): void {
-    // Preserve browser zoom, trackpad horizontal gestures and native Shift+wheel.
     if (event.defaultPrevented || event.ctrlKey || event.shiftKey || event.deltaX !== 0 || event.deltaY === 0) return;
     const viewport = this.findViewport(event.target);
     if (!viewport) return;
-    // Two-axis regions keep normal vertical wheel behavior.
     const vertical = scrollGeometry(viewport, 1);
     if (vertical.scrollable && vertical.maximum > 1) return;
     const geometry = scrollGeometry(viewport, 0);
     const delta = event.deltaY * (geometry.reversed ? -1 : 1) * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? geometry.size : 1);
-    // Keep horizontal ownership at both ends, rather than switching to vertical.
     event.preventDefault();
     setScrollPosition(viewport, 0, geometry.position + delta);
   }
@@ -94,7 +90,6 @@ export class ScrollbarController extends Controller<HTMLElement> {
     return includeEmpty ? nearest : null;
   }
 
-  // Lifting a finger also fires pointerleave; momentum scrolling keeps its tracks.
   leave(event?: PointerEvent): void {
     if (event?.pointerType === "touch") return;
     this.hide();

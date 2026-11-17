@@ -7,31 +7,20 @@ import { panelHtml } from "../panel/panel-html.ts";
 export interface DialogOptions {
   element: {
     id?: string;
-    /** Extra Stimulus controllers and actions, rendered alongside the dialog controller. */
     controllers?: string;
     actions?: string;
-    /** Caller-owned attributes; aria-label is owned by titleCaption, and data-controller and data-action by controllers and actions. Attribute values containing external input must be escaped. */
     attributesHtml?: string;
   };
-  /** Trusted, already-escaped decorative icon. */
   iconHtml: string;
-  /** Plain-text title caption. Dialog owns its body-text typography; callers supply no heading styling. */
   titleCaption: string;
-  /** Optional sentence with an inline control. Text is escaped; controlHtml is trusted. titleCaption remains the accessible dialog name. */
   titleParts?: { before: string; controlHtml: string; after: string };
-  /** Trusted, already-escaped body contents. */
   bodyHtml: string;
-  /** Padded by default. Use full-bleed when child regions own spacing or separators must reach both edges. */
   bodyLayout?: "padded" | "full-bleed";
-  /** Trusted, already-escaped footer contents. Omit when the dialog has no footer actions. */
   footerHtml?: string;
-  /** Accessible close-button label. */
   closeLabel?: string;
-  /** Omits the header's cancel control when the flow must provide its own completion action. */
   omitCancelButton?: boolean;
 }
 
-/** Renders a native modal host around the design-system panel surface. */
 export function dialogHtml(options: DialogOptions): string {
   const { element } = options;
   const id = element.id === undefined ? "" : ` id="${escapeHtml(element.id)}"`;

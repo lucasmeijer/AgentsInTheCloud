@@ -1,7 +1,6 @@
 import { buttonHtml } from "@agents-in-the-cloud/design-system/button";
 import { escapeHtml } from "@agents-in-the-cloud/shared";
 
-/** Shared status for interactive terminal controllers, which expose a retry action and target. */
 export function renderTerminalConnectionStatus(controller: string): string {
   return `<div class="observable-terminal-connection" data-${escapeHtml(controller)}-target="connectionStatus" data-state="connecting" role="status" aria-live="polite">
     <span data-terminal-connection-state="connecting">Connecting to terminal…</span>

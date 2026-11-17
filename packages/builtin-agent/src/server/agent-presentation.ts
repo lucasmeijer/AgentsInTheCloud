@@ -16,7 +16,6 @@ import { notificationControlId, renderNotificationControl } from "./render-notif
 import type { WorkspaceAgentInfo } from "./agent-store.ts";
 import type { AgentLivePresentationListener } from "./runtime-types.ts";
 
-/** Host chrome wraps committed native views; it never synthesizes transcript events. */
 export class AgentPresentation {
   readonly workspaceId: string;
   readonly agentId: string;
@@ -62,7 +61,6 @@ export class AgentPresentation {
     try {
       runtime.presentation = await DurableAgentPresentation.attach(controller, {
         ...agent, branchId: String(controller.id), jsonFinalAnswers: runtime.jsonFinalAnswers,
-        // A one-shot agent takes no input but still runs live; only imported histories render as snapshots.
         readOnly: agent.readOnly && !agent.oneShot,
       }, BACKGROUND_CONTEXT, () => runtime.committed());
       runtime.unsubscribeWork = controller.subscribeWork(() => runtime.chrome.invalidate());
@@ -115,7 +113,6 @@ export class AgentPresentation {
     this.chrome.invalidate();
   }
   private async committed() {
-    // attach starts the watch before returning its initial frame.
     if (!this.presentation || this.disposed) return;
     if (this.readOnly) return;
     const { agent } = this.presentation.state;
@@ -151,10 +148,8 @@ export class AgentPresentation {
     return { unsubscribe: () => { this.transcriptListeners.get(listener)?.unsubscribe(); this.transcriptListeners.delete(listener); chrome.unsubscribe(); } };
   }
   subscribeTurnPresentation(turn: string, branch: string, listener: AgentLivePresentationListener) { this.assertOpen(); return this.presentation.subscribeTurnPresentation(turn, branch, listener); }
-  /** The regions the agent channel publishes, for the pane to place. */
   paneState() { this.assertOpen(); return { regions: () => [this.presentation.transcriptRegion(), ...this.chromeRegions()], readOnly: this.readOnly }; }
   private catalogLoad?: Promise<void>;
-  /** Skills and templates load from the container once; finished turns refresh them. */
   loadCompletionCatalog() {
     return this.catalogLoad ??= this.refreshCompletionCatalog().catch(error => { this.catalogLoad = undefined; throw error; });
   }

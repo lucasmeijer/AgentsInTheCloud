@@ -3,7 +3,6 @@ import type { WorkspaceClientControllerConstructor as StimulusControllerConstruc
 const fadeDuration = 240;
 interface Arrival { start: number; end: number; time: number }
 
-/** Decorates server-rendered prose only; Markdown parsing and Turbo delivery stay server-owned. */
 export function createAgentStreamingTextController(Controller: StimulusControllerConstructor) {
   return class AgentStreamingTextController extends Controller {
     declare readonly element: HTMLElement;
@@ -14,7 +13,6 @@ export function createAgentStreamingTextController(Controller: StimulusControlle
     private readonly observer = new MutationObserver(() => this.refresh());
 
     connect(): void {
-      // Opening/reconnecting to an existing transcript must not animate history.
       this.text = this.textNodes().map((node) => node.data).join("");
       this.observe();
       this.reducedMotion.addEventListener("change", this.refresh);
@@ -58,7 +56,6 @@ export function createAgentStreamingTextController(Controller: StimulusControlle
       const now = performance.now();
       let prefix = 0;
       while (prefix < this.text.length && prefix < text.length && this.text[prefix] === text[prefix]) prefix++;
-      // Formatting repairs can remove literal Markdown. Don't re-fade the unchanged suffix.
       let suffix = 0;
       while (suffix < this.text.length - prefix && suffix < text.length - prefix
         && this.text[this.text.length - 1 - suffix] === text[text.length - 1 - suffix]) suffix++;
@@ -67,7 +64,6 @@ export function createAgentStreamingTextController(Controller: StimulusControlle
       this.text = text;
       if (this.reducedMotion.matches) this.arrivals = [];
 
-      // Split from the end so earlier text offsets remain valid.
       const newestFirst = this.arrivals.toReversed();
       let offset = 0;
       for (const node of nodes) {
@@ -81,7 +77,6 @@ export function createAgentStreamingTextController(Controller: StimulusControlle
           const span = document.createElement("span");
           span.className = "agent-stream-arrival";
           span.style.animationDuration = `${fadeDuration}ms`;
-          // Tail replacement must continue an existing fade, not restart it.
           span.style.animationDelay = `${arrival.time - now}ms`;
           entering.replaceWith(span);
           span.append(entering);

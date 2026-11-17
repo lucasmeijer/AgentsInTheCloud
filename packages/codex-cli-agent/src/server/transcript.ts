@@ -58,13 +58,12 @@ function execWrapperResult(output: string | Part[] | undefined): { text: string;
   }
   return undefined;
 }
-/** Project Codex's native rollout records without importing them into a mutable Pi session. */
 export function codexTranscriptRecords(jsonl: string, fallbackPrefix = "codex"): TranscriptRecord[] {
   const records: TranscriptRecord[] = [];
   let index = 0;
   const wrappers = new Map<string, string>();
   for (const row of nativeJsonlRows(jsonl, rowSchema)) {
-    if (row.type !== "response_item") continue; // event_msg duplicates response items
+    if (row.type !== "response_item") continue;
     const p = row.payload;
     const id = p.id ?? `${fallbackPrefix}-${index++}`;
     const timestamp = nativeTimestamp(row.timestamp);
@@ -105,7 +104,6 @@ function sessionDirectory(workspaceId: string, sessionId: string): string {
 export async function codexHistoryFiles(workspaceId: string, sessionId: string): Promise<string[]> {
   const directory = sessionDirectory(workspaceId, sessionId);
   const metadata = Bun.file(join(directory, "..", "native-session.json"));
-  // Older saved tabs kept rollouts inside their private CODEX_HOME.
   if (!await metadata.exists()) return nativeSessionFiles(directory);
   const schema = Type.Object({ id: Type.String(), transcript: Type.String(), private: Type.Optional(Type.Boolean()) });
   const session = Value.Parse(schema, await metadata.json());
@@ -131,7 +129,6 @@ export async function loadCodexTranscriptImage(workspaceId: string, sessionId: s
   });
 }
 
-/** Read the native ID from the tab-private rollout, never use workspace-wide --last. */
 export async function codexResumeId(workspaceId: string, sessionId: string): Promise<string | undefined> {
   const file = (await codexHistoryFiles(workspaceId, sessionId)).at(-1);
   if (!file) return undefined;

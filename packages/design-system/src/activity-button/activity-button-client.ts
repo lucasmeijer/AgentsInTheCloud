@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import type { ActivityButtonState } from "./activity-button-html.ts";
 
 interface ActivityButtonElement {
@@ -10,7 +8,6 @@ interface ActivityButtonElement {
   removeAttribute(name: string): void;
 }
 
-/** Updates the activity state and its corresponding busy and accessible-name semantics. */
 export function setActivityButtonState(button: ActivityButtonElement, state: ActivityButtonState): void {
   button.dataset.activityState = state;
   if (state === "active") button.setAttribute("aria-busy", "true");

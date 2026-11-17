@@ -10,7 +10,6 @@ export class EditError extends Error {
 const fingerprint = (contents: Uint8Array) => createHash("sha256").update(contents).digest("hex");
 interface EditSession { model: EditModel; snapshot: ChangesSnapshot; expected: WorkingFileRevision; saving: boolean }
 
-/** A lease pins the reviewed input, independent of subsequent live snapshot refreshes. */
 export function createChangesEditStore() {
   const sessions = new Map<string, Map<string, EditSession>>();
   async function begin(workspaceId: string, root: Repository, snapshot: ChangesSnapshot, path: string, file = snapshot.files.get(path)): Promise<EditModel> {
@@ -21,7 +20,6 @@ export function createChangesEditStore() {
     const model: EditModel = { token: crypto.randomUUID(), path, contents: file.newContents!, ending: editLineEnding(file.newContents!)! };
     let workspace = sessions.get(workspaceId);
     if (!workspace) sessions.set(workspaceId, workspace = new Map());
-    // Bound abandoned browser leases; active drafts remain in the browser if an old lease expires.
     if (workspace.size >= 32) workspace.delete(workspace.keys().next().value!);
     workspace.set(model.token, { model, snapshot, expected: { hash: fingerprint(working.contents), mode: working.mode }, saving: false });
     return model;
@@ -42,10 +40,8 @@ export function createChangesEditStore() {
       const result = await root.writeWorkingFile(edit.model.path, edit.expected, contents);
       if (result === "changed") throw new EditError("This file changed while you were editing. Your edits haven’t been saved.", 409);
       if (result === "unsupported") throw new EditError("This file is no longer a regular file inside the repository. Your edits haven’t been saved.", 409);
-      // Update the lease before recapturing: a transport/capture failure can retry without overwriting a later change.
       edit.expected.hash = fingerprint(Buffer.from(contents));
       relocate(edit.snapshot, edit.model.path, contents, ranges);
-      // A fresh history: the saved file changes the Working tree's counts, and commits may have changed meanwhile.
       const next = await refreshChanges(root, edit.snapshot);
       sessions.get(workspaceId)!.delete(token);
       return next;

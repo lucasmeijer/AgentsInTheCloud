@@ -46,7 +46,6 @@ export function getProviderApiKeyExample(provider: string): string | undefined {
   return hardcodedProviderKnowledge[provider]?.apiKeyExample;
 }
 
-/** Drops the brand prefix from catalogue names ("Claude Opus 5.5" → "Opus 5.5"); the provider icon already shows it. */
 export function modelDisplayName(name: string): string {
   return name.replace(/^Claude (?=[A-Z][a-z])/, "");
 }
@@ -63,14 +62,12 @@ export const popularProviderIds: readonly string[] = [...new Set(hardcodedPopula
   .sort((a, b) => getPopularProviderRank(a)! - getPopularProviderRank(b)!);
 
 export function getPopularProviderRank(provider: string): number | undefined {
-  // Prefer Codex sign-in; OpenAI keeps its model defaults in the other providers list.
   if (provider === "openai") return undefined;
   if (provider === "openai-codex") return 0;
   const rank = hardcodedPopularModels.findIndex((model) => model.provider === provider);
   return rank < 0 ? undefined : rank;
 }
 
-/** Up to five defaults: curated first, then post-release IDs in ID order. Otherwise use the highest known input price. */
 export function defaultProviderModels<T extends { id: string; name?: string; cost?: { input?: number } }>(provider: string, models: readonly T[]): T[] {
   const popular = models.filter((model) => getPopularModelRank(provider, model.id) !== undefined)
     .sort((a, b) => getPopularModelRank(provider, a.id)! - getPopularModelRank(provider, b.id)! || a.id.localeCompare(b.id));

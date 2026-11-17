@@ -18,7 +18,6 @@ import { agentsInTheCloudSystemPrompt, prepareAppendedAgentsInTheCloudInstructio
 import { launchComposerThinkingSettings, resolveNewWorkspaceAgentModel } from "@agents-in-the-cloud/agent/server/model-state";
 import type { WorkspaceAgentToolOptions } from "@agents-in-the-cloud/agent/server/tools";
 
-/** Workspace-scoped code, including the task definitions needed to recover bash; integrations add their own. */
 export function createDurableWorkspaceRegistry(workspaceId: string, options: WorkspaceAgentToolOptions = {}) {
   const registry = createRegistry();
   registry.install(defineExtension({ name: "agents-in-the-cloud.workspace-tools", tools: createDurableWorkspaceTools(workspaceId, options) }));
@@ -26,8 +25,6 @@ export function createDurableWorkspaceRegistry(workspaceId: string, options: Wor
   return registry;
 }
 
-/** No AgentSession, delegation coordinator, or host-local filesystem environment. */
-/** Our Harness always gets one `Models`, never a function returning the current one. */
 export type DurableHarnessOptions = HarnessOptions & { models: Models };
 
 export async function createDurableHarnessOptions(workspaceId: string, options: WorkspaceAgentToolOptions, writeTiming: WriteDurableTiming, harness: () => Harness): Promise<DurableHarnessOptions> {
@@ -35,7 +32,6 @@ export async function createDurableHarnessOptions(workspaceId: string, options: 
   const registry = createDurableWorkspaceRegistry(workspaceId, options);
   const delegation = agentDelegation?.create(models, harness);
   if (delegation) registry.install(delegation.extension);
-  // Such as code mode, whose task definitions must be installed to recover its scripts.
   for (const integration of builtinAgentIntegrations()) if (integration.extension) registry.install(integration.extension(workspaceId, models));
   registry.install(durableSubscriptionActivity(models));
   registry.install(durableTiming(writeTiming));
@@ -45,12 +41,10 @@ export async function createDurableHarnessOptions(workspaceId: string, options: 
     models: templates.models(delegation?.models ?? models),
     registry,
     settings: { compaction: { enabled: true, keepRecentTokens: 6000 } },
-    // Faulted, interrupted and unmigratable tasks, and failing extension code, are otherwise invisible.
     onReport: ({ error, ...info }) => console.error(`Agent work report (${info.kind})`, error, info),
   };
 }
 
-/** Only the builtin Agent runs code mode templates, so only its prompt points at their guide. */
 const codemodeTemplatesInstructions = "Code mode templates are Prompt templates that run a code mode script as your own call, without asking the model. When the user asks about them or wants one, read /opt/agents-in-the-cloud/docs/codemode-templates.md, which adds to the Prompt templates section of agents-in-the-cloud.md.";
 
 const resourceLoaders = {

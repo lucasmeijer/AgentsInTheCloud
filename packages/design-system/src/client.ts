@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { ScrollbarController } from "./scrollbar/scrollbar-controller.ts";
 
 import { TabStripController } from "./tab-strip/tab-strip-controller.ts";

@@ -1,16 +1,12 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 
 const showEvent = "button-confirmation:show";
 const confirmationDurationMs = 1_200;
 
-/** Call only after the action succeeds. Repeated successes refresh the hold time. */
 export function showButtonConfirmation(button: HTMLButtonElement): void {
   button.dispatchEvent(new Event(showEvent));
 }
 
-/** Restore the action when a new edit makes the previous acknowledgement obsolete. */
 export function resetButtonConfirmation(button: HTMLButtonElement): void {
   button.dataset.buttonConfirmationConfirmedValue = "false";
 }

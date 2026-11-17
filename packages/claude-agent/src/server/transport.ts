@@ -6,10 +6,8 @@ import { resolveWorkspace, startInWorkspace, workspaceRoot } from "@agents-in-th
 import { readPromptSuggestionsEnabled } from "@agents-in-the-cloud/agent/server/prompt-suggestions";
 import { claudeConfigDirectory, claudeExecutable, claudeMcpConfigPath } from "./setup.ts";
 
-/** Which native conversation the process continues. A fork resumes `resume` into the new `sessionId`. */
 type ClaudeSessionStart = { sessionId: string; resume?: string; forkSession?: boolean };
 
-/** Prompts stay open for the life of the process; Claude queues those sent while it works. */
 function inputQueue() {
   const pending: SDKUserMessage[] = [];
   let wake: (() => void) | undefined;
@@ -28,7 +26,6 @@ function inputQueue() {
   };
 }
 
-/** The SDK drives a child process; this one runs in the workspace. */
 class WorkspaceSpawnedProcess extends EventEmitter implements SpawnedProcess {
   readonly stdin: Writable;
   readonly stdout: Readable;
@@ -36,7 +33,6 @@ class WorkspaceSpawnedProcess extends EventEmitter implements SpawnedProcess {
   exitCode: number | null = null;
   signalCode: NodeJS.Signals | null = null;
 
-  /** A lost workspace connection ends the process like a kill, as `docker exec` did; `lost` explains why. */
   constructor(private readonly child: ReturnType<typeof startInWorkspace>, lost: (error: Error) => void) {
     super();
     this.stdin = new Writable({
@@ -45,7 +41,6 @@ class WorkspaceSpawnedProcess extends EventEmitter implements SpawnedProcess {
     });
     this.stdout = Readable.from((async function* () {
       try { yield* child.stdout; }
-      // `exited` reports the failure; stdout just ends.
       catch { return; }
     })());
     void child.exited.then((exit) => {
@@ -71,14 +66,12 @@ class WorkspaceSpawnedProcess extends EventEmitter implements SpawnedProcess {
   }
 }
 
-/** Stdio stays private: no listening port or raw provider credential in a workspace. */
 export async function openClaudeTransport(workspaceId: string, agentId: string, start: ClaudeSessionStart & { instructions: string; model?: string; effort?: EffortLevel }, message: (message: SDKMessage) => void, failed: (error: Error) => void) {
   await resolveWorkspace(workspaceId);
   const input = inputQueue();
   let stderr = "";
   let closing = false;
   const options: Options = {
-    // The process runs in the workspace; nothing from AgentsInTheCloud's own environment may reach it.
     env: { CLAUDE_AGENT_SDK_CLIENT_APP: "agents-in-the-cloud", CLAUDE_CONFIG_DIR: claudeConfigDirectory(agentId) },
     cwd: workspaceRoot,
     pathToClaudeCodeExecutable: claudeExecutable,
@@ -96,7 +89,6 @@ export async function openClaudeTransport(workspaceId: string, agentId: string, 
     systemPrompt: { type: "preset", preset: "claude_code", append: start.instructions },
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    // No client surface answers these yet; Claude asks in its reply instead.
     disallowedTools: ["AskUserQuestion", "EnterPlanMode", "ExitPlanMode"],
     includePartialMessages: true,
     promptSuggestions: await readPromptSuggestionsEnabled(),

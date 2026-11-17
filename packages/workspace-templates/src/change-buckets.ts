@@ -1,15 +1,12 @@
 import { invalidArguments } from "@agents-in-the-cloud/core";
 import { findConfigurationRecord, isGlobalScope, readWorkspaceTemplateStore, updateWorkspaceTemplateStore, workspaceScopes, workspaceTemplatesFile, type ConfigurationRecord, type ConfigurationScope } from "./workspace-template.ts";
 
-/** A named group of changed files, like Tests. Files matching no bucket are the main work. */
 export interface ChangeBucket { name: string; patterns: string[] }
 
-/** Used while the global settings have never saved their own buckets. */
 export const defaultChangeBuckets = `Tests: *{Test,Tests,Spec}.* *{.,_,-}{test,tests,spec}.* test_* {test,tests,Tests,__tests__,spec}/
 Evals: *{Eval,Evals}.* *{.,_,-}{eval,evals}.* {eval,evals,Evals}/
 `;
 
-/** One bucket per line: `Name: pattern pattern !pattern`. Blank lines and lines starting with # are ignored. */
 export function parseChangeBuckets(text: string): ChangeBucket[] {
   const buckets: ChangeBucket[] = [];
   for (const raw of text.split(/\r?\n/)) {
@@ -31,7 +28,6 @@ function storedChangeBuckets(scope: ConfigurationScope, configuration: Configura
   return configuration.changeBuckets ?? (isGlobalScope(scope) ? defaultChangeBuckets : "");
 }
 
-/** Saved text for the scope. A template's empty text removes its own buckets; global empty text means no buckets at all. */
 export async function setChangeBuckets(scope: ConfigurationScope, text: string, file = workspaceTemplatesFile()): Promise<string> {
   parseChangeBuckets(text);
   return await updateWorkspaceTemplateStore(file, (store) => {
@@ -46,7 +42,6 @@ export async function getChangeBuckets(scope: ConfigurationScope, file = workspa
   return storedChangeBuckets(scope, findConfigurationRecord(await readWorkspaceTemplateStore(file), scope));
 }
 
-/** Global buckets in order; a template's bucket replaces the global one with the same name, and its others follow. */
 export async function effectiveChangeBuckets(workspaceTemplateId?: string, file = workspaceTemplatesFile()): Promise<ChangeBucket[]> {
   const store = await readWorkspaceTemplateStore(file);
   const buckets: ChangeBucket[] = [];
@@ -55,6 +50,5 @@ export async function effectiveChangeBuckets(workspaceTemplateId?: string, file 
     if (existing < 0) buckets.push(bucket);
     else buckets[existing] = bucket;
   }
-  // A template disables a shared bucket by naming it without patterns.
   return buckets.filter(bucket => bucket.patterns.some(pattern => !pattern.startsWith("!")));
 }

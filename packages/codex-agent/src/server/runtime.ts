@@ -30,14 +30,10 @@ import { agentTypeId, label, codexHome, prepareCodex, settings } from "./setup.t
 import { createCodexStore, type CodexAgentRecord } from "./store.ts";
 import { liveRegions } from "./render.ts";
 
-/** What a Codex sub-agent's own thread said when last read. */
 interface CodexSubagentThread {
-  /** Its latest turn ended early, such as by a restart. */
   stopped: boolean;
-  /** When its running turn began. */
   startedAt?: number;
   latestTurnId?: string;
-  /** Each finished turn's answer, by turn. */
   answers: ReadonlyMap<string, string>;
 }
 
@@ -45,7 +41,6 @@ export class CodexRuntime {
   readonly state = new CodexState();
   instructions = "";
   private catalog: Model[] = [];
-  /** Slash commands and prompt templates; turns can add templates, so each finished turn reloads them. */
   completionCatalog = "";
   failure?: Error;
   private transport!: Awaited<ReturnType<typeof openCodexTransport>>;
@@ -414,16 +409,13 @@ export class CodexRuntime {
   }
   private receive(notification: CodexNotification) {
     if (this.disposed) return;
-    // Codex can publish native subagent activity too. Only this root owns this pane.
     if ("threadId" in notification.params && notification.params.threadId !== this.threadId) return;
     if ((notification.method === "item/started" || notification.method === "item/completed") && notification.params.item.type === "enteredReviewMode") this.turnPending = false;
     if (notification.method === "turn/started" || notification.method === "turn/completed") this.turnPending = false;
     this.state.receive(notification);
     this.changed();
-    // A sub-agent's activity in this thread may not tell that it stopped; its own thread does.
     if ((notification.method === "item/started" || notification.method === "item/completed") && notification.params.item.type === "subAgentActivity") {
       const { agentThreadId, kind } = notification.params.item;
-      // An activity can be reported as started and as completed; the first notes the turn it came after.
       if ((kind === "started" || kind === "interacted") && !this.subagentWorkSentAfter.has(agentThreadId)) this.subagentWorkSentAfter.set(agentThreadId, this.subagentThreads.get(agentThreadId)?.latestTurnId);
       this.readSubagentThreads([agentThreadId]);
     }
@@ -449,12 +441,9 @@ export class CodexRuntime {
    * successor yet, as new work can arrive before its turn begins.
    */
   readonly subagentThreads = new Map<string, CodexSubagentThread>();
-  /** The newest read of each sub-agent thread; an older one that answers later is dropped. */
   private readonly subagentReads = new Map<string, number>();
   private subagentReadCount = 0;
-  /** Each sub-agent's turns as last read, for the lazy details of its page. */
   private readonly subagentTurnsRead = new Map<string, readonly Turn[]>();
-  /** The latest turn each sub-agent had when it was sent work; until another begins, the work is still to start. */
   private readonly subagentWorkSentAfter = new Map<string, string | undefined>();
   private forgetSubagentThreads() {
     this.subagentThreads.clear();
@@ -462,11 +451,9 @@ export class CodexRuntime {
     this.subagentReads.clear();
     this.subagentTurnsRead.clear();
   }
-  /** A sub-agent's turns as its page last read them, or read now. */
   async lastSubagentTurns(threadId: string) {
     return this.subagentTurnsRead.get(threadId) ?? await this.subagentTurns(threadId);
   }
-  /** Reads a sub-agent's thread and notes what it says; whether that changed anything shown. */
   private async readSubagentThread(threadId: string) {
     this.assertOpen();
     const read = ++this.subagentReadCount;
@@ -485,7 +472,6 @@ export class CodexRuntime {
     const shown = (value?: CodexSubagentThread) => value && JSON.stringify([value.stopped, value.startedAt, [...value.answers]]);
     return { turns, changed: shown(previous) !== shown(noted) };
   }
-  /** Reads the threads of the given sub-agents, or of every one this thread's activity names, one at a time. */
   private readSubagentThreads(threadIds: Iterable<string> = new Set(this.state.turns.flatMap(turn => turn.items.flatMap(item => item.type === "subAgentActivity" ? [item.agentThreadId] : [])))) {
     void (async () => {
       let changed = false;
@@ -493,7 +479,6 @@ export class CodexRuntime {
       if (changed) this.changed();
     })().catch(error => console.error("Could not read a Codex sub-agent thread", error));
   }
-  /** A sub-agent's own thread, with its turns. */
   async subagentTurns(threadId: string) {
     const { turns, changed } = await this.readSubagentThread(threadId);
     if (changed) this.changed();
@@ -502,7 +487,6 @@ export class CodexRuntime {
   private async refreshTurnItems(turnId: string, completed: boolean) {
     const threadId = this.threadId;
     const response = await this.transport.rpc.request("thread/read", { threadId, includeTurns: true });
-    // A fresh-session command can replace the thread while this read is in flight.
     if (threadId !== this.threadId) return;
     const turn = response.thread.turns.find(turn => turn.id === turnId);
     if (!turn) throw new Error(`Codex history is missing turn ${turnId}`);

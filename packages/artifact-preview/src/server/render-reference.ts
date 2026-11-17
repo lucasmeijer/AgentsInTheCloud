@@ -2,8 +2,6 @@ import { extensionOf, imageMimeByExtension } from "@agents-in-the-cloud/shared/f
 import { buttonHtml } from "@agents-in-the-cloud/design-system/button";
 import { escapeHtml } from "@agents-in-the-cloud/shared";
 
-/** Render standalone artifacts and URL previews referenced in Markdown. */
-
 const imageExtensions = new Set(Object.keys(imageMimeByExtension));
 const videoExtensions = new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
 

@@ -52,7 +52,6 @@ async function proxiedWorkspace(hostnames: Record<string, { first: string; later
   }
   const hooks = createHttpHooks(hookOptions);
   const recorded: Recorded = { fetches: [], connects: [], lookups: [] };
-  // A local sink accepts tunnel connections so tests need no real upstream network.
   const sinkConnections = new Set<net.Socket>();
   const sink = net.createServer(socket => { sinkConnections.add(socket); socket.once("close", () => sinkConnections.delete(socket)); socket.pipe(socket); });
   sink.listen(0, "127.0.0.1");
@@ -150,7 +149,6 @@ test("CONNECT tunnels use the checked address, and forbidden destinations never 
     accepted.socket.destroy();
     expect(workspace.calls()).toBe(1);
     expect(workspace.recorded.connects).toEqual([{ port: 443, address: "93.184.215.14" }]);
-    // A destination that is already private on the first answer is refused outright.
     const refused = await proxyConnect(workspace.socketPath, "10.9.9.9:443");
     expect(refused.response).toContain("403");
     refused.socket.destroy();
@@ -219,7 +217,6 @@ test("private network access opens only the listed host and port", async () => {
     expect(otherPort.status).toBe(403);
     expect(otherPort.body).toContain("add db.internal:8081 under Private network access");
     expect((await proxyFetch(workspace.socketPath, "http://other.internal:8080/data")).status).toBe(403);
-    // Docker networks and cloud metadata stay closed, even when listed.
     expect((await proxyFetch(workspace.socketPath, "http://docker.internal/data")).status).toBe(403);
     expect((await proxyFetch(workspace.socketPath, "http://metadata.internal/data")).status).toBe(403);
     const { response, socket } = await proxyConnect(workspace.socketPath, "[fd00::5]:443");

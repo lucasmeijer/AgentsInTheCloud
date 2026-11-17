@@ -23,7 +23,6 @@ export function renderUsagePaneAction(): string {
 }
 const number = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 1 });
 
-/** Two compact units for allowance windows, reset countdowns, and pacing gaps. */
 function usageDuration(seconds: number): string {
   let remaining = Math.max(0, Math.floor(seconds));
   const parts: string[] = [];
@@ -36,7 +35,6 @@ function usageDuration(seconds: number): string {
   return parts.join(" ") || "0s";
 }
 
-/** Display the schedule distance, not a prediction of allowance exhaustion. */
 function usagePace(seconds: number | null): string {
   if (seconds === null) return "";
   if (Math.abs(seconds) < 1) return "On pace";
@@ -83,14 +81,12 @@ function shownUsageWindows(windows: PacedUsageWindow[]) {
   };
 }
 
-/** A limit of its own, like one model's weekly cap, can run out while the rest of the subscription still works. */
 function limitReachedHtml(reported: NonNullable<ProviderUsageOverview["reported"]>): string {
   if (reported.limitReached || reported.allowed === false) return '<p class="usage-error" role="status">Subscription limit reached.</p>';
   const reached = [...new Set(reported.windows.filter((window) => window.limitReached).map((window) => window.limitName))];
   return reached.length ? `<p class="usage-error" role="status">${escapeHtml(reached.join(" and "))} limit reached. Other models still work.</p>` : "";
 }
 
-/** A failed usage check says nothing about whether the provider's models work, so it reads as a note, not an alert. */
 function renderUsageLimits({ reported, error, windows }: ProviderUsageOverview): string {
   if (error) return `<div class="usage-unavailable" role="status"><p>Couldn’t check usage limits. This only affects the usage shown here; models may still work fine.</p><p class="usage-caption">${escapeHtml(error)}</p></div>`;
   if (!reported) return "<p>Disconnected.</p>";
@@ -118,7 +114,6 @@ function usageWindowCaption(window: PacedUsageWindow["reported"]): string {
   return window.meteredFeature === null ? usageDuration(window.durationSeconds).split(" ")[0]! : window.limitName.slice(0, 2);
 }
 
-/** Prepaid providers show their balance instead. One small ring per limit: its length for main allowances ("5h"), the first letters of a feature's name ("Op") otherwise. */
 function renderUsageRings({ provider, reported, error, windows }: ProviderUsageOverview, scope: string): string {
   const { used, unused } = shownUsageWindows(windows);
   const rings = reported && !error ? [...used, ...unused].map(({ reported: window, timing }) => comparisonRingHtml({
@@ -131,12 +126,10 @@ function renderUsageRings({ provider, reported, error, windows }: ProviderUsageO
   return `<turbo-frame class="usage-rings" id="${providerUsageFrameId("rings", provider.id, scope)}">${rings || balance || `<span class="usage-caption"${error ? ` title="${escapeHtml(error)}"` : ""}>Usage unavailable</span>`}</turbo-frame>`;
 }
 
-/** Refresh the card's rings from the same snapshot as its expanded limits. */
 function renderUsageProviderLimits(overview: ProviderUsageOverview, scope: string): string {
   return `<turbo-frame id="${providerUsageFrameId("limits", overview.provider.id, scope)}"><section class="usage-section" data-controller="usage-snapshot">${renderUsageLimits(overview)}${renderUsageAccount(overview)}</section>${turboStream("replace", providerUsageFrameId("rings", overview.provider.id, scope), renderUsageRings(overview, scope))}</turbo-frame>`;
 }
 
-/** Opens the Models dialog, with the provider whose limit the ring shows already open. */
 function usageButtonHtml(comparison?: { referencePercent: number; valuePercent: number }, label = "Usage", caption?: string, provider?: string): string {
   const iconHtml = caption === undefined ? Icons.Usage : `<span class="comparison-ring__caption">${escapeHtml(caption)}</span>`;
   const href = provider ? `/models?focus=${encodeURIComponent(provider)}` : "/models";
@@ -166,14 +159,12 @@ export async function handleUsageRequest(request: Request, url: URL): Promise<Re
       : response(`<turbo-frame id="usage_button_content">${button}</turbo-frame>`);
   }
   if (url.pathname === "/usage" && json) return jsonResponse({ providers: await Promise.all((await connectedUsageProviders()).map((provider) => getProviderUsageOverview(provider, { refresh }))) });
-  // The bare provider URL is JSON only; its limits and rings frames are what Models panel cards embed.
   const match = url.pathname.match(/^\/usage\/providers\/([^/]+)(?:\/(limits|rings))?$/);
   if (!match || (!match[2] && !json)) return undefined;
   const provider = supportedUsageProviders.find((provider) => provider.id === match[1]);
   if (!provider) return jsonResponse({ error: { code: "unsupported_usage_provider", message: "Subscription usage is not supported for this provider." } }, 404);
   const overview = await getProviderUsageOverview(provider, { refresh });
   if (!match[2]) return jsonResponse(overview);
-  // Each Models panel host names its scope so its frame ids match.
   const scope = url.searchParams.get("scope") ?? "";
   return response(match[2] === "limits" ? renderUsageProviderLimits(overview, scope) : renderUsageRings(overview, scope));
 }

@@ -60,7 +60,6 @@ export interface WorkspaceRegistryOptions {
 
 interface FileValueStore<T> {
   load(): Promise<T>;
-  /** Captures the values at invocation; later mutations cannot change the queued write. */
   save(values: T): Promise<void>;
 }
 
@@ -267,7 +266,6 @@ export function createWorkspaceRegistry(options: WorkspaceRegistryOptions = {}):
     setTitle(id, title) {
       const entry = requireEntry(id); if (entry.title === title) return;
       entry.title = title;
-      // A failed naming attempt stops mattering once the workspace has a name.
       const warnings = title ? entry.warnings?.filter((warning) => warning.kind !== "naming") : entry.warnings;
       const warningsChanged = warnings?.length !== entry.warnings?.length;
       entry.warnings = warnings?.length ? warnings : undefined;

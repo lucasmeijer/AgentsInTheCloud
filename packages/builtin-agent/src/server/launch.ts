@@ -20,7 +20,6 @@ function stringParameter(parameters: JsonObject, name: string): string {
   return value.trim();
 }
 
-/** An explicit API model may be any catalogue model, not just an enabled one, but is never quietly swapped for the default. */
 async function requireRunnableModel(value: string): Promise<void> {
   const requested = parseModelRef(value);
   if (!requested) throw invalidArguments("agent.model must look like provider::model");

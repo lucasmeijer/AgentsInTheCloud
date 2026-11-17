@@ -9,7 +9,6 @@ interface ProviderAvailability {
   connection: ProviderConnection;
 }
 
-/** Resolve each provider independently; rejected OAuth must not hide other providers. */
 export async function providerAvailability(runtime: Pick<ModelRuntime, "getAvailable" | "checkAuth">, providers: readonly string[]) {
   return new Map<string, ProviderAvailability>(await Promise.all([...new Set(providers)].map(async (provider) => {
     try {
@@ -23,7 +22,6 @@ export async function providerAvailability(runtime: Pick<ModelRuntime, "getAvail
   })));
 }
 
-/** Why an enabled model can't be picked, worded the same wherever models are listed; undefined when it can. */
 export function modelUnavailableReason(availability: ProviderAvailability, model: ModelRef, runtime: Pick<ModelRuntime, "getModel">): string | undefined {
   if (availability.modelIds.has(model.id)) return undefined;
   return availability.connection === "needs_attention" ? "Sign in again in Models"

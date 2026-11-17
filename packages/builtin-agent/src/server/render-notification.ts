@@ -12,7 +12,6 @@ export function renderAgentNotifications(ctx: AgentRenderContext): string {
   return `<span data-controller="agent-notifications">${renderNotificationFeedback(ctx.workspaceId, ctx.agentId)}${renderNotificationControl(ctx, false)}</span>`;
 }
 
-/** One dismissible surface for browser errors and server acknowledgements. */
 export function renderNotificationFeedback(workspaceId: string, agentId: string, message = "", error = false): string {
   return `<span id="${notificationFeedbackId(workspaceId, agentId)}" class="agent-noticeline agent-notification-feedback"${message ? "" : " hidden"} data-agent-notifications-target="feedback"><span role="${error ? "alert" : "status"}" data-agent-notifications-target="message">${escapeHtml(message)}</span>${buttonHtml({
     type: "button", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.Close, label: "Dismiss notification message" },
@@ -25,7 +24,6 @@ export function renderNotificationControl(ctx: AgentRenderContext, busy: boolean
   const turn = currentNotificationTurn(ctx);
   const armed = turn?.armed ?? false;
   const label = armed ? "Cancel notification for this turn" : "Notify when this turn finishes";
-  // Temporarily hide the bell until it has a better home in the UI.
   return `<span id="${notificationControlId(ctx)}" hidden>${buttonHtml({
     type: "button", variant: armed ? "primary" : "secondary", disabled: !turn,
     content: { kind: "icon-only", iconHtml: Icons.Bell, label },

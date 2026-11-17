@@ -22,7 +22,6 @@ export const delegationRequestIdentity = hook(GenerationTask, {
   },
 });
 
-/** A workspace-lifetime adapter with conversion state private to each stream call. */
 export function delegationModels(models: Models, harness: () => Harness): Models {
   const streamSimple: Models["streamSimple"] = (model, request, options) => {
     const bridge = new SubagentModelInput();
@@ -39,7 +38,6 @@ export function delegationModels(models: Models, harness: () => Harness): Models
       ...options,
       async onPayload(payload, selected) {
         const previous = await options?.onPayload?.(payload, selected);
-        // Provider objects may contain undefined option fields; validate their wire representation.
         const wire = JSON.parse(JSON.stringify(previous ?? payload));
         if (!isJsonObject(wire)) throw new Error("Expected a provider request object");
         const transformed = bridge.transform(wire, model.api);
@@ -47,7 +45,6 @@ export function delegationModels(models: Models, harness: () => Harness): Models
           const ledger = await tx.doc(Delegation);
           for (const marker of delivered) {
             const receipt = ledger.receipts[marker.id];
-            // Inherited context is not a new receipt, and never drains another branch's mailbox.
             if (!receipt || marker.requestConversationId !== marker.conversationId || receipt.conversationId !== marker.conversationId || receipt.prepared) continue;
             await updateReceipt(tx, receipt.id, { prepared: { timestamp: Date.now(), format: model.api === "openai-codex-responses" ? "agent_message" : "user envelope" } });
           }

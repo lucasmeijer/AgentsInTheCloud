@@ -1,7 +1,6 @@
 import { Client, credentials, Metadata, status, type ClientDuplexStream, type ClientWritableStream, type ServiceDefinition, type ServiceError } from "@grpc/grpc-js";
 import { fromJSON } from "@grpc/proto-loader";
 import { parse } from "protobufjs";
-// Imported as text so bundles, like the System supervisor, carry the schema with them.
 import protoSource from "../proto/workspace_helper.proto" with { type: "text" };
 
 
@@ -12,39 +11,29 @@ export interface TerminalSize { cols: number; rows: number }
 export interface WorkspaceExecStart {
   argv: string[];
   user: WorkspaceHelperUser;
-  /** Absolute; defaults to /work. */
   workdir?: string;
   env?: Record<string, string>;
-  /** Gives the process a stdin pipe. */
   stdin?: boolean;
-  /** Runs the process on a PTY; output then arrives only on stdout. */
   terminal?: TerminalSize;
 }
 
 export type WorkspaceExit = { exitCode: number; signal?: undefined } | { exitCode?: undefined; signal: number };
 
-/** An exit status the way shells report it, e.g. 137 for SIGKILL. */
 export function exitStatus(exit: WorkspaceExit): number {
   return exit.signal === undefined ? exit.exitCode : 128 + exit.signal;
 }
 
-/** A process running in a workspace through its helper. */
 export interface WorkspaceProcess {
-  /** Applies backpressure to the process. Cancelling either stream cancels the call. */
   readonly stdout: ReadableStream<Uint8Array>;
-  /** Buffers without limit, so ignoring it never stalls stdout. */
   readonly stderr: ReadableStream<Uint8Array>;
-  /** Resolves after all output; rejects when the call fails. */
   readonly exited: Promise<WorkspaceExit>;
   write(data: string | Uint8Array): void;
   closeStdin(): void;
   signal(signal: WorkspaceHelperSignal): void;
   resize(size: TerminalSize): void;
-  /** Ends the call, which kills the process group. */
   cancel(): void;
 }
 
-/** Starts a process in one particular workspace. */
 export type StartWorkspaceProcess = (start: WorkspaceExecStart) => WorkspaceProcess;
 
 export class WorkspaceHelperError extends Error {
@@ -54,35 +43,26 @@ export class WorkspaceHelperError extends Error {
   }
 }
 
-/** How a detached process ended. `unknown` means it exited while a restarted helper was no longer its parent. */
 export type DetachedWorkspaceExit = WorkspaceExit | { exitCode?: undefined; signal?: undefined; unknown: true };
 
-/** Output offsets: how many bytes of stdout and stderr a client has read. */
 export interface WorkspaceOutputOffsets { stdout: number; stderr: number }
 
-/** A process that outlives its call; see `startDetachedWorkspaceProcess`. */
 export interface DetachedWorkspaceProcess {
-  /** Applies backpressure to the call, not the process, which writes to disk. */
   readonly stdout: ReadableStream<Uint8Array>;
   readonly stderr: ReadableStream<Uint8Array>;
-  /** Resolves once the process has exited and all its output arrived; the process is gone after that. Rejects when the call ends first, e.g. on `detach`. */
   readonly exited: Promise<DetachedWorkspaceExit>;
   write(data: string | Uint8Array): void;
   signal(signal: WorkspaceHelperSignal): void;
-  /** The output before these offsets is no longer needed; the helper frees it, and attaching before them fails. */
   acknowledge(offsets: WorkspaceOutputOffsets): void;
-  /** Ends this call. The process keeps running. */
   detach(): void;
 }
 
 type HelperSignal = (typeof signals)[WorkspaceHelperSignal];
-/** ExecStart on the wire: how stdio connects is one explicit choice. */
 type HelperStart = Pick<WorkspaceExecStart, "argv" | "workdir" | "env"> & { user: string } & (
   | { pipes: { stdin: boolean } }
   | { terminal: TerminalSize }
   | { detached: { name: string; stdin: boolean } }
 );
-/** Options for a detached process; it can't have a terminal. */
 export type WorkspaceDetachedStart = Omit<WorkspaceExecStart, "terminal">;
 type Acknowledge = { stdoutOffset: number; stderrOffset: number };
 type ExecRequest =
@@ -124,7 +104,6 @@ function client(socketPath: string): Client {
   let existing = clients.get(socketPath);
   if (!existing) {
     existing = new Client(`unix://${socketPath}`, credentials.createInsecure(), {
-      // The helper is local; reconnect quickly once it is back, e.g. after a workspace restart.
       "grpc.initial_reconnect_backoff_ms": 100,
       "grpc.max_reconnect_backoff_ms": 1000,
     });
@@ -133,7 +112,6 @@ function client(socketPath: string): Client {
   return existing;
 }
 
-/** Drops the connection to a helper, e.g. once its workspace is gone. */
 export function closeWorkspaceHelper(socketPath: string): void {
   clients.get(socketPath)?.close();
   clients.delete(socketPath);
@@ -148,7 +126,6 @@ function callError(error: ServiceError, signal: AbortSignal | undefined): Error 
   return new WorkspaceHelperError(error.code, error.details || error.message);
 }
 
-/** The output and exit of one Exec or Attach call. */
 function receive<Request>(call: HelperCall<Request>, signal: AbortSignal | undefined) {
   let stdout!: ReadableStreamDefaultController<Uint8Array>;
   let stderr!: ReadableStreamDefaultController<Uint8Array>;
@@ -159,7 +136,6 @@ function receive<Request>(call: HelperCall<Request>, signal: AbortSignal | undef
   };
   const stdoutStream = new ReadableStream<Uint8Array>({
     start: (controller) => { stdout = controller; },
-    // Paused calls stop reading, so HTTP/2 flow control holds the helper back.
     pull: () => { call.resume(); },
     cancel: cancelOutput,
   }, new ByteLengthQueuingStrategy({ highWaterMark: 1024 * 1024 }));
@@ -208,13 +184,11 @@ function receive<Request>(call: HelperCall<Request>, signal: AbortSignal | undef
     call.on("error", (error: ServiceError) => finish(callError(error, signal)));
     call.on("end", () => finish());
   });
-  // Callers that only use the output streams still learn about failures there.
   exited.catch(() => {});
   return {
     stdout: stdoutStream,
     stderr: stderrStream,
     exited,
-    /** Sends a request unless the call is over. */
     send(request: Request) { if (!finished) call.write(request); },
   };
 }
@@ -263,7 +237,6 @@ export function startDetachedWorkspaceProcess(socketPath: string, name: string, 
   return detachedProcess(call, received);
 }
 
-/** Reconnects to a detached process, streaming its output from `offsets`. Fails with NOT_FOUND once the process is gone. */
 export function attachWorkspaceProcess(socketPath: string, name: string, offsets: WorkspaceOutputOffsets, options: { signal?: AbortSignal; waitForReady?: boolean } = {}): DetachedWorkspaceProcess {
   options.signal?.throwIfAborted();
   const call = openCall<AttachRequest>(socketPath, attachMethod, options.waitForReady);
@@ -290,7 +263,6 @@ const stdinChunkBytes = 64 * 1024;
 
 export interface WorkspaceRunResult { exitCode: number; stdout: Buffer; stderr: Buffer }
 
-/** Runs a process to completion, collecting its output. */
 export async function runWorkspaceProcess(socketPath: string, start: Omit<WorkspaceExecStart, "stdin" | "terminal">, options: { stdin?: string | Uint8Array; signal?: AbortSignal; waitForReady?: boolean } = {}): Promise<WorkspaceRunResult> {
   const process = startWorkspaceProcess(socketPath, { ...start, stdin: options.stdin !== undefined }, options);
   if (options.stdin !== undefined) {
@@ -302,18 +274,14 @@ export async function runWorkspaceProcess(socketPath: string, start: Omit<Worksp
   return { exitCode: exitStatus(exit), stdout: Buffer.from(stdout), stderr: Buffer.from(stderr) };
 }
 
-/** A file in a workspace, accessed with `user`'s permissions. Symlinks are followed. */
 export interface WorkspaceFile {
   user: WorkspaceHelperUser;
-  /** Absolute. */
   path: string;
 }
 
-/** Streams a regular file. Cancelling the stream ends the call; a failure, e.g. NOT_FOUND, errors it. */
 export function readWorkspaceFileStream(socketPath: string, file: WorkspaceFile, options: { signal?: AbortSignal } = {}): ReadableStream<Uint8Array> {
   options.signal?.throwIfAborted();
   const call = client(socketPath).makeServerStreamRequest(readFileMethod.path, readFileMethod.requestSerialize, readFileMethod.responseDeserialize, { user: users[file.user], path: file.path });
-  // Set once the stream is cancelled or settled; grpc-js emits `end` even after `error`.
   let finished = false;
   const abort = () => call.cancel();
   options.signal?.addEventListener("abort", abort, { once: true });
@@ -342,13 +310,11 @@ export function readWorkspaceFileStream(socketPath: string, file: WorkspaceFile,
   }, new ByteLengthQueuingStrategy({ highWaterMark: 1024 * 1024 }));
 }
 
-/** Reads a whole regular file, failing with RESOURCE_EXHAUSTED once it exceeds `maxBytes`. */
 export async function readWorkspaceFile(socketPath: string, file: WorkspaceFile, options: { maxBytes: number; signal?: AbortSignal }): Promise<Buffer> {
   const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of readWorkspaceFileStream(socketPath, file, options)) {
     size += chunk.byteLength;
-    // Leaving the loop cancels the stream, and with it the call.
     if (size > options.maxBytes) throw new WorkspaceHelperError(status.RESOURCE_EXHAUSTED, `${file.path} is larger than ${options.maxBytes} bytes`);
     chunks.push(chunk);
   }
@@ -357,7 +323,6 @@ export async function readWorkspaceFile(socketPath: string, file: WorkspaceFile,
 
 const fileChunkBytes = 64 * 1024;
 
-/** Replaces or creates a file atomically, along with any missing folders. */
 export async function writeWorkspaceFile(socketPath: string, file: WorkspaceFile, content: string | Uint8Array, options: { signal?: AbortSignal } = {}): Promise<void> {
   options.signal?.throwIfAborted();
   let call!: ClientWritableStream<WriteFileRequest>;
@@ -370,7 +335,6 @@ export async function writeWorkspaceFile(socketPath: string, file: WorkspaceFile
   });
   const abort = () => call.cancel();
   options.signal?.addEventListener("abort", abort, { once: true });
-  // A failed call never drains; `finished` rejects instead.
   const drained = () => Promise.race([new Promise((resolve) => call.once("drain", resolve)), finished]);
   call.write({ start: { user: users[file.user], path: file.path } });
   const bytes = encode(content);
@@ -381,21 +345,15 @@ export async function writeWorkspaceFile(socketPath: string, file: WorkspaceFile
   await finished;
 }
 
-/** What is at a path, as a user sees it, following symlinks. */
 export type WorkspaceFileStat = { path: string } & (
-  /** Nothing there, a dangling symlink, or a symlink loop. */
   | { kind: "missing" }
-  /** The user may not look into a folder on the way. */
   | { kind: "inaccessible" }
   | {
     kind: "regular" | "directory" | "other";
-    /** The path itself is a symlink; the rest describes its target. */
     symlink: boolean;
     size: number;
     modified: Date;
-    /** Opening it for reading succeeds. Always false for `other`, which is never opened. */
     readable: boolean;
-    /** The absolute path without symlinks, `.` or `..`; absent for a file removed since it was described. */
     canonicalPath?: string;
   }
 );
@@ -412,13 +370,11 @@ type FileStat = { kind: keyof typeof fileKinds; symlink?: boolean; size?: number
 function workspaceFileStat(path: string, stat: FileStat): WorkspaceFileStat {
   const kind = fileKinds[stat.kind];
   if (kind === "missing" || kind === "inaccessible") return { path, kind };
-  // Proto3 leaves zero values off the wire.
   const described: WorkspaceFileStat = { path, kind, symlink: stat.symlink ?? false, size: stat.size ?? 0, modified: new Date(stat.modifiedUnixMs ?? 0), readable: stat.readable ?? false };
   if (stat.canonicalPath) described.canonicalPath = stat.canonicalPath;
   return described;
 }
 
-/** Describes each of `paths`, all absolute, as `user` sees them, without reading them; in request order. */
 export async function statWorkspaceFiles(socketPath: string, user: WorkspaceHelperUser, paths: string[], options: { signal?: AbortSignal } = {}): Promise<WorkspaceFileStat[]> {
   options.signal?.throwIfAborted();
   const stats = await new Promise<FileStat[]>((resolve, reject) => {
@@ -433,21 +389,15 @@ export async function statWorkspaceFiles(socketPath: string, user: WorkspaceHelp
   return paths.map((path, index) => workspaceFileStat(path, stats[index]!));
 }
 
-/** A regular file opened in a workspace; see `openWorkspaceFile`. */
 export interface WorkspaceOpenFile {
-  /** What the open file is now, even when its path names another file meanwhile. */
   stat(): Promise<{ size: number; modified: Date }>;
-  /** Up to `length` bytes at `offset`; fewer only at the end of the file. */
   read(offset: number, length: number): Promise<Uint8Array>;
-  /** Closes the file. */
   close(): void;
 }
 
 type OpenFileRequest = { open: { user: string; path: string } } | { read: { offset: number; length: number } } | { stat: Record<string, never> };
-// Proto3 leaves empty bytes off the wire.
 type OpenFileResponse = { response: "stat"; stat: FileStat } | { response: "data"; data?: Buffer };
 
-/** The most the helper reads at once; longer reads take several. */
 const maxFileRangeBytes = 1024 * 1024;
 
 /**
@@ -457,7 +407,6 @@ const maxFileRangeBytes = 1024 * 1024;
 export async function openWorkspaceFile(socketPath: string, file: WorkspaceFile, options: { signal?: AbortSignal } = {}): Promise<WorkspaceOpenFile> {
   options.signal?.throwIfAborted();
   const call: ClientDuplexStream<OpenFileRequest, OpenFileResponse> = client(socketPath).makeBidiStreamRequest(openFileMethod.path, openFileMethod.requestSerialize, openFileMethod.responseDeserialize, new Metadata(), {});
-  // Each request gets one response, in order.
   const pending: { resolve: (response: OpenFileResponse) => void; reject: (error: Error) => void }[] = [];
   let failure: Error | undefined;
   const abort = () => call.cancel();
@@ -497,7 +446,6 @@ export async function openWorkspaceFile(socketPath: string, file: WorkspaceFile,
         const data = new Uint8Array(response.data ?? []);
         chunks.push(data);
         read += data.byteLength;
-        // The end of the file.
         if (data.byteLength < wanted) break;
       }
       return chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks);

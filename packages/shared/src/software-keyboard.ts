@@ -1,12 +1,9 @@
-/// <reference lib="dom" />
-
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import { changeLayout } from "./layout-transaction.ts";
 
 const softwareKeyboardInputMediaQuery = "(hover: none) and (pointer: coarse)";
 
-/** Dispatched on document, inside the layout transaction, whenever the keyboard arrangement changes. */
 export const softwareKeyboardEvent = "agents-in-the-cloud:software-keyboard";
 export const softwareKeyboardStorageKey = "agents-in-the-cloud:software-keyboard";
 
@@ -36,14 +33,12 @@ export function isTextEntry(element: Element | null): boolean {
   return element instanceof HTMLElement && element.isContentEditable;
 }
 
-/** True while the page is arranged for a soft keyboard, including a predicted one. */
 export function softwareKeyboardArranged(): boolean {
   return document.documentElement.classList.contains("software-keyboard-visible");
 }
 
 type Orientation = "portrait" | "landscape";
 
-/** What the last focus on this device did, so the next focus can arrange the page before the keyboard shows. */
 const keyboardMemorySchema = Type.Object({
   produced: Type.Boolean(),
   heights: Type.Object({ portrait: Type.Optional(Type.Number({ exclusiveMinimum: 0 })), landscape: Type.Optional(Type.Number({ exclusiveMinimum: 0 })) }),
@@ -75,7 +70,6 @@ export function installSoftwareKeyboardTracking(): void {
   let top = 0;
   let detected = false;
   let hardwareCheck: ReturnType<typeof setTimeout> | undefined;
-  /** The current single-finger touch, and a text field it focused before the tap completed. */
   let touch: { x: number; y: number; time: number } | undefined;
   let touchFocus: EventTarget | null | undefined;
 
@@ -155,7 +149,6 @@ export function installSoftwareKeyboardTracking(): void {
     hardwareCheck = setTimeout(() => {
       hardwareCheck = undefined;
       if (detected || !arranged) return;
-      // A hardware keyboard took over: stop predicting until a soft keyboard shows again.
       remember({ ...memory, produced: false });
       arrange(false, 0, 0, false);
     }, 1000);

@@ -12,7 +12,6 @@ const commitIdentitySchema = Type.Object({
 
 export type CommitIdentitySettings = Static<typeof commitIdentitySchema>;
 
-// Keep the existing serialized field and filename; the app calls this Commit identity.
 const storedCommitIdentitySchema = Type.Object({
   gitIdentity: Type.Optional(commitIdentitySchema),
 });

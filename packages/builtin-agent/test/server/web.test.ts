@@ -59,7 +59,6 @@ test("a Subagent finishing while its parent works does not request workspace att
   agentWorkspaceModule.initialize!(context);
   builtinAgentWorkspaceModule.initialize!(context);
 
-  // The delegated conversation is not a top-level workspace Agent tab.
   publishWorkspaceAgentBusy({ workspaceId: "workspace-1", agentKey: `agent:${root.agentId}`, busy: true });
   await events.emit("workspace_agent_turn_finished", { workspaceId: "workspace-1", agentId: childId });
   expect(surfaceRequests).toEqual([`agent:${childId}`]);
@@ -289,7 +288,6 @@ describe("Workspace Agent-tab provider", () => {
     expect(response?.headers.get("x-agents-in-the-cloud-attachment-draft-consumed")).toBe("true");
     expect(response?.headers.get("x-agents-in-the-cloud-submission-id")).toBe("7");
     expect(html).toBe("");
-    // Without a mode, a prompt steers a busy agent, as it did for API callers before follow-ups.
     expect(submissions).toEqual([{ text: "", imageCount: 1, requestId: "image-request", whenBusy: "steer" }]);
     expect(await readInitialPromptDraft("workspace-1", conversation.agentId)).toBeUndefined();
     expect(await findStagedAttachment(draftId, attachment.id)).toBeUndefined();

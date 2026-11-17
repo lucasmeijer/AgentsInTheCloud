@@ -8,7 +8,6 @@ const slot = (index: number) => `#${index.toString(16).padStart(2, "0")}000000`;
 const terminalDefault = "#00000001";
 
 const scopes: [scope: string, index: number][] = [
-  // Codex reads inline code and table headers from these scopes.
   ["markup.inline.raw.string.markdown, markup.raw.inline.markdown", transcriptSlot.accent],
   ["entity.name.type, support.type, entity.name.class", syntaxSlot.type],
   ["comment, punctuation.definition.comment", syntaxSlot.comment],
@@ -19,7 +18,6 @@ const scopes: [scope: string, index: number][] = [
   ["variable.parameter", syntaxSlot.variable],
 ];
 
-/** Codex's syntax theme: inline code, table headers and code blocks. */
 export function codexAgentsInTheCloudTmTheme(): string {
   const entry = (scope: string, foreground: string) =>
     `<dict><key>scope</key><string>${scope}</string><key>settings</key><dict><key>foreground</key><string>${foreground}</string></dict></dict>`;

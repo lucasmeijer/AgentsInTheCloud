@@ -1,7 +1,6 @@
 import type { AgentRenderContext } from "./render-context.ts";
 import type { ToolView } from "./transcript.ts";
 
-/** How a feature shows its own tool's calls; `undefined` falls back to the generic row. */
 export interface AgentToolPresentation {
   summary(tool: ToolView): string | undefined;
   detail(ctx: AgentRenderContext, tool: ToolView): string | undefined;
@@ -9,7 +8,6 @@ export interface AgentToolPresentation {
 
 const registered: Array<ReadonlyMap<string, AgentToolPresentation>> = [];
 
-/** Each feature registers its tools' presentations once; resolves to unregistering them. */
 export function registerAgentToolPresentations(presentations: ReadonlyMap<string, AgentToolPresentation>): () => void {
   for (const name of presentations.keys()) if (agentToolPresentation(name)) throw new Error(`Tool presentation already registered: ${name}`);
   registered.push(presentations);

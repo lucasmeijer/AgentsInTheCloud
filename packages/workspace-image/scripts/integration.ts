@@ -58,7 +58,6 @@ async function start(image: string, name: string, writableCache: boolean) {
 }
 async function ctr(container: string, ...args: string[]) { return exec(container, "ctr", "--namespace", "moby", ...args); }
 
-// Containerd records cache-backed layers as snapshot labels rather than symlinks.
 async function cachedLayerBlobs(container: string) {
   const keys = (await ctr(container, "snapshots", "--snapshotter", "erofs", "ls")).trim().split("\n").slice(1).map((line) => line.split(/\s+/)[0]!);
   const blobs: string[] = [];
@@ -110,7 +109,6 @@ try {
   const index = await tarJson("index.json");
   const manifest = await tarJson(`blobs/${index.manifests[0].digest.replace(":", "/")}`);
 
-  // Offline consumer proves neither import nor build downloads a base layer.
   await command(["docker", "network", "disconnect", network, workspace]);
   await exec(workspace, "systemctl", "start", "containerd.service");
   const ref = (await command(["docker", "exec", "-i", workspace, "agents-in-the-cloud-image-transfer", "import"], true, archive)).stdout.toString().trim();

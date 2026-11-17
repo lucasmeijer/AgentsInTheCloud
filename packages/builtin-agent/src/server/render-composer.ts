@@ -35,7 +35,6 @@ interface AgentPaneState {
   regions(): readonly LiveRegion[];
 }
 
-/** The pane's shell; its controller's channel owns the content placed into the mounts. */
 export async function renderAgentPane(ctx: AgentRenderContext, agent: Pick<WorkspaceAgentInfo, "agentId">, state: AgentPaneState, presentation: { moduleChannel?: string; notifications?: boolean; background?: boolean; initialPromptDraft?: boolean } = {}): Promise<WorkspaceAgentPane> {
   const key = agentKey(agent.agentId);
   const draftId = agentAttachmentDraftId(ctx.workspaceId, ctx.agentId);
@@ -125,7 +124,6 @@ export async function renderLaunchComposerSettings(options: { frameId: string; f
   });
 }
 
-/** `busyMode` is what sending does while the agent works: queue a follow-up, or steer the running turn. */
 export function renderPromptActions(ctx: AgentRenderContext | undefined, busy: boolean, hasStoppableWork = busy, busyMode: "steer" | "followUp" = "steer"): string {
   const initialLabel = busy ? (busyMode === "followUp" ? "Queue follow-up" : "Steer agent") : "Send prompt";
   const activeLabel = busy ? "Agent is working — click to stop" : "Subagents are working — click to stop";

@@ -6,7 +6,6 @@ import { Value } from "typebox/value";
 const configSchema = Type.Object({ url: Type.String(), token: Type.String(), turnSignalCommand: Type.String(), instructions: Type.String() });
 type AgentsInTheCloudSessionConfig = Static<typeof configSchema>;
 
-/** Pi owns MCP discovery and execution; we only wire up the session. */
 export function registerPiAgentsInTheCloud(pi: ExtensionAPI, config: AgentsInTheCloudSessionConfig): void {
   pi.registerMcpServer("agents-in-the-cloud", {
     url: config.url,
@@ -15,7 +14,6 @@ export function registerPiAgentsInTheCloud(pi: ExtensionAPI, config: AgentsInThe
     timeout: 3_600,
   });
 
-  // Append to Pi's assembled prompt so user prompt files and built-in guidance remain intact.
   pi.on("before_agent_start", (event) => ({ systemPrompt: `${event.systemPrompt}\n\n${config.instructions}` }));
 
   async function signalTurn(boundary: "started" | "finished"): Promise<void> {

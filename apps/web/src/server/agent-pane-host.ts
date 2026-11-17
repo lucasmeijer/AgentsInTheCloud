@@ -10,7 +10,6 @@ export interface HostedAgentTab extends WorkspaceAgentTabSummary {
   iconHtml: string;
 }
 
-/** The host routes globally unique Agent identities without interpreting Agent type storage. */
 export function createAgentPaneHost(agentTypes: readonly WorkspaceAgentType[]) {
   const byId = new Map(agentTypes.map((agentType) => [agentType.id, agentType]));
   if (byId.size !== agentTypes.length) throw new Error("Duplicate agent type identity");

@@ -17,7 +17,6 @@ function context(workspaceId: string, agentId: string, providerId: string): CliT
   return { workspaceId, agentId, transcriptBasePath: `/workspaces/${encodeURIComponent(workspaceId)}/${providerId}-agents/${encodeURIComponent(agentId)}/transcript` };
 }
 
-/** Available: the transcript can stand in for the terminal. Never mid-turn, and only once there is something to read. */
 function renderTranscriptContent(ctx: CliTranscriptContext, available: boolean, html = ""): string {
   return `<div id="${ids.transcript(ctx)}" class="agent-transcript-content" data-cli-terminal-target="transcriptContent" data-available="${available}">${html}</div>`;
 }
@@ -32,14 +31,11 @@ export function cliTranscriptAttributes(adapter: CliAgentAdapter, agentId: strin
   return `data-cli-terminal-agent-id-value="${escapeHtml(agentId)}" data-cli-terminal-transcript-channel-value="${escapeHtml(cliTranscriptChannelName(adapter))}"`;
 }
 
-/** The composer's slash command catalog; turns can add prompt templates, so each finished turn refreshes it. */
 export function cliCompletionCatalogId(workspaceId: string, agentId: string): string { return domId("cli_catalog", workspaceId, agentId); }
 
 function cliTranscriptChannelName(adapter: CliAgentAdapter): string { return `${adapter.id}-transcript`; }
 
-/** Publishes whether the transcript is available whenever the CLI starts or finishes a turn, with the transcript itself for panes showing it, and the refreshed completion catalog between turns. */
 export function cliTranscriptChannel(adapter: CliAgentAdapter, agents: Pick<CliAgents, "ready">): CableChannelAdapter {
-  // Agent keys identify Agents, which are unique across workspaces.
   const busy = new Set<string>();
   const watchers = new Set<{ agentKey: string; changed(): void }>();
   subscribeWorkspaceAgentBusy(({ agentKey, busy: started }) => {
@@ -47,7 +43,6 @@ export function cliTranscriptChannel(adapter: CliAgentAdapter, agents: Pick<CliA
     for (const watcher of watchers) if (watcher.agentKey === agentKey) watcher.changed();
   });
   async function render(workspaceId: string, agentId: string, includeTranscript: boolean): Promise<string> {
-    // The transcript is only shown between turns, so every turn in it has finished.
     const idle = !busy.has(agentKey(agentId));
     const [records, catalog] = idle ? await Promise.all([adapter.loadTranscript!(workspaceId, agentId), renderWorkspaceCompletionCatalog(workspaceId, "cli")]) : [];
     const available = records?.some((record) => record.kind === "user") ?? false;
@@ -63,7 +58,6 @@ export function cliTranscriptChannel(adapter: CliAgentAdapter, agents: Pick<CliA
       const workspaceId = identifier.workspaceId;
       await agents.ready(workspaceId, agentId);
       const publish = async () => listener(await render(workspaceId, agentId, transcript !== undefined));
-      // Turn boundaries can arrive while the transcript loads; publish each in order.
       let latest = publish();
       const watcher = {
         agentKey: agentKey(agentId),
@@ -80,7 +74,6 @@ export function cliTranscriptChannel(adapter: CliAgentAdapter, agents: Pick<CliA
   };
 }
 
-/** The view switch (terminal ↔ transcript) and the transcript's follow latest, for the floating stack. */
 interface CliTranscriptControls { viewSwitch?: string; followLatest?: string }
 
 export function renderCliTranscriptControls(adapter: CliAgentAdapter): CliTranscriptControls {

@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 
 const feedbackDurationMs = 2_000;

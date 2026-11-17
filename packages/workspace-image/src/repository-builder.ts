@@ -66,7 +66,6 @@ export async function buildRepositoryImage(baseImage: string, tag: string, build
   await requireDocker(["exec", name, "sh", "-ec",
     'for attempt in $(seq 1 120); do if docker --host unix:///control/docker.sock info >/dev/null 2>&1; then chmod 0666 /control/docker.sock; exit 0; fi; sleep 0.5; done; echo "Repository builder failed to start" >&2; exit 1',
   ]);
-  // The socket is accessible only through a management-owned mode-0700 directory.
   const builder = ["--host", `unix://${join(directory, "docker.sock")}`];
   const docker = (args: string[]) => requireDocker([...builder, ...args]);
   const baseId = await dockerImageId(baseImage);
@@ -80,7 +79,6 @@ export async function buildRepositoryImage(baseImage: string, tag: string, build
   // Publishing back preserves the ordinary workspace creation/run path. Stream
   // archives rather than buffering multi-GB images in the management process.
   await pipe(["docker", ...builder, "save", tag], ["docker", "load"]);
-  // Drop old exported image references, not BuildKit cache records/cache mounts.
   await docker(workspaceImagePruneArgs("repository", buildStartedAt));
 }
 

@@ -410,7 +410,6 @@ function renderEmbeddedRegion(region: EmbeddedRegion, depth: number): RenderedEm
     return { html: nested?.html ?? highlightedBashShell(displayed), language: "bash", differs: region.kind === "shell-literal" || formatDiffers || (nested?.differs ?? false) };
   }
   const highlighted = highlightCodeHtmlForPath(displayed, region.path);
-  // Languages without a lexer, like regex, still get their language class for styling.
   return { html: highlighted.html, language: highlighted.language ?? languageFromPath(region.path), differs: region.kind === "shell-literal" || formatDiffers };
 }
 
@@ -460,12 +459,10 @@ function formatAsyncBodyForDisplay(body: string): string | undefined {
   }
   const formatted = formatJavaScript(wrapped, "script.js", { indentStyle: "space", indentWidth: 2 }).trimEnd();
   const lines = formatted.split("\n");
-  // Taking the body out of the function un-indents it, except for string and template text.
   const inLiteral = javascriptLinesStartingInLiterals(formatted);
   return lines.slice(1, -1).map((line, index) => inLiteral[index + 1] ? line : line.replace(/^ {2}/, "")).join("\n");
 }
 
-/** A code mode script, readably formatted. Undefined when the script does not parse, or when formatting changes nothing. */
 export function formatCodemodeScriptForDisplay(code: string): string | undefined {
   const optionsLine = code.match(codemodeOptionsLine)?.[0] ?? "";
   const inner = formatAsyncBodyForDisplay(code.slice(optionsLine.length));
@@ -474,7 +471,6 @@ export function formatCodemodeScriptForDisplay(code: string): string | undefined
   return result === code.trimEnd() ? undefined : result;
 }
 
-/** A workflow script, readably formatted: a body like code mode's that exports its `meta`. Undefined when it does not parse, or when formatting changes nothing. */
 export function formatWorkflowScriptForDisplay(code: string): string | undefined {
   const inner = formatAsyncBodyForDisplay(code.replace(/^export (?=const meta\b)/m, ""));
   if (inner === undefined) return undefined;

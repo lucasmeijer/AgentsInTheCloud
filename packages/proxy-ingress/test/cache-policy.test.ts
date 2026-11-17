@@ -26,7 +26,6 @@ for (const kind of ["fetch", "http"] as const) {
           : {
             kind,
             target: new URL(`${url.pathname}${url.search}`, `http://127.0.0.1:${upstream.port}`),
-            // The preview policy must win even after a backend adapter.
             adaptResponse(response) {
               response.headers.set("cache-control", "max-age=86400");
               return response;
@@ -62,7 +61,6 @@ for (const kind of ["fetch", "http"] as const) {
         expect(observed.headers.get("cache-control")).toBe("no-cache");
         expect(observed.headers.get("cookie")).toBe("session=kept");
       }
-      // Writes still use optimistic concurrency; ranges still use If-Range.
       for (const method of ["PUT", "GET"]) {
         const response = await fetch(`${origin}/data`, {
           method,

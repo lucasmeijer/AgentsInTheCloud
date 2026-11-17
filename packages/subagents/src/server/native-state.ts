@@ -25,7 +25,6 @@ export const Delegation = defineDoc<{
 }>({ kind: "agents-in-the-cloud.delegation", version: 1, scope: "session", initial: () => ({ receipts: {}, assignments: {}, operations: {} }), checkpointWhen: () => false, });
 export const Mailbox = defineDoc<{ receipts: Receipt[] }>({ kind: "agents-in-the-cloud.mailbox", version: 1, scope: "conversation", history: "latest", fork: "initial", initial: () => ({ receipts: [] }), checkpointWhen: () => false, });
 
-/** Keep routing state, the recipient mailbox and transcript evidence in one commit. */
 export async function updateReceipt(tx: Tx, id: string, change: Partial<Receipt>) {
   const receipt = (await tx.doc(Delegation)).receipts[id]!;
   Object.assign(receipt, change);
@@ -57,7 +56,6 @@ export function attributedEntry(entry: EntryRecord) {
   return marked ? marked.agentsInTheCloudAgentMessage.kind === "task" ? "task" as const : "message" as const : undefined;
 }
 
-/** Select turn boundaries before filtering. Inherited traffic never becomes a new receipt. */
 export function selectNativeForkHistory(messages: readonly Message[], mode = "all"): Message[] {
   if (mode === "none") return [];
   let selected = messages;

@@ -49,7 +49,6 @@ export function createInlineContentController(Controller: WorkspaceClientControl
           this.frameTarget.style.height = `${Math.max(1, Math.min(30000, data.height))}px`;
           if (data.overflow) { this.statusTarget.textContent = "This visual is wider than the conversation. Ask the agent to make it responsive."; this.statusTarget.hidden = false; }
         }
-        // Replay input from inside the visual as if it happened over the frame.
         if (data.type === "scroll") this.frameTarget.dispatchEvent(new CustomEvent<FrameScrollDetail>(frameScrollEvent, { detail: { deltaY: data.deltaY }, bubbles: true }));
         if (data.type === "keydown") { const { type, ...init } = data; this.frameTarget.dispatchEvent(new KeyboardEvent(type, { ...init, bubbles: true, cancelable: true })); }
         if (data.type === "selection" || data.type === "selection-cleared") {
@@ -58,7 +57,6 @@ export function createInlineContentController(Controller: WorkspaceClientControl
         }
         if (data.type === "error") this.fail(`An interaction failed: ${data.message}`, false);
         if (data.type === "link") {
-          // A sandbox cannot navigate AgentsInTheCloud. External navigation always requires host confirmation.
           if (confirm(`Open this external link?\n${data.href}`)) window.open(data.href, "_blank", "noopener,noreferrer");
         }
       };

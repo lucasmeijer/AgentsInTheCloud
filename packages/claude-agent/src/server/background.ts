@@ -8,7 +8,6 @@ import { projectClaudeTranscript } from "./transcript.ts";
 import type { ClaudeRuntime, ClaudeTask } from "./runtime.ts";
 import { workflowAgentRows, type ClaudeWorkflowAgent, type ClaudeWorkflowProgress } from "./workflow.ts";
 
-/** Claude Code's task types, named as people know them. Commands and monitors show their output in place; subagents and workflows have a page of their own. */
 const kinds = new Map<string, Pick<BackgroundActivity, "kind" | "opens">>([
   ["local_bash", { kind: "command", opens: "inline" }],
   ["monitor", { kind: "monitor", opens: "inline" }],
@@ -29,17 +28,14 @@ function activity(task: ClaudeTask): BackgroundActivity {
   return {
     key: task.id, kind, opens, details, running: true, stoppable: true,
     title: task.workflowName ?? task.description, startedAt: task.startedAt, parentKey: task.parentTaskId, startedBy: task.toolUseId ? { itemKey: task.toolUseId, label: "Tool call" } : undefined,
-    // A workflow's page shows its phases and agents instead.
     progress: task.type === "local_workflow" ? undefined : task.summary ?? (task.lastToolName ? `Using ${task.lastToolName}` : undefined),
   };
 }
 
-/** What a workflow's agents are called, which also tells them apart from Claude Code's own tasks. */
 const workflowAgentKind = "workflow agent";
 
 const workflowAgentRunning = (agent: ClaudeWorkflowAgent) => agent.state === "start" || agent.state === "progress";
 
-/** A workflow's agent, once it has started and has a transcript to show. */
 function workflowAgentActivity(workflow: ClaudeTask, agent: ClaudeWorkflowAgent & { agentId: string }): BackgroundActivity {
   const details: Record<string, string> = {};
   if (agent.phaseTitle) details.Phase = agent.phaseTitle;
@@ -54,12 +50,10 @@ function workflowAgentActivity(workflow: ClaudeTask, agent: ClaudeWorkflowAgent 
   };
 }
 
-/** A workflow's agents that have started, and so have a page. */
 const startedWorkflowAgents = (task: ClaudeTask, phase?: string) => (task.workflow?.agents ?? [])
   .filter((agent): agent is ClaudeWorkflowAgent & { agentId: string } => agent.agentId !== undefined && (phase === undefined || agent.phaseTitle === phase))
   .map(agent => workflowAgentActivity(task, agent));
 
-/** Claude's live background work. Monitors show although Claude won't report on them; other ambient tasks are Claude Code's own housekeeping. */
 export function claudeBackgroundActivities(runtime: ClaudeRuntime): BackgroundActivity[] {
   return runtime.tasks.filter(task => !task.ambient || task.type === "monitor").flatMap(task => [activity(task), ...startedWorkflowAgents(task)]);
 }
@@ -70,10 +64,8 @@ async function subagentTranscript(runtime: ClaudeRuntime, activity: BackgroundAc
   return projectClaudeTranscript({ rows: workflowAgent ? workflowAgentRows(rows) : rows }, true);
 }
 
-/** A workflow's script: its own, or for one of its agents, the workflow's. */
 const workflowScript = (runtime: ClaudeRuntime, activity: BackgroundActivity) => runtime.tasks.find(task => task.id === (activity.kind === workflowAgentKind ? activity.parentKey : activity.key))?.script;
 
-/** Each phase of a workflow, with how its agents are doing, followed by those that have started. */
 function workflowPhasesHtml(ctx: AgentRenderContext, task: ClaudeTask, workflow: ClaudeWorkflowProgress): string {
   return workflow.phases.map(title => {
     const agents = workflow.agents.filter(agent => agent.phaseTitle === title);
@@ -91,7 +83,6 @@ function workflowPhasesHtml(ctx: AgentRenderContext, task: ClaudeTask, workflow:
 export async function claudeBackgroundDetail(runtime: ClaudeRuntime, activity: BackgroundActivity, ctx: AgentRenderContext): Promise<string> {
   const task = runtime.tasks.find(task => task.id === activity.key);
   if (activity.kind === workflowAgentKind || task?.type === "local_agent") {
-    // A workflow's agents show its script above their transcripts.
     const script = workflowScript(runtime, activity) ? backgroundScriptFrameHtml(ctx, activity) : "";
     return refreshingBackgroundDetail(activity, script + backgroundTranscriptHtml(ctx, activity, await subagentTranscript(runtime, activity)));
   }
@@ -107,6 +98,5 @@ export async function claudeBackgroundDetail(runtime: ClaudeRuntime, activity: B
 export async function claudeBackgroundRoute(runtime: ClaudeRuntime, activity: BackgroundActivity, path: string, url: URL, ctx: AgentRenderContext): Promise<Response | undefined> {
   const script = workflowScript(runtime, activity);
   if (path === "script" && script) return backgroundScriptResponse(ctx, activity, script, activity.kind === workflowAgentKind ? "Workflow script" : undefined);
-  // A workflow's page has no transcript of its own.
   return activity.opens === "drill-in" && activity.kind !== "workflow" ? backgroundTranscriptItemResponse(ctx, activity, path, url, () => subagentTranscript(runtime, activity)) : undefined;
 }

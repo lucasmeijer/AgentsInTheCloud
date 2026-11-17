@@ -11,14 +11,12 @@ export interface ChangeRefresh<Snapshot> {
 export class ChangesPublication<Snapshot extends object> {
   private request = 0;
   private changes = 0;
-  /** The number of workspace changes when the shown history was captured. */
   private historyChange = 0;
   private capturing = 0;
   private refreshing = 0;
   private waiting: (() => void)[] = [];
   constructor(public snapshot: Snapshot, private readonly changeRefresh: ChangeRefresh<Snapshot>) {}
 
-  /** Starts a selection, superseding earlier ones. */
   select(): number { return ++this.request; }
   superseded(ticket: number): boolean { return ticket !== this.request; }
 
@@ -43,20 +41,17 @@ export class ChangesPublication<Snapshot extends object> {
     }
   }
 
-  /** The shown snapshot once nothing captures anymore: for a selection's caller when a later one superseded it. */
   async settled(): Promise<Snapshot> {
     while (this.capturing || this.refreshing) await new Promise<void>(resolve => this.waiting.push(resolve));
     return this.snapshot;
   }
 
-  /** Refreshes after the workspace changed, unless selections capture the change themselves, or a later change refreshes. */
   changed(): Promise<void> { return this.refresh(++this.changes); }
 
   private async refresh(change: number): Promise<void> {
     this.refreshing++;
     let steppedAside = false;
     try {
-      // Selections capturing now capture this change themselves; don't capture only to throw it away.
       if (this.capturing) { steppedAside = true; return; }
       const selection = this.request, previous = this.snapshot;
       const next = await this.changeRefresh.capture(previous);
@@ -64,7 +59,6 @@ export class ChangesPublication<Snapshot extends object> {
       if (!steppedAside) this.changeRefresh.published(this.publish(next, change));
     } finally {
       this.refreshing--;
-      // A failed refresh isn't retried; the next change or selection captures again.
       this.settle(steppedAside);
     }
   }

@@ -1,6 +1,5 @@
 import { Controller } from "@hotwired/stimulus";
 
-/** Turbo must not activate foreign HTML in the management document. */
 export class NavigationOriginController extends Controller {
   connect(): void {
     // Capture also precedes Turbo's stream-response listener. Cancelling alone
@@ -20,7 +19,6 @@ export class NavigationOriginController extends Controller {
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    // Never hand the foreign body to Turbo, even while navigation is pending.
     window.location.assign(destination.href);
   };
 }

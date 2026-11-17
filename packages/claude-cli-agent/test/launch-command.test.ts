@@ -62,7 +62,6 @@ sleep .1
 mkdir -p "$3/node_modules/.bin"
 printf '#!/bin/sh\\nprintf "CLAUDE_STARTED\\\\n"\\n' > "$3/node_modules/.bin/claude"
 chmod +x "$3/node_modules/.bin/claude"`);
-  // Do not reuse the old arbitrary npm prefix: Claude mistakes it for global.
   await executable(`${home}/.local/bin/claude`, "echo OLD_INSTALL; exit 9");
   const results = await Promise.all([run(launch(empty, [])), run(launch(empty, []))]);
   for (const [code, output] of results) { expect(code).toBe(0); expect(output).toContain("CLAUDE_STARTED"); }

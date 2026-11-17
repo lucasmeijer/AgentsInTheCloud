@@ -10,7 +10,6 @@ import { builtinAgentIntegrations, type BackgroundActivitySource } from "./integ
 import { durableWorkspaceOwner } from "./runtime.ts";
 import type { AgentLivePresentationSubscription } from "./runtime-types.ts";
 
-/** The module channel that publishes a root Agent's Background bar. */
 export const backgroundChannelName = "agent-background";
 
 function sources(): BackgroundActivitySource[] {
@@ -22,14 +21,12 @@ async function activities(workspaceId: string, rootId: string) {
   return lists.flat();
 }
 
-/** Listens for the Agent's background work while its pane shows, keeping its Background bar current. */
 export function renderBackgroundControl(ctx: AgentRenderContext): string {
   if (!sources().length) return "";
   return `<div hidden data-controller="builtin-background" data-builtin-background-workspace-id-value="${escapeHtml(ctx.workspaceId)}" data-builtin-background-agent-id-value="${escapeHtml(ctx.agentId)}"
     data-action="agents-in-the-cloud:workspace-agent-selected@document->builtin-background#sync agents-in-the-cloud:workspace-pane-visible@document->builtin-background#sync agents-in-the-cloud:workspace-pane-hidden@document->builtin-background#sync visibilitychange@document->builtin-background#sync"></div>`;
 }
 
-/** Publishes the root Agent's Background bar as its work changes. */
 export async function subscribeBackground(workspaceId: string, rootId: string, listener: (html: string) => void): Promise<AgentLivePresentationSubscription> {
   const roots = await listWorkspaceAgents(workspaceId);
   if (!roots.some((root) => root.agentId === rootId)) throw new Error(`Agent not found: ${rootId}`);
@@ -52,14 +49,11 @@ export async function subscribeBackground(workspaceId: string, rootId: string, l
   } };
 }
 
-/** A child agent's page follows its live transcript; it is an Agent of its own. */
 export function childAgentTranscriptHtml(workspaceId: string, agentId: string): string {
-  // Kept as the page reloads its header: the transcript fills it live.
   return `<div class="agent-transcript-content" id="${ids.transcript({ workspaceId, agentId })}" data-turbo-permanent data-controller="builtin-child-transcript" data-builtin-child-transcript-workspace-id-value="${escapeHtml(workspaceId)}" data-builtin-child-transcript-agent-id-value="${escapeHtml(agentId)}"
     data-action="click->builtin-child-transcript#follow agents-in-the-cloud:workspace-agent-selected@document->builtin-child-transcript#sync agents-in-the-cloud:workspace-pane-visible@document->builtin-child-transcript#sync agents-in-the-cloud:workspace-pane-hidden@document->builtin-child-transcript#sync visibilitychange@document->builtin-child-transcript#sync"></div>`;
 }
 
-/** Stops a child agent's running work, as Stop does in its own pane: saved first, then ended. */
 export async function stopChildAgent(workspaceId: string, agentId: string): Promise<void> {
   const owner = await durableWorkspaceOwner(workspaceId);
   const record = (await owner.catalog()).find(record => record.agentId === agentId)!;
@@ -68,13 +62,11 @@ export async function stopChildAgent(workspaceId: string, agentId: string): Prom
   await settleStoppedDurableWork(owner.harness);
 }
 
-/** `/workspaces/:id/agents/:agentId/background/:key`, an activity's page, and `/stop`. */
 export async function handleBackgroundRequest(request: Request, url: URL): Promise<Response | undefined> {
   const match = url.pathname.match(/^\/workspaces\/([^/]+)\/agents\/([^/]+)\/background\/([^/]+)(\/stop)?$/);
   if (!match || !sources().length) return undefined;
   const workspaceId = decodeURIComponent(match[1]!);
   const key = decodeURIComponent(match[3]!);
-  // A child's own transcript links to the work it started, which is listed under their root Agent.
   const agentId = decodeURIComponent(match[2]!);
   const record = (await (await durableWorkspaceOwner(workspaceId)).catalog()).find(record => record.agentId === agentId);
   const rootId = record?.rootId ?? agentId;
@@ -86,6 +78,5 @@ export async function handleBackgroundRequest(request: Request, url: URL): Promi
   }
   if (match[4] || request.method !== "GET") return undefined;
   if (!found) return response(renderBackgroundGone(ctx, key, true));
-  // The page reloads around the detail, so its header, Stop and closing row follow the activity.
   return response(renderBackgroundPage(ctx, found.activity, refreshingBackgroundDetail(found.activity, await found.source.detail(workspaceId, rootId, found.activity))));
 }

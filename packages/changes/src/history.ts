@@ -7,7 +7,6 @@ const laneWidth = 16;
 const x = (lane: number) => 12 + lane * laneWidth;
 const y = (row: number) => row * rowHeight + rowHeight / 2;
 
-/** Allocate a first-parent spine and pending branch lanes for a topological history prefix. */
 export function historyGraph(commits: ChangesCommit[]): HistoryGraph {
   const byCommit = new Map(commits.map(commit => [commit.id, commit]));
   const primary = new Set<string>();
@@ -68,7 +67,6 @@ export function diffEndpointsDescription(model: HistoryModel, selected: Resolved
   return `${endpointName(model, selected.base ?? undefined)} → ${endpointName(model, selected.target)}`;
 }
 
-/** Local and tracking labels share a hue; the remote name is not part of their identity. */
 export function branchColor(name: string, kind: ChangesRef["kind"] = "local"): number {
   const key = kind === "remote" ? name.slice(name.indexOf("/") + 1) : name;
   let hash = 2166136261;
@@ -76,7 +74,6 @@ export function branchColor(name: string, kind: ChangesRef["kind"] = "local"): n
   return (hash >>> 0) % 8;
 }
 
-/** Attach geometry to all real connecting edges between snapshot endpoints. */
 export function comparisonGraph(graph: HistoryGraph, endpoints: DiffEndpoints, topology: readonly ComparisonCommit[] = graph.nodes.map(node => node.commit)) {
   const selection = resolveDiffEndpoints(topology, endpoints, graph.nodes.map(node => node.commit.id));
   const keys = new Set(selection.trace.map(edge => JSON.stringify([edge.from, edge.to])));

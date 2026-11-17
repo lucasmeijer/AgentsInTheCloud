@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { setTextInputValue } from "@agents-in-the-cloud/shared";
 
 type TextInput = HTMLInputElement | HTMLTextAreaElement;

@@ -3,7 +3,6 @@ import { privateNetworkAccessRules, resolverAddresses, tailscaleResolvers, works
 
 test("all bridge kinds share the input and forwarding boundary, independent of names", () => {
   const rules = workspaceFirewallRules("/system/workloads/build-clients", ["127.0.0.53"]);
-  // Only the private network access set is keyed by a workspace's bridge name.
   expect(rules).not.toContain('iifname "');
   expect(rules).not.toContain("oifname");
   expect(rules).toContain('meta iifkind "bridge" counter drop');
@@ -24,7 +23,6 @@ test("preserves host-initiated replies and IPv6 neighbor discovery before the in
     expect(rules).toContain(exception);
     expect(rules.indexOf(exception)).toBeLessThan(deny);
   }
-  // Only our table is replaced: Docker's NAT/filtering and ingress stay intact.
   expect(rules).toStartWith("add table inet agents-in-the-cloud_workspaces\nflush table inet agents-in-the-cloud_workspaces\n");
   expect(rules).not.toContain("flush ruleset");
 });
@@ -97,11 +95,9 @@ test("private network destinations are opened per workspace bridge, before the p
   const forward = rules.slice(rules.indexOf("  chain forward"));
   const allow = 'meta iifkind "bridge" meta l4proto tcp iifname . ip daddr . tcp dport @private_network_v4 counter accept';
   expect(rules).toContain("type ifname . ipv4_addr . inet_service;");
-  // Flushing a table keeps set elements: reinstalling starts without destinations until the app replaces them.
   expect(rules).toContain("}\nflush set inet agents-in-the-cloud_workspaces private_network_v4\n");
   expect(forward.indexOf('meta iifkind "bridge" meta oifkind "bridge" counter drop')).toBeLessThan(forward.indexOf(allow));
   expect(forward.indexOf(allow)).toBeLessThan(forward.indexOf('meta iifkind "bridge" jump public_destinations'));
-  // System's own addresses are dropped by the earlier family tables, whatever the set holds.
   for (const family of ["ip", "ip6"]) {
     const table = rules.slice(rules.indexOf(`table ${family} agents-in-the-cloud_workspaces {`));
     expect(table).toContain("type filter hook forward priority -11");

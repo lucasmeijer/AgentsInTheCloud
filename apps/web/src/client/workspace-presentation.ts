@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { focusLikelyOpensSoftwareKeyboard, phoneLayoutMediaQuery, workspaceAgentSelectionEvent, type WorkspaceClientApplication, type WorkspaceClientControllerConstructor, type WorkspaceClientSurfaceVisibilityContext } from "@agents-in-the-cloud/shared";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
@@ -49,7 +47,6 @@ interface TurboLike {
 const navigationIntents = new Map<string, { agent?: string; work?: string; createdAgent?: string }>();
 
 const visiblePresentationPanes = new WeakSet<HTMLElement>();
-/** A pane's content element, which is its own live surface. */
 const paneSurfaceSelector = "[data-controller~='live-surface']";
 const agentPaneWidthStorageKey = "agents-in-the-cloud:agent-pane-width";
 
@@ -169,7 +166,7 @@ export function createWorkspacePresentationController(
     }
 
     workIntentValueChanged(): void {
-      if (!this.state) return; // Stimulus initializes values before connect.
+      if (!this.state) return;
       this.acceptWorkIntent();
       this.presentationChanged();
     }
@@ -356,7 +353,6 @@ export function createWorkspacePresentationController(
     }
 
     private normalizeState(): void {
-      // Panes are in the presentation from the start; their selectors arrive separately.
       const paneIds = (role: string) => [...this.element.querySelectorAll<HTMLElement>(`[data-workspace-pane-role="${role}"]`)].map((pane) => pane.dataset.workspacePaneId!);
       const agents = paneIds("agent");
       const workViews = paneIds("work");
@@ -382,14 +378,12 @@ export function createWorkspacePresentationController(
       return this.element.querySelector<HTMLElement>(`[data-workspace-pane-role="work"][data-workspace-pane-id="${CSS.escape(key)}"]`);
     }
 
-    /** The content surfaces of the selected Agent pane and, while the Work pane is open, the selected Work view. */
     private selectedPaneSurfaces(): HTMLElement[] {
       const agent = this.state.activeAgentId ? this.agentPaneSlot(this.state.activeAgentId) : null;
       const work = this.state.workPaneVisible && this.state.activeWorkViewKey ? this.workViewPane(this.state.activeWorkViewKey) : null;
       return [agent, work].flatMap(pane => pane?.querySelector<HTMLElement>(`:scope > ${paneSurfaceSelector}`) ?? []);
     }
 
-    /** Selected panes publish their content; the others keep what they last showed. */
     private followSelectedPanes(): void {
       const selected = this.selectedPaneSurfaces();
       this.element.querySelectorAll<HTMLElement>(`[data-workspace-pane-role] > ${paneSurfaceSelector}`).forEach(surface => {
@@ -492,7 +486,6 @@ export function createWorkspacePresentationController(
         pane.dataset.workspaceLogicallyVisible = String(afterSet.has(pane));
         pane.dataset.workspaceSurfaceVisible = String(visiblePresentationPanes.has(pane));
       });
-      // Mark the newly created pane when it arrives, before its visibility event.
       const intent = navigationIntents.get(this.workspaceIdValue);
       const createdPane = after.find(pane => pane.dataset.workspacePaneRole === "agent" && pane.dataset.workspacePaneId === intent?.createdAgent);
       if (intent && createdPane) {
@@ -520,7 +513,6 @@ export function createWorkspacePresentationController(
       destinations.forEach((destination) => { destination.hidden = false; });
       overflowItems.forEach((item) => { item.hidden = true; });
 
-      // Try roomy spacing first, then compact before moving views into More.
       container.classList.remove("is-compact");
       container.classList.toggle("is-compact", container.scrollWidth > container.clientWidth);
 
@@ -649,7 +641,6 @@ export function createWorkspacePresentationController(
     private structureChanged = (): void => { this.presentationChanged(); };
     private viewportChanged = (): void => { this.applyState({ emit: true }); };
     private mountVisible = (event: Event): void => {
-      // Restore the visible pane's width before transcript navigation measures it.
       this.restorePreferences();
       if (event instanceof CustomEvent && event.detail.selectedFromList) this.selectDestinationOnWorkspaceEntry();
       else this.applyDeepLink();

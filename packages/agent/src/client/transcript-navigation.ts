@@ -10,7 +10,6 @@ interface TranscriptGeometry {
   latestTop: number;
 }
 
-/** Transcript content dispatches this, bubbling, when the reader expands it in place. */
 export const transcriptExpandEvent = "agent-transcript:expand";
 
 /** Show the end of the answer, scrolling back only as far as its prompt requires.
@@ -104,7 +103,6 @@ export class TranscriptNavigation {
 
   setVisible(visible: boolean): void {
     this.visible = visible;
-    // Hidden panes get no scroll events, so the last position may be stale.
     if (visible) { this.positionStale = true; this.layoutChanged(); }
     else { this.touch = undefined; this.stopMotion(); }
   }
@@ -149,7 +147,6 @@ export class TranscriptNavigation {
   reveal(target: HTMLElement): void {
     this.pause();
     target.scrollIntoView({ block: "center" });
-    // Revealing a target near the end isn't the reader scrolling there.
     this.rememberPosition();
   }
 
@@ -224,7 +221,6 @@ export class TranscriptNavigation {
     for (const element of this.content.querySelectorAll<HTMLElement>(".agent-item, p, pre, li, h1, h2, h3, h4, h5, h6")) {
       const bounds = element.getBoundingClientRect();
       if (bounds.height === 0 || bounds.bottom <= top) continue;
-      // Prefer the innermost visible block over a potentially very long message.
       if (this.readingAnchor && !this.readingAnchor.element.contains(element)) break;
       this.readingAnchor = { element, offset: bounds.top - top, height: bounds.height };
     }
@@ -256,7 +252,6 @@ export class TranscriptNavigation {
     } else if (widthChanged && !this.pendingPosition && this.readingAnchor && this.content.contains(this.readingAnchor.element)) {
       const { element, offset, height } = this.readingAnchor;
       const bounds = element.getBoundingClientRect();
-      // Scale an offset inside a reflowed block; preserve gaps above it.
       const nextOffset = offset < 0 ? offset * bounds.height / height : offset;
       this.moveTo(this.transcript.scrollTop + bounds.top - this.transcript.getBoundingClientRect().top - nextOffset, true);
     }
@@ -293,7 +288,6 @@ export class TranscriptNavigation {
     }
     this.motionForward = top >= this.transcript.scrollTop;
     this.motionTarget = top;
-    // Retarget an existing glide without restarting it on each incoming delta.
     if (!this.motionFrame) this.motionFrame = requestAnimationFrame(this.glide);
   }
 
@@ -334,7 +328,6 @@ export class TranscriptNavigation {
   private readonly scrolled = (): void => {
     const top = this.transcript.scrollTop;
     const distanceToEnd = this.following ? Infinity : this.geometry().latestTop - top;
-    // Without a position from before, this scroll is where the reader starts.
     const towardEnd = !this.positionStale && top > this.lastScrollTop && distanceToEnd < this.lastDistanceToEnd;
     this.positionStale = false;
     this.lastScrollTop = top;
@@ -382,7 +375,6 @@ export class TranscriptNavigation {
     const target = event.target;
     if (target instanceof HTMLElement) {
       if (target.isContentEditable || target.closest("input, textarea, select")) return;
-      // Space activates these controls; Page Up/Home/arrows still scroll.
       if (event.key === " " && target.closest("button, summary")) return;
     }
     const up = ["ArrowUp", "PageUp", "Home"].includes(event.key)
@@ -392,7 +384,6 @@ export class TranscriptNavigation {
 
   private readonly scrollbarDrag = (): void => this.pause();
 
-  // Expanding content in place, like truncated thinking, is reading it.
   private readonly expanded = (): void => this.pause();
 
   // Opening a disclosure means reading it: keep it where it is rather than

@@ -9,12 +9,10 @@ function journalName(workspaceId: string) {
   return workspaceId;
 }
 
-/** Also usable for retained histories after the workspace's metadata is gone. */
 export function durableJournalDirectory(shareKey: string, workspaceId: string, dataDir = getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir) {
   return join(sessionShareDir(shareKey, dataDir), journalsDirectory, journalName(workspaceId));
 }
 
-/** Canonical storage is the journal itself, not a periodically published copy. */
 export async function workspaceDurableJournalDirectory(workspaceId: string, dataDir = getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir) {
   journalName(workspaceId);
   return durableJournalDirectory(await workspaceSessionShareKey(workspaceId, dataDir), workspaceId, dataDir);
@@ -24,7 +22,6 @@ export function durableJournalMountPath(workspaceId: string) {
   return join(sessionShareMountPath, journalsDirectory, journalName(workspaceId));
 }
 
-/** Native-only guidance: legacy sessions and other agent backends keep their own formats. */
 export function durableJournalInstructions(workspaceId: string, agentId: string) {
   const path = durableJournalMountPath(workspaceId);
   return `## Searchable agent history

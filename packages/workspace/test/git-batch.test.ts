@@ -35,7 +35,6 @@ test("batch preserves ordered binary results, tricky filenames, symlink text, mo
   await symlink(path, join(root, "link"));
   await repo.gitResult(["add", "--", path, "link"]);
   const hash = (await repo.gitResult(["rev-parse", `:${path}`])).stdout.toString().trim();
-  // Neither project preload settings nor .env should affect the trusted runner.
   await writeFile(join(root, "bunfig.toml"), 'preload = ["./attack.ts"]\n');
   await writeFile(join(root, "attack.ts"), 'throw new Error("repository preload ran");');
   await writeFile(join(root, ".env"), 'NODE_OPTIONS=--require=./attack.ts\n');

@@ -1,5 +1,3 @@
-/** Renderer-friendly transcript model for the pi-backed runtime. */
-
 import type { TurnTimingSummary } from "./turn-timing.ts";
 import { Type, type Static } from "typebox";
 import type { StopReason } from "@earendil-works/pi-ai";
@@ -41,14 +39,12 @@ export type TranscriptRecord =
   | { kind: "toolResult"; callId: string; text: string; images: SessionImageRef[]; isError: boolean; timestamp: number; details?: ToolViewDetails }
   | { kind: "note"; id?: string; text: string; tone: NoteTone; timestamp?: number };
 
-// Shared by live completion and persisted transcript reconstruction.
 function assistantErrorText(message: { stopReason: string; errorMessage?: string }): string | undefined {
   return message.errorMessage || (message.stopReason === "aborted" ? "Run aborted" : message.stopReason === "error" ? "Provider request failed" : undefined);
 }
 
 type NoteTone = "system" | "summary" | "warning" | "error";
 
-// Checked for every tool result when a transcript reloads.
 const toolViewDetailsSchema = Type.Object({
   aborted: Type.Optional(Type.Boolean()),
   timedOut: Type.Optional(Type.Boolean()),
@@ -69,7 +65,6 @@ export function isToolViewDetails(value: unknown): value is ToolViewDetails {
   return isJsonObject(Object.fromEntries(definedEntries));
 }
 
-/** A script file as a code mode call ran it: its contents when the call started. */
 export type ScriptFileView = { path: string; sha256: string; code: string };
 
 export interface ToolView {
@@ -79,22 +74,15 @@ export interface ToolView {
   status: "streaming" | "running" | "ok" | "error";
   resultText?: string;
   resultImages?: SessionImageRef[];
-  /** The terminal process a running bash call can be watched in. */
   terminalProcessId?: string;
   canAbort?: boolean;
   durationMs?: number;
   details?: ToolViewDetails;
-  /** Timestamp of the assistant entry that issued this call. */
   issuedAt?: number;
-  /** Calls this tool made to other tools, such as a code mode script's. */
   nested?: ToolView[];
-  /** The script file a code mode call ran, as it was when the call started. */
   scriptFile?: ScriptFileView;
-  /** A finished call whose result was not kept, so only its arguments and error can show. */
   resultUnavailable?: boolean;
-  /** The child agent this call runs, such as a script's one-shot agent, whose conversation opens from its row. */
   childAgentId?: string;
-  /** Inference this call ran beyond the Agent's own, such as a one-shot agent's, once it has finished. */
   usage?: { outputTokens: number; cost: number };
 }
 
@@ -102,26 +90,22 @@ interface TranscriptItemBase {
   timestamp?: number;
   anchor?: string;
   key: string;
-  /** Rewind to immediately before this persisted session entry. */
   rewindEntryId?: string;
 }
 
 export type WorkingTranscriptItem = TranscriptItemBase & {
   type: "working";
-  /** The user entries, read together, whose activity this block shows. */
   inputEntryIds?: string[];
   startedAt: number;
   completedAt?: number;
   hasFinalAnswer?: boolean;
   stoppedAt?: number;
   timing?: TurnTimingSummary;
-  /** Native message timestamps do not measure execution duration. */
   durationUnavailable?: boolean;
   live?: boolean;
   items: TranscriptItem[];
 };
 
-/** Input waiting in the inbox. `stranded` when no run will pick it up, as after a turn that ended in an error. */
 export type QueuedInput = { submissionId: string; mode: "steer" | "followUp"; stranded: boolean };
 
 export type TranscriptItem =
@@ -132,24 +116,17 @@ export type TranscriptItem =
   | (TranscriptItemBase & { type: "text"; text: string; final: boolean; live?: boolean })
   | (TranscriptItemBase & { type: "tool"; tool: ToolView })
   | (TranscriptItemBase & { type: "note"; text: string; tone: NoteTone })
-  /** Something that reached the Agent from elsewhere, such as a subagent's report or a finished background command. */
   | (TranscriptItemBase & {
     type: "message";
-    /** Who sent it, such as a subagent or a command. */
     sender: string;
-    /** What happened, shown after the sender while collapsed. */
     title: string;
     bodyMarkdown?: string;
-    /** Further facts, in order. */
     details: Record<string, string>;
-    /** The tool call that started the sender. */
     dispatchedByToolCallId?: string;
-    /** The background activity that sent it, such as a subagent; the sender links to its page. */
     senderActivityKey?: string;
   })
   | (TranscriptItemBase & { type: "error"; text: string });
 
-/** Whether a reveal request for `target`, an item key, anchor or tool call ID, points at this item. */
 export function isTranscriptTarget(item: TranscriptItem, target: string): boolean {
   return item.key === target || item.anchor === target || (item.type === "tool" && item.tool.callId === target);
 }
@@ -171,7 +148,6 @@ function isFinalAssistantStopReason(reason: StopReason): boolean {
 
 type AssistantContentPart = { type: string; text?: string; textSignature?: string };
 
-/** Select final-answer content once for both streaming promotion and persisted history. */
 export function finalAssistantTextIndexes(parts: ReadonlyArray<AssistantContentPart>): number[] {
   const phased = parts.some((part) => part.type === "text" && assistantTextPhase(part.textSignature) !== undefined);
   return parts.flatMap((part, index) => part.type === "text"
@@ -188,7 +164,6 @@ export function finalAssistantText(parts: ReadonlyArray<AssistantContentPart>): 
   return finalAssistantTextIndexes(parts).map((index) => parts[index]!.text ?? "").join("");
 }
 
-/** A JSON answer's source: models may fence it as a code block. */
 export function unfencedJson(text: string): string {
   return /^\s*```(?:json)?\s*\n([\s\S]*?)\n?```\s*$/.exec(text)?.[1] ?? text;
 }
@@ -253,14 +228,12 @@ export function buildTranscript(records: TranscriptRecord[], options: { openEnde
         text: record.text,
         images: record.images,
       } : undefined;
-      // Input read together with the previous one, before any activity, joins its block.
       if (user && working && follows === "user" && !runStarts.has(record.id)) {
         items.splice(items.length - 1, 0, user);
         working.inputEntryIds!.push(record.id);
         continue;
       }
       if (user) items.push(user);
-      // A new run cuts the old one short. Steering continues the run in a new block; the block it interrupted has done its work.
       if (working) {
         if (runScoped && runStarts.has(record.id)) working.stoppedAt = Math.max(working.startedAt, record.timestamp);
         else working.completedAt = Math.max(working.startedAt, record.timestamp);
@@ -353,7 +326,6 @@ export function buildTranscript(records: TranscriptRecord[], options: { openEnde
   return items;
 }
 
-/** How a finished tool call ended, in a word or two, or "" when it succeeded. */
 export function toolOutcomeLabel(details: ToolViewDetails | undefined, isError: boolean): string {
   if (details?.timedOut === true) return "timed out";
   if (details?.aborted === true) return "aborted";

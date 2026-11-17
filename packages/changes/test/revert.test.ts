@@ -11,7 +11,6 @@ const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 const lines = (count: number, change: (line: number) => string | undefined = () => undefined) => Array.from({ length: count }, (_, index) => change(index + 1) ?? `line ${index + 1}\n`).join("");
 
-/** Applies an edit the way the editor resolves zero-based line and character positions. */
 function apply(text: string, { range, newText }: LineEdit): string {
   const starts = [0];
   for (let index = 0; index < text.length; index++) if (text[index] === "\n") starts.push(index + 1);

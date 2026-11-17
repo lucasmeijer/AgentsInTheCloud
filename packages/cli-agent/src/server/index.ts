@@ -20,7 +20,6 @@ function terminalStatus(terminal: CliAgentTerminal): string {
   return terminal.state === "exited" && terminal.exitCode ? `Session ended (exit ${terminal.exitCode}). Its output is below.` : "Session ended";
 }
 
-/** One adapter supplies CLI policy; this module owns the complete terminal-agent lifecycle. */
 export function createCliAgentModule(adapter: CliAgentAdapter): WorkspaceModule {
   let events: AgentsInTheCloudEventBus;
   const agents = createCliAgents(adapter, async (workspaceId, agentId, title, workspaceNamed) => {
@@ -51,7 +50,6 @@ export function createCliAgentModule(adapter: CliAgentAdapter): WorkspaceModule 
         <div id="${cliCompletionCatalogId(workspaceId, agentId)}" data-agent-completions-target="catalog" hidden>${await renderWorkspaceCompletionCatalog(workspaceId, "cli")}</div>
       </div>
     </div>` : "";
-    // Permanent keeps a live terminal through page renders; an ended one has none, and must be replaceable.
     return `<section id="${domId("cli_agent", workspaceId, agentId)}"${running ? " data-turbo-permanent" : ""} class="cli-agent-body agent-composer-pane" data-controller="cli-terminal agent-composer composer-focus${composer ? " agent-attachments transcript-quote" : ""}" data-agent-composer-open-on-select-value="false" data-cli-terminal-url-value="${escapeHtml(url)}" data-cli-terminal-socket-value="${escapeHtml(terminalProcessSocketPath(workspaceId, agentId))}" data-cli-terminal-workspace-id-value="${escapeHtml(workspaceId)}" ${cliTranscriptAttributes(adapter, agentId)} ${composerAttachmentAttributes(draftId, rowId, `agents-in-the-cloud:workspace-pane-visible@window->cli-terminal#refresh agents-in-the-cloud:workspace-agent-focus->cli-terminal#focus agents-in-the-cloud:theme-change@document->cli-terminal#theme ${agentComposerActions}`)}>
       <div class="cli-terminal-status" role="status">${session.error ? failureStatus(session.error) : terminalStatus(terminal)}</div>
       <div class="cli-agent-stage">
@@ -67,7 +65,6 @@ export function createCliAgentModule(adapter: CliAgentAdapter): WorkspaceModule 
     </section>`;
   }
 
-  /** The tab again, once its terminal has ended under a viewer, so it can show why. */
   async function tabRoute(request: Request, url: URL): Promise<Response | undefined> {
     const match = url.pathname.match(/^\/workspaces\/([^/]+)\/([^/]+)-agents\/([^/]+)\/tab$/);
     if (!match || match[2] !== adapter.id || request.method !== "GET") return undefined;

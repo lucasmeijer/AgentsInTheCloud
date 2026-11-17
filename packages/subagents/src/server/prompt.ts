@@ -15,7 +15,6 @@ interface ModelDelegationText {
 export function delegationPrompt(modelId: string | undefined, thinkingLevel: string, role: "root" | "subagent"): string[] {
   const canonicalId = codexModelId(modelId);
   const model = canonicalId ? models[canonicalId] : undefined;
-  // Keep the imported Codex text intact; use app vocabulary at the prompt boundary.
   const roleText = (model?.role?.[role] ?? upstream.defaults[role])?.replaceAll("sub-agent", "subagent");
   const mode = model?.mode;
   const modeText = (mode?.hint_text ?? (thinkingLevel === "ultra"

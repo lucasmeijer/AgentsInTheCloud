@@ -12,10 +12,8 @@ import { startLocally } from "../../src/server/local-terminal-processes.ts";
 for (const remote of [false, true]) {
   describe.skip(`${remote ? "Docker" : "local"} terminal lifecycle`, () => {
     const container = `agents-in-the-cloud-terminal-test-${crypto.randomUUID()}`;
-    // Built by `bun run --cwd packages/workspace-helper build`.
     const helper = new URL("../../../workspace-helper/workspace_tools/aitc-workspace-helper", import.meta.url).pathname;
     let socket = "";
-    // Locally, a tmux server of the tests' own.
     let tmuxDirectory = "";
     const sessions: string[] = [];
     const connections: ObservableTerminalConnection[] = [];

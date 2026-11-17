@@ -1,7 +1,6 @@
 import { writeCliSessionFiles, type CliAgentConnection, type CliAgentSession } from "@agents-in-the-cloud/cli-agent/server";
 import { shellQuote } from "@agents-in-the-cloud/core";
 
-/** Keep launch config and credentials private, while Codex owns one shared native installation. */
 export async function prepareCodexSession(workspaceId: string, session: CliAgentSession, connection: CliAgentConnection): Promise<Record<string, string>> {
   const directory = `${session.directory}/codex`;
   await writeCliSessionFiles(workspaceId, session, {

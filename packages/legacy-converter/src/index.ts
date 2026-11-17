@@ -27,13 +27,10 @@ export interface LegacyConversion {
   workspaceId: string;
   workspaceDirectory: string;
   shareDirectory: string;
-  /** Original metadata file contents, parsed only inside the converter. */
   metadata: string | undefined;
-  /** Open lazily: native-only metadata needs no journal or execution owner. */
   destination(): Promise<HistoryImportDestination>;
 }
 
-// Only this module understands the pre-Durable metadata and file layouts.
 const oldMetadata = Type.Object({ conversations: Type.Array(Type.Object({
   conversationId: Type.String({ pattern: "^[a-zA-Z0-9_-]+$" }), label: Type.String(), title: Type.String(),
   storage: Type.Optional(Type.Literal("durable")),
@@ -49,7 +46,6 @@ const content = Type.Union([Type.String(), Type.Array(Type.Union([
 ]))]);
 const messageSchema = Type.Object({ role: Type.String(), content });
 
-/** Parse without SessionManager.open: that method can migrate/rewrite the source file. */
 async function transcript(path: string): Promise<EntryDraft[]> {
   const parsed = (await readFile(path, "utf8")).split("\n").filter(line => line.trim()).map(line => Value.Parse(envelope, JSON.parse(line)));
   // SAFETY: Only the envelope is needed by the SDK's in-memory version migration;
@@ -84,7 +80,6 @@ async function transcript(path: string): Promise<EntryDraft[]> {
         Value.Assert(messageSchema, message);
         if (message.role === "assistant" && !Array.isArray(message.content)) throw new Error(`Invalid assistant content in ${path}`);
         if (message.role === "toolResult") Value.Assert(Type.Object({ toolCallId: Type.String(), toolName: Type.String() }), message);
-        // The persisted Pi messages already use the native model-message vocabulary.
         result.push({ kind: message.role === "user" ? UserEntry.kind : message.role === "assistant" ? AssistantEntry.kind : ToolResultEntry.kind, model: [message] });
         continue;
       }

@@ -14,15 +14,11 @@
  */
 export const systemVersion = 2;
 
-/** The lowest System version this app relies on. Raise it when the app starts using a newer System addition. */
 export const requiredSystemVersion = 1;
 
-/** App image label: the System version that app needs. */
 export const requiredSystemVersionLabel = "org.agents-in-the-cloud.required-system-version";
-/** System image label: that image's systemVersion. */
 export const systemVersionLabel = "org.agents-in-the-cloud.system-version";
 
-/** Reads a version label. Images from before versions existed have none and are version 0. */
 export function parseSystemVersion(label: string | undefined): number {
   if (label === undefined) return 0;
   if (!/^\d+$/.test(label)) throw new Error(`Invalid System version: ${label}`);

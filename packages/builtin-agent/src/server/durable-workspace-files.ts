@@ -14,7 +14,6 @@ const home = "/home/agents-in-the-cloud";
 const maxWholeFileBytes = 64 * 1024 * 1024;
 const scanChunkBytes = 1024 * 1024;
 
-/** The helper's failures that are expected of a file, by its status. */
 function helperFileErrorCode(code: number): FileErrorCode {
   switch (code) {
     case WorkspaceHelperStatus.NOT_FOUND: return "not_found";
@@ -41,7 +40,6 @@ async function attempt<T>(path: string, context: Context, operation: () => Promi
   }
 }
 
-/** A file URL's path; one naming another host, or malformed, stays an ordinary path, as the Node environment keeps it. */
 function filePath(url: string): string {
   try {
     return fileURLToPath(url);
@@ -62,19 +60,16 @@ function unsupported(path: string): Result<never, FileError> {
 export class WorkspaceFileSystem implements ExecutionEnv {
   readonly id: string;
 
-  /** Relative paths resolve against `cwd`, the workspace's /work unless a test gives another folder. */
   constructor(private readonly workspaceId: string, readonly cwd = workspaceRoot) {
     this.id = `workspace:${workspaceId}`;
   }
 
-  /** Where `path` is in the workspace: relative to `cwd`, with `~` the agent user's home, as the Node environment resolves locally. */
   #resolve(path: string): string {
     if (path === "~") return home;
     if (path.startsWith("~/")) return posix.join(home, path.slice(2));
     return posix.resolve(this.cwd, path.startsWith("file://") ? filePath(path) : path);
   }
 
-  /** What is at `path`, following symlinks; nothing there, or nothing the user may reach, is an error. */
   async #describe(path: string, context: Context): Promise<Result<Exclude<WorkspaceFileStat, { kind: "missing" | "inaccessible" }>, FileError>> {
     const described = await attempt(path, context, async () => (await statFilesInWorkspace(this.workspaceId, user, [path], { signal: context.abortSignal }))[0]!);
     if (!described.ok) return described;
@@ -87,7 +82,6 @@ export class WorkspaceFileSystem implements ExecutionEnv {
   readonly absolutePath: ExecutionEnv["absolutePath"] = async (path) => ok(this.#resolve(path));
   readonly joinPath: ExecutionEnv["joinPath"] = async (parts) => ok(posix.join(...parts));
 
-  /** Its kind as the Node environment's `lstat` reports it, so a symlink is one; its size and time are those of what it points to. */
   async fileInfo(path: string, context: Context): Promise<Result<FileInfo, FileError>> {
     const absolute = this.#resolve(path);
     const described = await this.#describe(absolute, context);
@@ -116,7 +110,6 @@ export class WorkspaceFileSystem implements ExecutionEnv {
 
   async readTextFile(path: string, context: Context): Promise<Result<string, FileError>> {
     const absolute = this.#resolve(path);
-    // Buffer keeps a byte-order mark, as Node's readFile does; edit puts it back after matching.
     return attempt(absolute, context, async () => (await readFileInWorkspace(this.workspaceId, { user, path: absolute }, { maxBytes: maxWholeFileBytes, signal: context.abortSignal })).toString("utf8"));
   }
 
@@ -130,14 +123,12 @@ export class WorkspaceFileSystem implements ExecutionEnv {
     if (options?.noFollow) return err(new FileError("not_supported", "Workspace files always follow symlinks", absolute));
     const opened = await attempt(absolute, context, () => openFileInWorkspace(this.workspaceId, { user, path: absolute }, { signal: context.abortSignal }));
     if (!opened.ok) {
-      // The helper refuses anything but a regular file alike; tell a folder apart, as the Node environment does.
       const info = opened.error.code === "invalid" ? await this.fileInfo(absolute, context) : undefined;
       if (info?.ok && info.value.kind === "directory") return err(new FileError("is_directory", `${absolute} is a folder`, absolute));
       return opened;
     }
     const file = opened.value;
     let closed = false;
-    // The file stays open on the context it was opened with; each use ends when its own context is aborted.
     const use = <T>(useContext: Context, operation: () => Promise<T>) =>
       closed ? Promise.resolve(err<T, FileError>(new FileError("invalid", `${absolute} is closed`, absolute))) : attempt(absolute, useContext, () => awaitWithContext(operation(), useContext));
     return ok({
@@ -163,7 +154,6 @@ export class WorkspaceFileSystem implements ExecutionEnv {
         }
         return use(scanContext, async () => {
           for (let position = 0; ; position += scanChunkBytes) {
-            // Stop reading once aborted, not only waiting: the file takes one request at a time.
             if (scanContext.abortSignal?.aborted) throw new Error("aborted");
             const chunk = await file.read(position, scanChunkBytes);
             scanner.push(chunk);

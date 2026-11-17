@@ -61,7 +61,6 @@ export const agentsInTheCloudClientModule: WorkspaceClientModule = {
         if (data.type === "agents-in-the-cloud:desktop:status") {
           this.show(data.phase, data.detail);
         } else if (data.type === "agents-in-the-cloud:desktop:clipboard") {
-          // VNC can echo text we just sent; that doesn't make it a remote copy.
           if (data.text !== this.clipboardInputTarget.value) {
             this.cancelClipboardSend();
             this.clipboardInputTarget.value = data.text;

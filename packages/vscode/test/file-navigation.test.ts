@@ -48,7 +48,6 @@ async function runOpenFileScript(windows: Array<"accepts" | "refuses">): Promise
   const directory = await mkdtemp(join(tmpdir(), "vscode-open-file-"));
   const listeners = windows.map((_, index) => Bun.listen({ unix: join(directory, `vscode-ipc-${index}.sock`), socket: { data() {} } }));
   try {
-    // The stub CLI stands in for VS Code's remote CLI and records which windows received the file.
     const cli = join(directory, "code");
     await writeFile(cli, `#!/bin/sh\ncase "$VSCODE_IPC_HOOK_CLI" in ${windows.map((mode, index) => `*-${index}.sock) ${mode === "accepts" ? `echo "$VSCODE_IPC_HOOK_CLI $*" >> '${directory}/opened'` : "exit 1"} ;;`).join(" ")} esac\n`, { mode: 0o755 });
     const script = vscodeOpenFileScript("/work/it's here.ts:4:2", true)

@@ -220,7 +220,6 @@ function dockerBuildCommand(options: Options, args: string[], context?: string):
     : ["docker", "build"];
   return [
     ...command,
-    // System cgroup paths belong to the local daemon, never the SSH helper.
     ...(context && context === options.helperContext ? [] : resourceBuildArgs),
     ...(options.builder && !context ? ["--builder", options.builder] : []),
     ...(options.platform ? ["--platform", options.platform] : []),
@@ -244,7 +243,6 @@ async function buildImage(refs: string[], args: string[]): Promise<void> {
   const slices: string[] = [];
   for (const platform of requestedPlatforms(options)) {
     const slice = `${refs[0]}-${platform.split("/")[1]}`;
-    // Integrated docker builders must be selected via their Docker context.
     const context = platform === options.nativePlatform ? options.builder : options.helperContext;
     await runInherited(dockerBuildCommand({ ...options, platform }, ["--tag", slice, ...args], context));
     const descriptor = JSON.parse(run(["docker", "buildx", "imagetools", "inspect", slice, "--format", "{{json .Manifest}}"]));
@@ -285,7 +283,6 @@ await ensureGeneratedDefaultWorkspaceImage({
   exists: async ref => workspaceImageExists(ref, options),
   build: async () => { shouldBuildWorkspace = true; await buildImage([defaultWorkspaceImageRef], ["--file", `${workspaceContextDir}/Dockerfile`, workspaceContextDir]); },
 });
-// Bind the app to the exact multi-platform workspace manifest just published.
 let publishedWorkspaceRef = defaultWorkspaceImageRef;
 if (options.push) {
   const descriptor = JSON.parse(run(["docker", "buildx", "imagetools", "inspect", defaultWorkspaceImageRef, "--format", "{{json .Manifest}}"]));
@@ -299,13 +296,11 @@ const defaultBuildArgs = [
   `ATELIER_EAGERLY_PRELOAD=${JSON.stringify([publishedWorkspaceRef])}`,
 ];
 const allBuildArgs = [...defaultBuildArgs, ...options.buildArgs];
-// Like the workspace image, the System requirement comes from the checkout being built, not this script's copy.
 const systemCompatibility = Value.Parse(
   Type.Object({ requiredSystemVersion: Type.Integer({ minimum: 0 }), requiredSystemVersionLabel: Type.String() }),
   await import(join(process.cwd(), "packages/shared/src/system-version.ts")),
 );
 
-// The app image copies each platform's helper from the checkout being built.
 for (const platform of requestedPlatforms(options)) {
   await buildGoProgram(join(process.cwd(), "packages/workspace-helper/helper"), join(process.cwd(), "packages/workspace-helper/dist", platform.replace("/", "-"), "aitc-workspace-helper"), platform);
 }

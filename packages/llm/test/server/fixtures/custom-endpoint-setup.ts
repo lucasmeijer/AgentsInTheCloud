@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { customOpenAIDefaults, connectCustomOpenAIEndpoint, type CustomOpenAIEndpointInput } from "../../../src/server/custom-openai-endpoint.ts";
 import { createPiModelRuntime, getCustomModelsJson } from "../../../src/server/pi-config-models.ts";
 
-// Run in a fresh process: the production model runtime is intentionally an app-wide singleton.
 const input: CustomOpenAIEndpointInput = { api: "openai-completions", name: "DevBox Ollama", baseUrl: "https://models.example.com/v1/", apiKey: "stub-only-key", ...customOpenAIDefaults };
 
 const directory = await mkdtemp(join(tmpdir(), "endpoint-setup-"));
@@ -62,7 +61,6 @@ try {
   expect(await readFile(authPath, "utf8")).toContain(input.apiKey);
   expect((await stat(authPath)).mode & 0o777).toBe(0o600);
   expect(await readFile(join(directory, "pi-config", "models.json"), "utf8")).not.toContain(input.apiKey);
-  // A bad manual ID never adds a provider or persists a credential.
   await expect(connectCustomOpenAIEndpoint({ ...input, baseUrl, modelId: "" }, false)).rejects.toThrow("model ID");
   const rejected = connectCustomOpenAIEndpoint({ ...input, baseUrl, modelId: "rejected" }, false);
   await expect(rejected).rejects.toThrow("model request failed");

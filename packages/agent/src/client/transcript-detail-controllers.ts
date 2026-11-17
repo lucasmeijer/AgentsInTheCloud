@@ -38,7 +38,6 @@ export function createAgentTailFrameController(Controller: StimulusControllerCon
       if (!scroller) return;
       scroller.scrollTop = previous.tail ? previous.top + scroller.scrollHeight - previous.height : previous.top;
       if (previous.transcript) {
-        // Keep pagination from activating native anchoring or stick-to-bottom.
         previous.transcript.element.scrollTop = previous.transcript.top;
         previous.transcript.element.dispatchEvent(new Event("scroll"));
       }

@@ -24,7 +24,6 @@ async function submitMessage(workspaceId: string, agentId: string, request: Requ
   const agent = await resolveAgent(workspaceId, agentId);
   const json = requestAcceptsJson(request) ? await readJsonObject(request) : undefined;
   const form = json ? undefined : await request.formData();
-  // Older API callers can omit the identity, but cannot retry idempotently.
   const requestId = json?.requestId ?? form?.get("requestId") ?? crypto.randomUUID();
   if (!Value.Check(Type.String({ pattern: "^[a-zA-Z0-9_-]{1,128}$" }), requestId)) {
     const message = "Request ID must contain 1–128 letters, numbers, underscores, or hyphens";
@@ -70,7 +69,6 @@ async function submitMessage(workspaceId: string, agentId: string, request: Requ
 
   const attachmentDraft = agentAttachmentDraftId(workspaceId, agentId);
   if (form && String(form.get("attachmentDraft") ?? "") !== attachmentDraft) return turboStreamResponse("", { status: 422 });
-  // Admission wins even if the previous response was lost after attachment cleanup.
   if (await (options.knownRequest ?? knownWorkspaceAgentRequest)(agent, requestId, { events: options.events })) {
     const headers = { "x-agents-in-the-cloud-attachment-draft-consumed": "true" };
     return json ? Response.json({ agent: { agentId, state: "accepted" } }, { status: 202, headers }) : turboStreamResponse("", { headers });
@@ -88,7 +86,6 @@ async function submitMessage(workspaceId: string, agentId: string, request: Requ
   const runtime = await resolveAgentController(agent, options);
   const model = (await runtime.settings()).model;
   const namingContext = trimmed ? { messages: [...await runtime.userMessages(), trimmed], agentModel: model && { provider: model.provider, id: model.modelId } } : undefined;
-  // A new prompt that finds the agent busy waits its turn; only explicit steering joins the running turn.
   const submission = await runtime.submit({ text: expandedText, requestId, whenBusy: mode === "steer" ? "steer" : "followUp", images: images.map(image => ({ type: "image", data: image.data, mimeType: image.mimeType })), attachmentNotes });
   if (namingContext) {
     await options.events?.emit("workspace_user_activity", { workspaceId });
@@ -96,7 +93,6 @@ async function submitMessage(workspaceId: string, agentId: string, request: Requ
   }
   await removeStagedAttachments(attachmentDraft, attachmentIds);
   await removeInitialPromptDraft(workspaceId, agentId);
-  // The composer steers a follow-up it sent by this ID.
   const acceptedHeaders = { "x-agents-in-the-cloud-attachment-draft-consumed": "true", "x-agents-in-the-cloud-submission-id": String(submission.id) };
   return json
     ? Response.json({ agent: { agentId, state: "running" } }, { status: 202, headers: acceptedHeaders })

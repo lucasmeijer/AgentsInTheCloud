@@ -6,13 +6,11 @@ export function claudeInstructionsPath(session: CliAgentSession): string {
   return `${session.directory}/instructions.txt`;
 }
 
-/** Session-private MCP configuration; the bearer token never reaches a command line. */
 export function claudeMcpConfigPath(session: CliAgentSession): string {
   return `${session.directory}/claude-mcp.json`;
 }
 
 export async function prepareClaudeSession(workspaceId: string, session: CliAgentSession, connection: CliAgentConnection): Promise<Record<string, string>> {
-  // Claude waits for alwaysLoad servers at startup and includes their tools in turn one.
   const config = { mcpServers: { "agents-in-the-cloud": { type: "http", url: connection.url, headers: { Authorization: `Bearer ${connection.token}` }, alwaysLoad: true } } };
   await writeCliSessionFiles(workspaceId, session, {
     "claude-mcp.json": JSON.stringify(config),

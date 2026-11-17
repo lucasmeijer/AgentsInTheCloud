@@ -75,7 +75,6 @@ async function searchPersonalRepositories(query: string, token: string | undefin
   }
 }
 
-/** Your own and your organizations' repositories first, then public ones. */
 export async function searchGitHubRepositories(query: string, token: string | undefined): Promise<GitHostingRepositorySearch> {
   const trimmed = query.trim();
   const [publicRepositories, personal] = await Promise.all([

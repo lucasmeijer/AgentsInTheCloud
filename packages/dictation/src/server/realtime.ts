@@ -11,7 +11,6 @@ import { addTranscriptionContext, readDictationContext } from "./dictation-conte
 import { ensureTranscriptionRuntime } from "./runtime.ts";
 import { spawnTranscriptionProcess } from "./process.ts";
 
-// The NeMo Speech transcription runtime and native realtime protocol keep their processing vocabulary.
 const transcriptionPort = 8098;
 const transcriptionReadyUrl = `http://127.0.0.1:${transcriptionPort}/ready`;
 const transcriptionSocketUrl = `ws://127.0.0.1:${transcriptionPort}/v1/realtime`;

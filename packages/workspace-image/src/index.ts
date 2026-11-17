@@ -19,9 +19,7 @@ interface WorkspaceImageBuildTask {
   tag: string;
   owner?: string;
   modules: string[];
-  /** The build's output once finished, with its terminal colors. */
   output: string;
-  /** Where to watch the build while it runs. */
   terminalSocketPath?: string;
   promise: Promise<void>;
 }
@@ -217,7 +215,6 @@ async function optimizedRepoDockerfile(sourcePath: string, dockerfile: string): 
 
 export function repositoryWorkspaceImageTag(baseImage: string, dockerfileContents: string | Uint8Array): string {
   const hash = createHash("sha256");
-  // Do not reuse repository images produced before builder isolation.
   hash.update("agents-in-the-cloud-repo-workspace-dockerfile-v6\n");
   hash.update(baseImage); hash.update("\0");
   hash.update(dockerfileContents); hash.update("\0");

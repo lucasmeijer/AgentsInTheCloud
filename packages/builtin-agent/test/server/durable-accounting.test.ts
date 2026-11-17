@@ -26,10 +26,8 @@ test("native context estimate follows head cutoffs, and derived edits", async ()
     const fork = await conversation.fork(view.entries.at(-1)!.id, { ownership: { kind: "ownerless" } }, context);
     expect(await harness.snapshot(UsageDoc, fork.id, context)).toEqual({ models: {}, tools: {} });
     expect(durableContextTokens(await fork.context(context))).toBe(durableContextTokens(view));
-    // A newer head invalidates measurements in retained older assistant entries.
     const head = view.entries.at(-1)!;
     expect(durableContextTokens({ ...view, head })).toBe(view.messages.reduce((sum, message) => sum + estimateMessageTokens(message), 0));
-    // Native context has already applied omit/replace edits. Never count raw entries.
     expect(durableContextTokens({ ...view, head, messages: [], contributions: view.entries.map(() => []) })).toBe(0);
   } finally { await harness.close(context); }
 });

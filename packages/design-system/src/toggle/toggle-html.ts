@@ -75,7 +75,6 @@ function optionHtml(options: ToggleOptions, option: ToggleOption, kind: "button"
   return `<button class="${escapeHtml(`${kind}-toggle__option`)}"${id} type="${type}" name="${escapeHtml(options.name)}" value="${escapeHtml(option.value)}" aria-pressed="${option.value === options.value}"${option.disabled ? " disabled" : ""}${dataHtml(option.data)}>${content}</button>`;
 }
 
-/** Renders an interactive, mutually-exclusive button or text toggle. */
 export function toggleHtml(options: ToggleOptions): string {
   validate(options);
   const kind = options.variant === "button" ? "button" : "text";

@@ -57,7 +57,6 @@ function workspaceDiagnostic(snapshotRoot: string, diagnostic: ResourceDiagnosti
   };
 }
 
-/** Use Pi's skill parser and validation against files copied from a workspace container. */
 export async function workspaceSkillsFromFiles(files: WorkspaceSkillFile[]): Promise<{ skills: WorkspaceSkill[]; diagnostics: ResourceDiagnostic[] }> {
   const contents = new Map(files.map((file) => [file.path, file.content]));
   const snapshotRoot = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-skills-"));
@@ -94,7 +93,6 @@ export async function workspaceSkillsFromFiles(files: WorkspaceSkillFile[]): Pro
   }
 }
 
-/** Discover Skills without assuming the AgentsInTheCloud server can mount the workspace filesystem. */
 export async function loadWorkspaceSkills(workspaceId: string): Promise<{ skills: WorkspaceSkill[]; diagnostics: ResourceDiagnostic[] }> {
   const script = `set -eu
 for root in ${skillRoots.map((root) => `'${root}'`).join(" ")}; do
@@ -114,7 +112,6 @@ done`;
   return workspaceSkillsFromFiles(files);
 }
 
-/** Resolve explicit invocations in the workspace, before Pi can read server-local paths. */
 export async function expandWorkspaceSkillCommand(
   workspaceId: string,
   text: string,

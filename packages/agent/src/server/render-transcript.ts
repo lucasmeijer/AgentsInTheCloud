@@ -73,7 +73,6 @@ function renderQueuedInputActions(ctx: AgentRenderContext, key: string, queued: 
 
 function renderStreamingTextBody(ctx: AgentRenderContext, key: string, text: string, className: string): string {
   const snapshot = ctx.streamingText?.(key, text) ?? renderStreamingMarkdownSnapshot(ctx.workspaceId, text);
-  // Live streaming text is owned by its own regions; morphing the row must not blank it.
   const island = ctx.streamingText ? " data-turbo-permanent" : "";
   return `<div class="${className} agent-stream-markdown" data-controller="agent-streaming-text" id="${ids.itemText(ctx, key)}"><div id="${ids.itemTextStable(ctx, key)}"${island}>${snapshot.stableHtml}</div><div id="${ids.itemTextTail(ctx, key)}"${island}>${snapshot.tailHtml}</div></div>`;
 }
@@ -104,12 +103,10 @@ export function renderTranscriptItem(ctx: AgentRenderContext, item: TranscriptIt
   return `<div class="agent-item" id="${id}" data-transcript-key="${escapeHtml(item.key)}" data-quote-source="${escapeHtml(quoteSource(item))}"${item.anchor ? ` data-transcript-anchor="${escapeHtml(item.anchor)}"` : ""}${item.type === "tool" ? ` data-tool-call-id="${escapeHtml(item.tool.callId)}"` : ""}>${body}</div>`;
 }
 
-/** The Comment button for selected transcript text; the pane's `transcript-quote` controller places it. */
 export function renderTranscriptQuoteAction(): string {
   return `<div class="transcript-quote-action" data-transcript-quote-target="action" hidden>${buttonHtml({ type: "button", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.Comment, label: "Comment on selection" }, attributesHtml: 'data-popular-button="touch" data-action="mousedown->transcript-quote#keepSelection pointerdown->transcript-quote#press pointerup@window->transcript-quote#release pointercancel->transcript-quote#release click->transcript-quote#quote"' })}</div>`;
 }
 
-/** Where a quoted selection came from, as the user tells the Agent. */
 function quoteSource(item: Exclude<TranscriptItem, { type: "working" }>): string {
   switch (item.type) {
     case "user": return "From my prompt";
@@ -121,7 +118,6 @@ function quoteSource(item: Exclude<TranscriptItem, { type: "working" }>): string
   }
 }
 
-/** A JSON final answer, formatted once it parses. A streaming answer shows as written; one that isn't JSON, as markdown. */
 function renderJsonFinalAnswer(ctx: AgentRenderContext, text: string, live: boolean): string {
   let code = unfencedJson(text);
   if (!live) {
@@ -136,7 +132,6 @@ function renderJsonFinalAnswer(ctx: AgentRenderContext, text: string, live: bool
 
 function renderMessage(ctx: AgentRenderContext, message: Extract<TranscriptItem, { type: "message" }>): string {
   const details = Object.entries(message.details).map(([label, text]) => ({ label, html: escapeHtml(text) }));
-  // A read-only pane has no activity pages to open.
   if (message.senderActivityKey && !ctx.readOnly) details.unshift({ label: "Sender", html: `<a href="${escapeHtml(backgroundActivityPath(ctx, message.senderActivityKey))}" class="agent-trace-link" data-action="agent-background#open">${escapeHtml(message.sender)}</a>` });
   if (message.dispatchedByToolCallId) details.push({ label: "Started by", html: transcriptTargetLink(ctx, message.dispatchedByToolCallId, "Tool call") });
   const body = `${message.bodyMarkdown ? `<div class="markdown agent-message-body">${markdown(ctx, message.bodyMarkdown)}</div>` : ""}${details.length ? detailTableHtml(details) : ""}`;
@@ -154,13 +149,11 @@ function renderWorkingItems(ctx: AgentRenderContext, section: WorkingTranscriptI
   return `<div id="${ids.workingItems(ctx, section.key)}">${items}</div>`;
 }
 
-/** What a collapsed turn shows of its work until it answers: its text and the messages that reached it. */
 export function workingCommentaryItems(section: WorkingTranscriptItem): TranscriptItem[] {
   if (section.completedAt !== undefined && section.hasFinalAnswer) return [];
   return section.items.filter((item) => item.type === "text" || item.type === "message");
 }
 
-/** Whether a finished turn's items load when it opens, rather than with the transcript. */
 export function workingItemsLoadLazily(ctx: AgentRenderContext, section: WorkingTranscriptItem): boolean {
   const finished = section.completedAt !== undefined || section.stoppedAt !== undefined;
   return !ctx.readOnly && Boolean(ctx.lazyCompletedWorkingItems && finished);
@@ -170,7 +163,6 @@ export function workingItemsLoadLazily(ctx: AgentRenderContext, section: Working
  * and likewise the islands of a turn whose items show inline. */
 export function renderWorkingSection(ctx: AgentRenderContext, section: WorkingTranscriptItem, commentaryHtml?: string, itemsHtml?: string): string {
   if (section.completedAt !== undefined && section.items.length === 0 && !section.timing) return "";
-  // A live commentary collection is its own region: the turn's summary ticking along must not resend it.
   const commentaryIsland = commentaryHtml !== undefined ? " data-turbo-permanent" : "";
   const summary = workingSummary(ctx, section);
   const commentary = commentaryContext(ctx);
@@ -218,7 +210,6 @@ function renderWorkingTiming(section: Omit<WorkingTranscriptItem, "items">): str
   return ` <span class="agent-working-timing" title="Wall-clock tool wait (parallel calls counted once). Output-token count and tokens per inference second, including reported thinking tokens.">(${escapeHtml(toolsLabel)}${timing.usageComplete ? `${formatTokens(timing.outputTokens)} tok` : "tokens unavailable"} @ ${escapeHtml(rate)})</span>`;
 }
 
-/** These models write short, final-quality thoughts, so they render in full rather than clamped until expanded. */
 function showsFullThinking(model?: ModelRef): boolean {
   return model?.provider === "openai-codex" && /^gpt-5\.(?:5|6)(?:$|[-.])/.test(model.id);
 }

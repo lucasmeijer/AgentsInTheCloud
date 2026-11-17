@@ -22,7 +22,6 @@ function sshEnvironment(directory: string) {
 }
 
 export async function workspaceSourceSshEnvironment(workspaceId: string, workspaceTemplateId?: string): Promise<Record<string, string>> {
-  // One module owns the signing backend for the lifetime of AgentsInTheCloud, not a workspace.
   shared ??= new SharedSshAgent(agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "ssh-signer"), async (id) => revealEffectiveSshKeys(id));
   const directory = agentDir(workspaceId);
   await shared.listen(join(directory, "agent.sock"), workspaceTemplateId);
@@ -58,7 +57,6 @@ printf '%s\\n' "$keys" | curl --noproxy '*' --fail --silent --show-error --max-t
   --data-urlencode "host=$host" --data-urlencode "port=$port" --data-urlencode 'keys@-' http://localhost/ssh/host-keys
 `;
     await writeFile(join(directory, "known-hosts-command"), command, { mode: 0o755 });
-    // Loopback is the workspace's own container, not a server the user can verify, so keep default OpenSSH behavior there.
     await writeFile(join(directory, "ssh_config"), `Host * !localhost !127.* !::1\n    KnownHostsCommand /run/agents-in-the-cloud-ssh-agent/known-hosts-command %h %p\n    UserKnownHostsFile /run/agents-in-the-cloud-ssh-agent/known_hosts /run/agents-in-the-cloud-ssh-agent/workspace_known_hosts ~/.ssh/known_hosts\n    StrictHostKeyChecking yes\n`);
     plan.containerFiles.push({ source: join(directory, "ssh_config"), target: "/etc/ssh/ssh_config.d/agents-in-the-cloud.conf" });
     plan.initScripts.push("chown root:root /etc/ssh/ssh_config.d/agents-in-the-cloud.conf; chmod 644 /etc/ssh/ssh_config.d/agents-in-the-cloud.conf");

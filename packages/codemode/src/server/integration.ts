@@ -10,7 +10,6 @@ import { codemodeTranscript } from "./transcript.ts";
 // The VM shares the server process; the limit keeps a runaway script from taking it down.
 const sandbox = new CodemodeSandbox({ memoryLimitBytes: 256 * 1024 * 1024 });
 
-/** Code mode for Builtin Agents: scripts, the calls they make, and the one-shot agents they run. */
 export const codemodeIntegration: BuiltinAgentIntegration = {
   id: "codemode",
   extension(workspaceId, models) {

@@ -16,13 +16,11 @@ const subscriptionSecrets: Record<string, SecretDefinition> = {};
 const requestTransforms = new Map<string, { transform: SecretRequestTransform; hosts: () => Promise<string[]> }>();
 const responseTransforms = new Map<string, (response: Response, request: Request) => Promise<Response>>();
 
-/** Host-owned bridges run before ordinary substitution and must register every injected secret for response scrubbing. */
 export function registerWorkspaceRequestTransform(id: string, transform: SecretRequestTransform, hosts: () => Promise<string[]> = async () => []): void {
   requestTransforms.set(id, { transform, hosts });
   invalidateContexts();
 }
 
-/** HTTPS must be decrypted before host-owned request bridges can see placeholders. */
 export async function workspaceRequestTransformMatchesHost(hostname: string): Promise<boolean> {
   for (const { hosts } of requestTransforms.values()) {
     if ((await hosts()).some((host) => matchHostname(hostname, host))) return true;
@@ -42,7 +40,6 @@ export function registerWorkspaceSubscriptionSecrets(secrets: Record<string, Sec
 
 const contexts = new Map<string, WorkspaceSecretContext>();
 let configurationGeneration = 0;
-// New requests reload hooks; existing raw CONNECT tunnels still require client reconnection.
 function invalidateContexts(): void {
   configurationGeneration++;
   contexts.clear();
@@ -87,7 +84,6 @@ export function forgetWorkspaceSecretContext(workspaceId: string): void {
   contexts.delete(workspaceId);
 }
 
-/** Public addresses, plus private network addresses of a listed exact host and port. */
 export function privateNetworkAccessAllows(destinations: readonly PrivateNetworkDestination[], { hostname, ip, port }: { hostname: string; ip: string; port: number }): boolean {
   if (isWorkspaceEgressAddress(ip)) return true;
   const requested = requestedPrivateNetworkDestination(hostname, port);

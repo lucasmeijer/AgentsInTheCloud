@@ -1,4 +1,3 @@
-/** Run the model in the server's lifetime, including crashes and forced dev reloads. */
 export function spawnTranscriptionProcess(command: string[], cacheDir: string) {
   return Bun.spawn([
     "setpriv", "--pdeathsig", "SIGKILL", "--",

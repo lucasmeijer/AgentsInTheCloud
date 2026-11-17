@@ -46,13 +46,17 @@ export default defineConfig({
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-widen-then-assert": "error",
     "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "agents-in-the-cloud/no-comments": "error",
     "agents-in-the-cloud/no-docker-exec": "error",
   },
   overrides: [
     {
-      // Tests and image scripts drive containers directly, outside the app.
       files: ["**/test/**", "**/*.test.ts", "**/*.integration.ts", "**/scripts/**", "acceptance/**", "images/**"],
       rules: { "agents-in-the-cloud/no-docker-exec": "off" },
+    },
+    {
+      files: ["packages/codex-agent/src/protocol.ts"],
+      rules: { "agents-in-the-cloud/no-comments": "off" },
     },
   ],
 });

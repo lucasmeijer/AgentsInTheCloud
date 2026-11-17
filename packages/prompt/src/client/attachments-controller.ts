@@ -17,7 +17,6 @@ function clearAgentDropTargets(): void {
 function installDropGuard(): void {
   if (dropGuardInstalled) return;
   dropGuardInstalled = true;
-  // Never let a stray file drop navigate the app away.
   window.addEventListener("dragover", (event) => {
     if (dragHasFiles(event)) event.preventDefault();
   });

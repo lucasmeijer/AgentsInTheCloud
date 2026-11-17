@@ -8,7 +8,6 @@ import { copyTextToClipboard } from "@agents-in-the-cloud/shared";
 import { Controller } from "@hotwired/stimulus";
 import { registerWorkspaceControllers } from "./workspace-controller-registry.ts";
 
-/** Applies the server's theme setting, on page load and when the shell region pushes a change. */
 class AgentsInTheCloudThemeController extends Controller<HTMLElement> {
   static values = { name: String };
   declare readonly nameValue: string;
@@ -51,7 +50,6 @@ class SettingsAutosaveController extends Controller<HTMLFormElement> {
   }
 
   save(): Promise<boolean> {
-    // Every caller joins the same drain. Only its owner starts requests or clears pending.
     return this.pending ??= Promise.resolve().then(() => this.drain()).finally(() => { this.pending = undefined; });
   }
 

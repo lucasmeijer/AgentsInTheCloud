@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 
 export interface ToggleChangeDetail {
@@ -13,7 +11,6 @@ function toggleOptions(element: HTMLElement): HTMLButtonElement[] {
   return Array.from(element.querySelectorAll<HTMLButtonElement>("button[aria-pressed][value]"));
 }
 
-/** Updates a rendered toggle without firing its user-initiated change event. */
 export function setToggleValue(element: HTMLElement, value: string): HTMLButtonElement {
   const options = toggleOptions(element);
   const selected = options.filter((option) => option.value === value);
@@ -63,7 +60,6 @@ export class ToggleController extends Controller<HTMLElement> {
     if (!selected) return;
     let label = selected.getBoundingClientRect();
     if (!this.element.classList.contains("button-toggle")) {
-      // Text indicators follow the label rather than its larger touch target.
       const range = document.createRange();
       range.selectNodeContents(selected);
       label = range.getBoundingClientRect();

@@ -30,7 +30,6 @@ export function transcriptTargetLink(ctx: AgentRenderContext, target: string, la
   return `<a href="/workspaces/${encodeURIComponent(ctx.workspaceId)}?${escapeHtml(query.toString())}" class="agent-trace-link" data-action="agent-pane#reveal" data-agent-pane-item-param="${escapeHtml(target)}" data-agent-pane-agent-param="${escapeHtml(ctx.agentId)}">${escapeHtml(label)}</a>`;
 }
 
-/** Labelled facts in the standard tool card. */
 export function detailTableHtml(rows: Array<{ label: string; html: string }>): string {
   return `<div class="agent-tool-detail"><table class="agent-detail-table"><tbody>${rows.map((row) => `<tr><th scope="row">${escapeHtml(row.label)}</th><td>${row.html}</td></tr>`).join("")}</tbody></table></div>`;
 }

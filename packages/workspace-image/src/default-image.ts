@@ -15,17 +15,14 @@ export interface DefaultWorkspaceImageContext {
 export interface EnsureDefaultImageOptions {
   docker?: DockerCommand;
   force?: boolean;
-  /** Publishing can use the same identity and preparation with a registry tag. */
   imageName?: (contentTag: string) => string;
   exists?: (image: string) => Promise<boolean>;
   build?: (context: DefaultWorkspaceImageContext, image: string) => Promise<void>;
-  /** A prepared context can be shared by publication and app build metadata. */
   context?: DefaultWorkspaceImageContext;
 }
 
 const root = join(import.meta.dir, "../../..");
 
-/** Always regenerate from the selected source checkout, defaulting to this installation. */
 export async function prepareDefaultWorkspaceImage(sourceRoot = root): Promise<DefaultWorkspaceImageContext> {
   const contextDir = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-workspace-image-"));
   const dispose = () => rm(contextDir, { recursive: true, force: true });

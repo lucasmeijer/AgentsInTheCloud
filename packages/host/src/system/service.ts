@@ -26,7 +26,6 @@ export class HostService {
   }
 }
 
-/** Only the app receives this socket mount. No privileged API on the public supervisor listener. Each connection carries one request. */
 export async function startHostService(options: { root: string; effectiveMemory: number; privateNetworkAccess: (destinations: PrivateNetworkFirewallEntry[]) => Promise<void>; socketPath?: string }) {
   const socketPath = options.socketPath ?? hostSocketPath;
   await mkdir(dirname(socketPath), { recursive: true });

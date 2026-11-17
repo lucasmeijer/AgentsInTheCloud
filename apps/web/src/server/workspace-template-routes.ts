@@ -107,7 +107,6 @@ export function createWorkspaceTemplateRoutes(deps: {
     }
     deps.invalidatePresentation();
     if (json) return jsonResponse({ workspaceTemplate });
-    // Adding a template returns to the template picker, where the new template is selected.
     if (wantsStream(request)) return turboStreamResponse(replace("workspace-template-editor-modal", '<div id="workspace-template-editor-modal"></div>'));
     return Response.redirect(new URL("/", url).toString(), 303);
   }
@@ -132,7 +131,6 @@ export function createWorkspaceTemplateRoutes(deps: {
     return workspaceTemplateSettingsResponse(request, { workspaceTemplate });
   }
 
-  /** Refresh workspace warnings except for the future-only image preload list. */
   async function workspaceTemplateSettingsResponse(request: Request, result: { workspaceTemplate: WorkspaceTemplateSummary }): Promise<Response> {
     const url = new URL(request.url);
     const concern = url.pathname.split("/")[3];
@@ -163,7 +161,6 @@ export function createWorkspaceTemplateRoutes(deps: {
     return turboStreamResponse(replace(globalWorkspaceSettingsFrameId, await renderGlobalWorkspaceSettingsFrame({ section, editor }, !deleted, url.pathname)));
   }
 
-  /** The template whose settings page made the change; global settings edited from Settings have none. */
   function editedTemplateId(scope: ConfigurationScope, url: URL): string | undefined {
     return isGlobalScope(scope) ? url.searchParams.get("workspaceTemplate") ?? undefined : scope;
   }
@@ -322,7 +319,6 @@ export function createWorkspaceTemplateRoutes(deps: {
     return configurationSettingsResponse(request, scope, "ssh", key.id, { key });
   }
 
-  /** Secrets, SSH keys, Environment variables and Private network access for a template or for all workspaces share one set of endpoints. */
   async function handleConfigurationRoute(request: Request, url: URL): Promise<Response | undefined> {
     const match = url.pathname.match(/^\/(?:workspace-templates\/([^/]+)|global-workspace-settings)\/(secrets|environment|ssh-keys|ssh-known-hosts|private-network-access|change-buckets)(?:\/([^/]+))?(?:\/(delete|public-key))?$/);
     if (!match) return undefined;

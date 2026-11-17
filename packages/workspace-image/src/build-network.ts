@@ -13,6 +13,5 @@ export function protectedRepositoryBuildCommand(resources: JsonObject, args: str
   if (resources.buildClientNetworkPolicy !== 1)
     throw new Error("Repository Dockerfile builds require System build-client network protection. Update System or use a prebuilt workspace image.");
 
-  // sh -e makes a failed migration fatal; exec and all helpers inherit membership.
   return ["sh", "-ec", 'echo $$ > /run/agents-in-the-cloud-system/build-client-processes/cgroup.procs; exec "$@"', "agents-in-the-cloud-build", ...args];
 }

@@ -102,10 +102,8 @@ class RuntimeController extends Controller {
   // Scrolling and keys over the frame never reach the host. It needs upward
   // scrolling to stop following the transcript, and keys for its shortcuts.
   private wheel = (event: WheelEvent): void => {
-    // Ctrl+wheel is pinch zoom.
     if (event.deltaY !== 0 && !event.ctrlKey) this.port?.postMessage({ type: "scroll", deltaY: event.deltaY });
   };
-  // Screen coordinates: the frame moves under the finger while the host scrolls.
   private touchStart = (event: TouchEvent): void => { this.touchY = event.touches.length === 1 ? event.touches[0]!.screenY : undefined; };
   private touchMove = (event: TouchEvent): void => {
     if (this.touchY === undefined || event.touches.length !== 1) { this.touchY = undefined; return; }
@@ -123,7 +121,6 @@ class RuntimeController extends Controller {
     const { key, code, altKey, ctrlKey, metaKey, shiftKey, repeat } = event;
     this.port?.postMessage({ type: "keydown", key, code, altKey, ctrlKey, metaKey, shiftKey, repeat });
   };
-  // The host draws the Comment button for selected text; it cannot see into this document.
   private selectionChanged = (): void => {
     cancelAnimationFrame(this.selectionFrame);
     this.selectionFrame = requestAnimationFrame(() => {
@@ -221,5 +218,4 @@ application.register("ic-runtime", RuntimeController);
 application.register("ic-tabs", TabsController);
 application.register("ic-tooltip", TooltipController);
 
-// Imported author controllers start only after the host controller is listening.
 await application.start();

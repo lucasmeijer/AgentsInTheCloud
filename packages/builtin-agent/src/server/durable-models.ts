@@ -1,6 +1,5 @@
 import type { Models } from "@earendil-works/pi-ai";
 
-/** Models that answer chat requests through `streamSimple`, and leave everything else to `models`. */
 export function withStreamSimple(models: Models, streamSimple: Models["streamSimple"]): Models {
   // ModelRuntime implements these as prototype methods; spreading it drops them.
   // Preserve its receiver (provider/auth state) while replacing the chat paths.

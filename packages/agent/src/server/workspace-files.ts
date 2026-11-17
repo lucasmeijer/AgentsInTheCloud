@@ -47,7 +47,6 @@ export async function workspaceFileEndpoint(workspaceId: string, path: string, r
 
   const range = parseRange(request.headers.get("range"), size);
   const command = range ? `tail -c +${range.start + 1} ${quoted} | head -c ${range.end - range.start + 1}` : `cat ${quoted}`;
-  // A disconnecting client cancels the response body, which stops the read.
   const proc = startInWorkspace(workspaceId, { argv: ["sh", "-c", command], user: "root" });
   const contentType = mimeByExtension[extensionOf(path)] ?? Bun.file(path).type;
   const headers = new Headers({ "content-type": contentType, "accept-ranges": "bytes", "x-content-type-options": "nosniff" });

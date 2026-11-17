@@ -5,7 +5,6 @@
  * one change, all at once, landing on the settled layout.
  */
 
-/** [left, top, width, height] in CSS pixels, or null when not visible. */
 export type Box = [number, number, number, number] | null;
 
 export interface Frame {
@@ -14,17 +13,12 @@ export interface Frame {
   terminal: Box;
   composer: Box;
   keyRow: Box;
-  /** Visible floating buttons by accessible label, measured without press transforms. */
   floating: Record<string, Box>;
   scrollTop: number | null;
-  /** Height of the transcript's content; changes when the server adds messages. */
   content: number | null;
-  /** Screen y of the transcript content's end. */
   contentBottom: number | null;
-  /** Visible composer button slots (attach, close, transcribe, send); labels change with state, slots don't. */
   buttons: string[];
   viewport: [number, number];
-  /** The document's scroll offset: iOS scrolls it to reveal a focused field. */
   pageScroll: number;
   keyboard: boolean;
   focus: string;
@@ -32,7 +26,6 @@ export interface Frame {
 
 export interface Mark { t: number; label: string }
 
-/** Installs (or resets) the per-frame sampler. Plain ES2020 so it runs in WebKit too. */
 export const samplerSource = String.raw`(() => {
   const round = (value) => Math.round(value * 10) / 10;
   const shown = (element) => Boolean(element && element.isConnected && element.checkVisibility());
@@ -89,7 +82,6 @@ export const samplerSource = String.raw`(() => {
 
 export interface Trace { frames: Frame[]; marks: Mark[] }
 
-/** One tracked quantity: a number per frame (NaN when absent). */
 interface Channel { key: string; values: number[] }
 
 const boxFields = ["left", "top", "width", "height"] as const;
@@ -102,7 +94,6 @@ function channels(frames: Frame[]): Channel[] {
     values[index] = value;
   };
   const putBox = (key: string, index: number, value: Box): void => {
-    // Absence is a value too: something that disappears changes.
     put(`${key}.visible`, index, value ? 1 : 0);
     if (value) boxFields.forEach((field, position) => put(`${key}.${field}`, index, value[position]!));
   };
@@ -135,11 +126,8 @@ function differs(a: number, b: number, tolerance: number): boolean {
 export interface CheckResult { name: string; pass: boolean; evidence: string; note?: string }
 
 export interface TransitionAnalysis {
-  /** Frames inside the analysed window. */
   window: Frame[];
-  /** For each channel that changed, the window frame indices where it changed. */
   changes: Record<string, number[]>;
-  /** Frame index (within the window) of the single change, if all changes coincide. */
   changeFrame?: number;
   truncated?: string;
 }
@@ -174,7 +162,6 @@ export function analyseTransition(trace: Trace, from: number, to = Number.POSITI
   return { window, changes, changeFrame: frames.size === 1 ? [...frames][0] : undefined, truncated };
 }
 
-/** The pass criteria common to every transition. `correction` permits one extra step (first focus, D12). */
 export function oneStepChecks(analysis: TransitionAnalysis, options: { expectChange?: boolean; correctionAllowed?: boolean } = {}): CheckResult[] {
   const { window, changes } = analysis;
   const keys = Object.keys(changes);
@@ -214,7 +201,6 @@ export function check(name: string, pass: boolean, evidence: string): CheckResul
   return { name, pass, evidence };
 }
 
-/** An SVG chart of each element's top and bottom edge over time, with the marks. */
 export function chartSvg(trace: Trace, title: string): string {
   const frames = trace.frames;
   if (frames.length < 2) return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="40"><text x="8" y="24">${escapeXml(title)}: no frames</text></svg>`;
@@ -267,7 +253,6 @@ export function chartSvg(trace: Trace, title: string): string {
     const value = min + share * (max - min);
     return `<text x="${pad.left - 6}" y="${y(value) + 3}" font-size="10" text-anchor="end">${Math.round(value)}px</text>`;
   }).join("");
-  // Frame ticks show the sampling resolution.
   const frameTicks = frames.map((frame) => `<line x1="${x(frame.t).toFixed(1)}" x2="${x(frame.t).toFixed(1)}" y1="${height - pad.bottom}" y2="${height - pad.bottom + 4}" stroke="#bbb"/>`).join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui, sans-serif">
 <rect width="100%" height="100%" fill="#fff"/><text x="${pad.left}" y="16" font-size="13" font-weight="600">${escapeXml(title)} — element edges (y, px, down is lower on screen) per frame</text>

@@ -6,7 +6,6 @@ import { join } from "node:path";
 const version = "0.1.0";
 const installations = new Map<string, Promise<string>>();
 
-/** Prefer the bundled runtime; otherwise install and cache the pinned CPU release. */
 export function ensureTranscriptionRuntime(cacheDir: string): Promise<string> {
   const bundled = Bun.which("nemo-speech");
   if (bundled) return Promise.resolve(bundled);

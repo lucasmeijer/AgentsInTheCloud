@@ -15,7 +15,6 @@ async function waitFor(check: () => Promise<boolean>): Promise<void> {
 
 async function isDead(pid: number): Promise<boolean> {
   try {
-    // A reparented zombie has already released its model memory and listener.
     return /^State:\s+Z/m.test(await readFile(`/proc/${pid}/status`, "utf8"));
   } catch (error) {
     if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ESRCH")) return true;

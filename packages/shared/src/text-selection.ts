@@ -1,14 +1,10 @@
-/// <reference lib="dom" />
-
 export interface QuotableSelection {
   range: Range;
   text: string;
   code: boolean;
-  /** The closest element holding the whole selection. */
   container: Element;
 }
 
-/** A document's selection, when it is worth quoting: not blank and not inside a form field. */
 export function quotableSelection(document: Document): QuotableSelection | undefined {
   const selection = document.getSelection();
   if (!selection?.rangeCount || selection.isCollapsed) return undefined;

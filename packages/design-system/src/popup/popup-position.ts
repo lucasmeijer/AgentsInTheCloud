@@ -1,11 +1,8 @@
-/// <reference lib="dom" />
-
 type Bounds = Pick<DOMRect, "left" | "right" | "top" | "bottom">;
 type Position = Pick<DOMRect, "left" | "top">;
 const gap = 8;
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(value, max));
 
-/** Shared top-layer positioning lifecycle for menus, selects, autocomplete, and confirmations. */
 export class PopupPosition {
   private readonly viewport = window.visualViewport!;
   private readonly resize = new ResizeObserver(() => this.position());
@@ -75,17 +72,14 @@ export class PopupPosition {
       ?? this.vertical(anchor, viewport, rtl);
     this.menu.style.left = `${position.left}px`;
     this.menu.style.top = `${position.top}px`;
-    // Grow from the nearest point to the trigger, including adjacent confirmations.
     const x = clamp(anchor.left + anchor.width / 2 - position.left, 0, this.menu.offsetWidth);
     const y = clamp(anchor.top + anchor.height / 2 - position.top, 0, this.menu.offsetHeight);
     this.menu.style.transformOrigin = `${x}px ${y}px`;
     this.menu.style.visibility = "visible";
   };
 
-  /** Prefer the nearest container that fits both controls, then the viewport. */
   private adjacent(anchor: DOMRect, viewport: Bounds, rtl: boolean): Position | undefined {
     this.menu.style.maxHeight = `${viewport.bottom - viewport.top}px`;
-    // Layout dimensions ignore the confirmation's entrance transform.
     const width = this.menu.offsetWidth;
     const height = this.menu.offsetHeight;
     const bounds: Bounds[] = [...this.ancestors()].map((parent) => parent.getBoundingClientRect());
@@ -111,7 +105,6 @@ export class PopupPosition {
     }
   }
 
-  /** Menus prefer below/above; confirmations also use this when space requires scrolling. */
   private vertical(anchor: DOMRect, viewport: Bounds, rtl: boolean): Position {
     const above = Math.max(0, anchor.top - viewport.top - gap);
     const below = Math.max(0, viewport.bottom - anchor.bottom - gap);

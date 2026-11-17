@@ -19,7 +19,6 @@ export function renderComposerBody(options: {
   inputHtml: string;
   sendHtml?: string;
   collapsible?: boolean;
-  /** A wrapping row of prompt-template-button buttons under the text field, filled from the completion catalog. */
   promptTemplateButtons?: boolean;
 }): string {
   const { draft } = options;
@@ -48,7 +47,6 @@ export function renderFloatingStack(slots: { openComposer?: string; viewSwitch?:
   return `<div class="floating-stack">${slots.followLatest ?? ""}${slots.viewSwitch ?? ""}${slots.openComposer ?? ""}</div>`;
 }
 
-/** Follow latest, for a transcript's slot in the floating stack; hidden until the transcript is scrolled away from its end. */
 export function renderFollowLatestButton(attributesHtml: string): string {
   return buttonHtml({
     type: "button", variant: "secondary",

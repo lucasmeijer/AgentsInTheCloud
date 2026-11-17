@@ -5,7 +5,6 @@ import { dialogHtml } from "@agents-in-the-cloud/design-system/dialog";
 import { agentsInTheCloudBrandIconHtml, Icons } from "@agents-in-the-cloud/design-system/icons";
 import { escapeHtml } from "@agents-in-the-cloud/shared";
 
-// Menu paths checked against the linked vendor documentation on 2026-09-08.
 const guides = [
   {
     id: "ios",

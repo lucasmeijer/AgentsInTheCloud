@@ -38,7 +38,6 @@ async function setup(pauseSpawn?: (context: Context) => Promise<void>) {
   return { owner, root, faux, open };
 }
 async function completedDeliveries(owner: DurableAgentRuntime) {
-  // Join the useful work, never the persistent background identity anchors.
   for (let round = 0; round < 5; round++) {
     const tasks = (await owner.harness.inspect(context)).tasks.filter(item => item.record.kind !== "agents-in-the-cloud.delegation-anchor");
     if (!tasks.length) return;
@@ -70,7 +69,7 @@ test("spawn, native child completion, passive parent delivery and follow-up surv
   expect(Object.values(state.receipts).map(item => item.kind).sort()).toEqual(["completion", "task"]);
   expect(Object.values(state.assignments)[0]?.result).toBe("Child result");
   expect((await owner.harness.snapshot(Mailbox, root.id, context))?.receipts[0]?.text).toBe("Child result");
-  expect(faux.state.callCount).toBe(3); // Receipt did not start an extra parent turn.
+  expect(faux.state.callCount).toBe(3);
   await owner.suspend();
   const reopened = await open();
   const restored = await reopened.agent({ agentId: "root", label: "Root", title: "Root" });
@@ -114,7 +113,7 @@ test("root Stop cancels descendants without retiring their identities", async ()
   expect(await owner.harness.snapshot(LiveDoc, root.id, context)).not.toHaveProperty("run");
   expect(other.hasStoppableWork).toBe(false);
   await root.stop();
-  await work(false); // Idle identity anchors must not keep Stop available.
+  await work(false);
   expect((await owner.catalog()).find(record => record.agentId === child.agentId)).toBeDefined();
   expect(Object.values((await owner.harness.snapshot(Delegation, context))!.assignments)[0]?.status).toBe("interrupted");
   expect((await owner.harness.inspect(context)).tasks.every(item => item.record.kind === "agents-in-the-cloud.delegation-anchor")).toBe(true);
@@ -202,7 +201,7 @@ test("pending child execution resumes after host suspension without duplicate sp
   const reopened = await open();
   const before = faux.state.callCount;
   expect(Object.values((await reopened.harness.snapshot(Delegation, context))!.assignments)[0]?.status).toBe("pending");
-  expect(faux.state.callCount).toBe(before); // Attaching remains passive.
+  expect(faux.state.callCount).toBe(before);
   faux.setResponses([fauxAssistantMessage("Recovered child result")]);
   await reopened.resume(); await completedDeliveries(reopened);
   const receipts = Object.values((await reopened.harness.snapshot(Delegation, context))!.receipts);
@@ -294,7 +293,6 @@ test("Stop also fences a native input admitted by an already-stopped dispatcher"
   const { defineTask } = await import("@earendil-works/pi-durable");
   const { DurableTaskAdmissions, WorkspaceStops, commitDurableStop } = await import("@agents-in-the-cloud/builtin-agent/server");
   const { markGatedDurableWork, settleStoppedDurableWork } = await import("@agents-in-the-cloud/builtin-agent/server/durable-lifecycle");
-  // A not-yet-installed dispatcher models the persisted outbox before execution.
   const dispatcher = defineTask<Record<string, never>, { phase: "send" }, null>({
     name: "test.late-dispatcher", version: 1, initial: () => ({ phase: "send" }),
     phases: { async send() { throw new Error("Must not execute"); } },
@@ -311,7 +309,6 @@ test("Stop also fences a native input admitted by an already-stopped dispatcher"
     await awaitWithContext(new Promise<never>(() => {}), { ...context, abortSignal: options?.signal });
     return fauxAssistantMessage("Must not finish");
   }]);
-  // Reproduce the narrow gap between persisting Stop and joining its dispatcher.
   const raw = (await owner.harness.conversation(root.id, context))!;
   const late = await raw.submit({ type: "input", requestId: "late-dispatch", content: "Old task" }, context);
   await markGatedDurableWork(owner.harness); await settleStoppedDurableWork(owner.harness);
@@ -322,7 +319,6 @@ test("Stop also fences a native input admitted by an already-stopped dispatcher"
 
 test("a script's one-shot agent is no part of delegation: not listed, addressed or given a delegation prompt", async () => {
   const { owner, root, faux } = await setup();
-  // As code mode lists one: a read-only child of the root, marked with the script call that runs it.
   const oneShot = await owner.harness.commit(async tx => {
     const created = await tx.createConversation({ ownership: { kind: "ownerless" } });
     await configure(tx, created.id, { model: { provider: "faux", modelId: "faux-1" }, instructions: "Testing native collaboration." });

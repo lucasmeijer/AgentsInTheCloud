@@ -21,6 +21,5 @@ test("listed hosts become per-bridge private IPv4 firewall entries", async () =>
     { bridge: workspaceBridgeName("beta0002"), address: "10.0.0.5", port: 6379 },
     { bridge: workspaceBridgeName("beta0002"), address: "10.0.0.6", port: 6379 },
   ]);
-  // Each host is resolved once per update, however many workspaces list it.
   expect(lookups.filter(host => host === "db.internal")).toHaveLength(1);
 });

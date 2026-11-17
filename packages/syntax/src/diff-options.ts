@@ -4,7 +4,6 @@ const changedLineCSS = `[data-line-type="change-addition"], [data-line-type="cha
 export const wordDiffCSS = `[data-line-type="change-addition"] [data-diff-span] { background-color: color-mix(in srgb, var(--diffs-addition-base) 20%, transparent); } [data-line-type="change-deletion"] [data-diff-span] { background-color: color-mix(in srgb, var(--diffs-deletion-base) 20%, transparent); }`;
 const changesLayoutCSS = `[data-code] { padding-block: 0; overflow-x: auto; }`;
 
-/** How every Pierre surface highlights code: with Highlights, in the design system's syntax palette. */
 export const pierreHighlightOptions = {
   preferredHighlighter: "highlights" as const,
   theme: agentsInTheCloudThemeName,

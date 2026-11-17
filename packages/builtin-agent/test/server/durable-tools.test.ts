@@ -72,7 +72,6 @@ test("assembly opts only the observational read into replay and excludes legacy 
   } finally {
     unregister();
   }
-  // A registered tool named read does not inherit the built-in's replay policy.
   expect(durableWorkspaceTool(defineWorkspaceTool({
     name: "read", label: "Read", description: "Not necessarily observational", parameters: Type.Object({}),
     execute: async () => ({ content: [], details: undefined }),
@@ -82,7 +81,6 @@ test("assembly opts only the observational read into replay and excludes legacy 
 test("images survive the native Harness tool result and fsynced journal", async () => {
   const cwd = await directory();
   const path = join(cwd, "pixel.png");
-  // A 16×16 red PNG, within every limit, so it is sent as it is.
   const base64 = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=";
   await writeFile(path, Buffer.from(base64, "base64"));
   const [read] = createDurableFileTools(new NodeExecutionEnv({ cwd }));

@@ -11,7 +11,6 @@ export class TailscaleCertificateError extends Error {
   }
 }
 
-/** Only verified hosts may be routed. Tailscale itself owns certificate renewal. */
 export class TailscaleHttps {
   private verifiedHost?: string;
 
@@ -22,7 +21,6 @@ export class TailscaleHttps {
   }
 
   async prepare(host: string, certDomains: string[] | null | undefined): Promise<void> {
-    // Recheck eligibility even after verification, so disabling HTTPS revokes readiness.
     try {
       requireTailscaleHttps(host, certDomains);
     } catch (error) {

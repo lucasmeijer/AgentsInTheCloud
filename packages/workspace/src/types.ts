@@ -17,7 +17,6 @@ export interface WorkspaceDockerContainerFile {
 export interface WorkspaceDockerPlan {
   image?: string;
   privileged?: boolean;
-  /** Host-authorized permission; repository manifests cannot grant it. */
   seedConfigEnabled?: boolean;
   dockerSupportSettingsUrl?: string;
   preloadImages: string[];

@@ -13,7 +13,6 @@ import { openDurableAgentRuntime, type DurableAgentRuntime } from "@agents-in-th
 import { assertNoTemplateAttachments, codemodeTemplateResponse, createCodemodeTemplates } from "@agents-in-the-cloud/builtin-agent/server/durable-codemode-templates";
 import { durableViewState, projectDurableTranscript } from "@agents-in-the-cloud/builtin-agent/server";
 import { createWorkspaceCodemodeExtension } from "../../src/server/extension.ts";
-// Importing support also makes transcripts show each script's calls as code mode records them.
 import { localScriptFiles } from "./support.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -100,7 +99,6 @@ test("a template's message gets its script as the agent's call, and only a promp
   expect(response).toMatchObject({ role: "assistant", stopReason: "toolUse", timestamp: 2, usage: { totalTokens: 0, cost: { total: 0 } } });
   expect(response.content).toEqual([{ type: "toolCall", id: expect.stringMatching(/^codemode_template_[0-9a-f]{32}$/), name: "codemode", arguments: { code: 'const args = ["hello","there"];\nconst argumentsText = "hello there";\nreturn await tools.echo({ text: argumentsText });' } }]);
   expect(codemodeTemplateResponse([{ role: "user", content: "/review", timestamp: 1 }], templates)).toBeUndefined();
-  // Messages placed together each get their call; the others are left for the model.
   const together = codemodeTemplateResponse([{ role: "user", content: "/echo one", timestamp: 1 }, { role: "user", content: "And this", timestamp: 1 }, { role: "user", content: "/echo two", timestamp: 1 }], templates)!;
   expect(together.content.map(call => call.type === "toolCall" && call.arguments.code)).toEqual([expect.stringContaining('"one"'), expect.stringContaining('"two"')]);
   expect(codemodeTemplateResponse([{ role: "user", content: "/echo", timestamp: 1 }, { role: "toolResult", toolCallId: "x", toolName: "echo", content: [], isError: false, timestamp: 2 }], templates)).toBeUndefined();
@@ -115,7 +113,6 @@ test("a code mode template runs its script without asking the model, and the nex
 
   const items = await transcript(agent);
   expect(items.find(item => item.type === "user")).toMatchObject({ text: "/echo hello there" });
-  // The template finished its turn; it wasn't stopped.
   expect(items.find(item => item.type === "working")).toMatchObject({ completedAt: expect.any(Number), stoppedAt: undefined });
   const [tool] = codemodeTools(items);
   expect(tool).toMatchObject({ status: "ok" });
@@ -155,10 +152,8 @@ test("a template's script picks up where it was after a restart, still without t
   await runtime.suspend();
   const reopened = await open();
   const restored = await reopened.agent(record);
-  // The same request finds the saved submission.
   const submission = await restored.submit({ requestId: "template", text: "/wait" });
   await reopened.resume();
-  // The interrupted hold isn't rerun; the script gets its interruption and ends.
   expect((await submission.wait(context)).status).toBe("done");
   expect(echoed).toEqual(["before the wait"]);
   expect(faux.state.callCount).toBe(0);
@@ -187,7 +182,6 @@ test("a template sent while the agent works joins that work, and the agent carri
   expect((await first.wait(context)).status).toBe("done");
   expect((await steer.status(context)).status).not.toBe("queued");
   expect(faux.state.callCount).toBe(2);
-  // Like any steering, the template ends the block it interrupted and starts its own, and the answer follows.
   const items = await transcript(agent);
   expect(items.map(item => item.type)).toEqual(["user", "working", "user", "working", "text"]);
   expect(items[2]).toMatchObject({ text: "/echo steered in" });
@@ -214,7 +208,6 @@ test("a template placed together with another message leaves that message for th
   ]);
   const first = await agent.submit({ requestId: "first", text: "First" });
   await answering.promise;
-  // Placed together when the first answer ends: one steer and one follow-up.
   const template = await agent.submit({ requestId: "template", text: "/echo together", whenBusy: "steer" });
   const other = await agent.submit({ requestId: "other", text: "And the rest", whenBusy: "followUp" });
   release.resolve();

@@ -2,7 +2,6 @@ import { WorkspaceAgents, type DurableAgentRecord } from "./durable-workspace.ts
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { defineDoc, defineEntry, InboxDoc, LiveDoc, type ConversationId, type Cursor, type Harness, type TaskId, type ToolExecutionApi, type Tx } from "@earendil-works/pi-durable";
 
-/** Separate from the identity catalog: existing journals start with open admission. */
 export const WorkspaceAdmission = defineDoc<{
   deleted: boolean;
   closed: ConversationId[];
@@ -14,7 +13,6 @@ export const WorkspaceAdmission = defineDoc<{
   checkpointWhen: () => false,
 });
 
-/** Exact work at the Stop boundary, not a permanent conversation admission gate. */
 export const WorkspaceStops = defineDoc<{ tasks: Record<string, TaskId[]> }>({
   kind: "agents-in-the-cloud.stops", version: 1, scope: "session", initial: () => ({ tasks: {} }), checkpointWhen: () => false,
 });
@@ -38,7 +36,6 @@ export const durableStopEntry = defineEntry<{ at: number }>("agents-in-the-cloud
  */
 export const durableQueueResumeEntry = defineEntry("agents-in-the-cloud.queue-resume");
 
-/** Refuses a tool's effect once its conversation is closed, or the work it belongs to was stopped. */
 export async function assertDurableToolAdmission(tx: Tx, api: Pick<ToolExecutionApi, "conversationId" | "taskId">) {
   const gates = await tx.doc(WorkspaceAdmission);
   if (gates.deleted || gates.closed.includes(api.conversationId)) throw new Error("Agent is closed");
@@ -46,13 +43,11 @@ export async function assertDurableToolAdmission(tx: Tx, api: Pick<ToolExecution
   for (let id: TaskId | undefined = api.taskId; id !== undefined; id = (await tx.task(id))?.owner) if (stopped.has(id)) throw new Error("This operation was stopped");
 }
 
-/** The same scope is used to offer Stop and to commit it. Child Stop is local. */
 export function durableStopScope(records: readonly DurableAgentRecord[], conversationId: ConversationId, tree: boolean) {
   const root = records.find(record => record.durableId === conversationId);
   return [conversationId, ...records.filter(record => tree && root && record.rootId === root.agentId).map(record => record.durableId)];
 }
 
-/** Commit intent and withdraw steering atomically, without enabling execution. */
 export async function commitDurableStop(tx: Tx, conversationId: ConversationId, tree = false) {
   const scope = durableStopScope((await tx.doc(WorkspaceAgents)).agents, conversationId, tree);
   const scopes = [];
@@ -120,7 +115,6 @@ export async function markGatedDurableWork(harness: Harness) {
   }
 }
 
-/** Readiness must precede this progress boundary; only join explicitly stopped work. */
 export async function settleStoppedDurableWork(harness: Harness) {
   const stopped = new Set(Object.values((await harness.snapshot(WorkspaceStops, BACKGROUND_CONTEXT))?.tasks ?? {}).flat());
   if (!stopped.size) return;

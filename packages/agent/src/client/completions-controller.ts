@@ -27,7 +27,6 @@ function runBuiltinSlashCommand(option: HTMLElement, input: HTMLInputElement | H
 
 type ShortcutCommand = Pick<WorkspaceClientCommand, "label" | "binding">;
 
-// Prompt-template shortcuts are ⌘⌥Letter on Apple platforms and Ctrl+Alt+Letter elsewhere.
 function promptTemplateBinding(shortcut: string, apple: boolean): string {
   return `${apple ? "Meta" : "Control"}+Alt+Key${shortcut.toUpperCase()}`;
 }
@@ -146,20 +145,16 @@ async function expandedSlashCommand(url: string, text: string): Promise<string> 
   return await response.text();
 }
 
-/** The prompt suggestion the composer offers in place of its placeholder, if any. */
 function composerSuggestion(input: HTMLInputElement | HTMLTextAreaElement): string | undefined {
   const target = input.closest(".composer")!.querySelector<HTMLElement>("[data-agent-completions-target='suggestion']");
   if (!target) return undefined;
-  // Chips still uploading count too: they will be sent.
   return composerPromptSuggestion(target.textContent!, input.form!.querySelectorAll(".agent-chip").length);
 }
 
-/** The suggestion showing in the empty composer. */
 function shownSuggestion(input: HTMLInputElement | HTMLTextAreaElement): string | undefined {
   return input.value === "" ? composerSuggestion(input) : undefined;
 }
 
-/** An empty composer's send button stops running work instead, so the suggestion can't be sent then. */
 function suggestionSendable(input: HTMLInputElement | HTMLTextAreaElement): boolean {
   return !input.closest(".composer")!.querySelector('[data-agent-stoppable="true"]');
 }
@@ -209,7 +204,6 @@ export function createAgentCompletionsController(Controller: StimulusControllerC
       const suggestionAction = suggestion === undefined ? undefined : promptSuggestionKeyAction(event, suggestionSendable(input));
       if (suggestion !== undefined && suggestionAction) {
         actions.setInputValue(suggestion);
-        // The pane sends what is now written.
         if (suggestionAction === "send") return false;
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -279,7 +273,6 @@ export function createAgentCompletionsController(Controller: StimulusControllerC
       if (this.hasSuggestionTarget) {
         this.element.removeEventListener("click", this.sendClicked);
         this.inputTarget.form!.removeEventListener("submit", this.suggestionSent);
-        // A reconnect reads the placeholder as its base again, so leave no suggestion in it.
         this.inputTarget.placeholder = `${this.placeholder}${this.inputTarget.dataset.composerSendHint ?? ""}`;
       }
       super.disconnect();
@@ -298,7 +291,6 @@ export function createAgentCompletionsController(Controller: StimulusControllerC
       this.renderSuggestion();
     }
 
-    /** The suggestion is the placeholder, so it shows exactly while the composer is empty. The send hint follows it: sending sends it. */
     private renderSuggestion(): void {
       const placeholder = `${composerSuggestion(this.inputTarget) ?? this.placeholder}${this.inputTarget.dataset.composerSendHint ?? ""}`;
       if (this.inputTarget.placeholder === placeholder) return;
@@ -308,22 +300,18 @@ export function createAgentCompletionsController(Controller: StimulusControllerC
       });
     }
 
-    /** Sending from an empty composer sends the suggestion it shows. */
     private readonly sendClicked = (event: MouseEvent): void => {
       const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[type="submit"]') : null;
       const input = this.inputTarget;
-      // Stop submits the abort form instead.
       if (button?.form !== input.form) return;
       const suggestion = shownSuggestion(input);
       if (suggestion !== undefined && suggestionSendable(input)) setTextInputValue(input, suggestion);
     };
 
-    /** A sent prompt answers the suggestion; the next one arrives after the turn. */
     private readonly suggestionSent = (): void => {
       this.suggestionTarget.replaceChildren();
     };
 
-    /** Prompt template buttons always sit in the composer, so its height never changes late. */
     private renderPromptTemplateButtons(): void {
       if (!this.hasPromptTemplateButtonsTarget) return;
       const html = labelPromptTemplateShortcuts(promptTemplateButtonHtml(this.catalogTarget.innerHTML), hooks);
@@ -341,7 +329,6 @@ export function createAgentCompletionsController(Controller: StimulusControllerC
       const initialValue = input.value;
       void expandedSlashCommand(this.urlValue, option.dataset.commandTrigger!).then((expanded) => {
         if (input.value !== initialValue || composerIsDictating(input)) return;
-        // A draft is never discarded: the template follows it.
         setTextInputValue(input, initialValue.trim() ? `${initialValue.trimEnd()}\n\n${expanded}` : expanded);
         if (!focusLikelyOpensSoftwareKeyboard()) input.focus({ preventScroll: true });
       });

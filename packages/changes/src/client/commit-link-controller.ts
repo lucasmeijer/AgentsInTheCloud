@@ -1,7 +1,6 @@
 import type { WorkspaceClientControllerConstructor } from "@agents-in-the-cloud/shared";
 
 interface CommitLinkLabel { found: boolean; html: string }
-/** Commits never change, so one lookup serves every link to them on the page. */
 const labels = new Map<string, Promise<CommitLinkLabel>>();
 
 function label(url: string): Promise<CommitLinkLabel> {
@@ -17,7 +16,6 @@ function label(url: string): Promise<CommitLinkLabel> {
   return loaded;
 }
 
-/** Fills a Markdown commit link with its server-rendered subject or range size. */
 export function createCommitLinkController(Controller: WorkspaceClientControllerConstructor) {
   return class CommitLinkController extends Controller {
     declare readonly element: HTMLAnchorElement;
@@ -39,7 +37,6 @@ export function createCommitLinkController(Controller: WorkspaceClientController
       this.shown = url;
     }
 
-    // A loaded link is browser-owned; morphing the same link would blank its label.
     preserve(event: CustomEvent<{ newElement: Element }>): void {
       const incoming = event.detail.newElement;
       if (event.target === this.element && incoming instanceof HTMLElement && incoming.dataset.commitLinkUrlValue === this.shown) event.preventDefault();

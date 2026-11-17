@@ -9,12 +9,10 @@ const withHomeLock = createProcessFileLock({
   label: "shared home initialization",
 });
 
-/** Publish a complete home once; deleted defaults are never restored on later starts. */
 export async function ensureSharedHome(): Promise<void> {
   const runtime = getAgentsInTheCloudRuntimeContext();
   const home = agentsInTheCloudDataPath(runtime, "home");
   if (existsSync(home)) return;
-  // Image acquisition can take minutes; don't hold the short-lived filesystem lock.
   const image = await ensureDefaultWorkspaceImage();
   await withHomeLock(async () => {
     if (existsSync(home)) return;
@@ -23,7 +21,6 @@ export async function ensureSharedHome(): Promise<void> {
     try {
       await requireDocker(["create", "--name", container, "--entrypoint", "/bin/true", image]);
       try {
-        // docker cp assigns files to the invoking host user, rather than the image UID.
         await requireDocker(["cp", `${container}:/opt/agents-in-the-cloud/home-defaults/.`, staging]);
       } finally {
         await requireDocker(["rm", container]);
@@ -41,7 +38,6 @@ export async function workspaceHomeMounts(workspaceId: string): Promise<Workspac
   const runtime = getAgentsInTheCloudRuntimeContext();
   const mounts: WorkspaceDockerMount[] = [{ type: "bind", source: dockerHostAgentsInTheCloudDataPath(runtime, "home"), target: "/home/agents-in-the-cloud" }];
   for (const path of [".local/share", ".local/state", ".cache"]) {
-    // Pre-create mountpoints as the host user, not as Docker's root user.
     await mkdir(agentsInTheCloudDataPath(runtime, "home", path), { recursive: true });
     await mkdir(agentsInTheCloudDataPath(runtime, "workspaces", workspaceId, "home-local", path), { recursive: true, mode: 0o700 });
     mounts.push({ type: "bind", source: dockerHostAgentsInTheCloudDataPath(runtime, "workspaces", workspaceId, "home-local", path), target: `/home/agents-in-the-cloud/${path}` });

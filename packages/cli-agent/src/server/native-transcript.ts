@@ -4,10 +4,8 @@ import { isNotFoundError } from "@agents-in-the-cloud/core";
 import type { TSchema, Static } from "typebox";
 import { Compile, type Validator } from "typebox/compile";
 
-// Histories can hold tens of thousands of rows; compiled checks are much faster than interpreted ones.
 const validators = new WeakMap<TSchema, Validator>();
 
-/** Native CLI histories are append-only; the last line can still be in flight. */
 export function* nativeJsonlRows<T extends TSchema>(jsonl: string, schema: T): Generator<Static<T>> {
   let validator = validators.get(schema);
   if (!validator) validators.set(schema, validator = Compile(schema));
@@ -43,12 +41,10 @@ async function nativeJsonlFiles(directory: string): Promise<string[]> {
   return files;
 }
 
-/** Session files in chronological order, oldest first. */
 export async function nativeSessionFiles(directory: string): Promise<string[]> {
   return (await nativeJsonlFiles(directory)).sort();
 }
 
-/** The newest session file, which a resumed CLI continues. */
 export async function latestNativeSessionFile(directory: string): Promise<string | undefined> {
   return (await nativeSessionFiles(directory)).at(-1);
 }

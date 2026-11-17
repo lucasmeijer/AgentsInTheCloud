@@ -38,7 +38,6 @@ export type CodexCommandResult =
   | { kind: "plugins"; plugins: PluginListResponse; notice?: string }
   | { kind: "apps"; apps: AppsListResponse["data"]; notice?: string };
 
-/** Native commands take precedence over prompt templates with the same trigger. */
 export function parseCodexCommand(text: string): CodexCommand | undefined {
   const match = text.trim().match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
   if (!match || !codexSlashCommands.some(command => command.name === match[1])) return;
@@ -86,7 +85,6 @@ export function parseCodexCommand(text: string): CodexCommand | undefined {
   }
 }
 
-/** Catalog inspection is repeatable; operations that change native state need durable admission. */
 export function codexCommandMutates(command: CodexCommand): boolean {
   switch (command.kind) {
     case "new": case "compact": case "fork": return true;

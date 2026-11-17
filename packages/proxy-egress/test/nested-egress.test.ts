@@ -46,12 +46,10 @@ test("nested HTTP, HTTPS and WebSocket egress preserve inherited credentials and
     const pinnedUpgrades: string[] = [];
     const parentSocket = join(directory, "parent.sock");
     const parent = await startWorkspaceEgressProxy({ socketPath: parentSocket, ca,
-      // The parent runs outside the child’s environment in a real installation.
       upstreamProxyForUrl: () => "",
       getContext: async () => ({ workspaceId: "parent", ...parentHooks, hooks: parentHooks.httpHooks }),
       upstreamDnsLookup: async name => {
         expect(name).toBe(hostname);
-        // The parent checks its own DNS result, not the child's earlier result.
         checked.push(parentAddress);
         return [{ address: parentAddress, family: 4 }];
       },
@@ -102,7 +100,6 @@ test("nested HTTP, HTTPS and WebSocket egress preserve inherited credentials and
       upstreamDnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
       upstreamFetch: (url, init) => fetch(url, { ...init, tls: { ...init.tls, ca: caPem } }),
       upstreamUpgrade: (url, options) => {
-        // Proxied CONNECT must not pretend its destination is pinned locally.
         expect(options.lookup).toBeUndefined();
         const trustedOptions = { ...options, ca: caPem };
         return requestWebSocketUpgrade(url, trustedOptions);
@@ -152,7 +149,6 @@ test("nested HTTP, HTTPS and WebSocket egress preserve inherited credentials and
     expect(websocketCredentials).toEqual([`Bearer ${value}`]);
     expect(pinnedUpgrades).toEqual(["8.8.8.8"]);
     expect(checked.length).toBeGreaterThanOrEqual(4);
-    // A child-approved public answer cannot bypass the parent's own policy.
     parentAddress = "10.1.2.3";
     const refused = await new Promise<number>((resolve, reject) => {
       request({ socketPath: childSocket, path: `http://${hostname}/private`, headers: { authorization: `Bearer ${placeholder}` } }, response => {

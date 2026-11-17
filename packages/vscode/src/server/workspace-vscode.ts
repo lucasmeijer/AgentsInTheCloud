@@ -57,7 +57,6 @@ export async function ensureWorkspaceVSCodeServer(workspaceId: string): Promise<
   if (result.exitCode !== 0) throw new Error(result.stderr.trim() || result.stdout.trim() || `could not start VS Code server for ${workspaceId}`);
 }
 
-/** Returns whether any live VS Code window of the workspace opened the file. */
 export async function openFileInConnectedVSCodeWindows(workspaceId: string, target: WorkspaceFileTarget): Promise<boolean> {
   const { file, gotoLine } = vscodeFileLocation(target);
   const result = await execWorkspaceCommand(workspaceId, ["sh", "-c", vscodeOpenFileScript(file, gotoLine)], { user: "agents-in-the-cloud" });

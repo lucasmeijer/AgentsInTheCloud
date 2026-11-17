@@ -5,12 +5,10 @@ import { agentsInTheCloudTheme } from "./theme.ts";
 
 export { languageFromPath } from "./language.ts";
 
-// Canonical names for language classes; Highlights accepts these aliases but doesn't name them.
 const aliases = new Map(Object.entries({
   ts: "typescript", js: "javascript", mjs: "javascript", cjs: "javascript", htm: "html", yml: "yaml",
   dockerfile: "docker", shell: "bash", sh: "bash", zsh: "bash", cs: "csharp", csx: "csharp", md: "markdown",
   py: "python", rb: "ruby", rs: "rust", tf: "terraform", protobuf: "proto",
-  // Highlights has no ERB lexer; the surrounding HTML is the bulk of a template.
   erb: "html",
 }));
 
@@ -26,7 +24,6 @@ function resolveLanguage(language: string | undefined): Lang | undefined {
   return isSupportedLanguage(resolved) ? resolved : undefined;
 }
 
-/** Map Highlights tokens to stable syntax roles; colors are supplied by CSS. */
 export function highlightCodeHtml(request: HighlightRequest): HighlightedCode {
   const language = resolveLanguage(request.language ?? languageFromPath(request.path));
   if (!language) return { html: escapeHtml(request.code) };

@@ -14,9 +14,7 @@ import { renderTranscriptItem, renderTranscriptItemDetailFrame } from "@agents-i
 import { type AgentRouteHandler } from "./route-support.ts";
 import type { DurableAgentRuntime } from "./durable-runtime.ts";
 
-/** Enumerate the viewer's existing share, including journals whose workspace was deleted. */
 export async function retainedDurableHistories(workspaceId: string) {
-  // Validate the external workspace identifier before reading its share metadata.
   durableJournalDirectory("projectless", workspaceId);
   // A missing init is valid for an existing projectless workspace, but an
   // arbitrary/missing viewer must not turn into access to the projectless share.
@@ -42,7 +40,6 @@ export async function retainedDurableHistories(workspaceId: string) {
   return histories;
 }
 
-/** Read-only HTTP surface: never mounts a live runtime, probes readiness, or resumes a scheduler. */
 export const handleDurableHistoryRequest: AgentRouteHandler = async (request, url, options) => {
   const match = url.pathname.match(/^\/workspaces\/([^/]+)\/agent-history(?:\/([^/]+)\/([^/]+)(?:\/(session-images|transcript-items)\/([^/]+)(?:\/(\d+))?)?)?$/);
   if (!match || request.method !== "GET") return undefined;

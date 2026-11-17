@@ -9,7 +9,6 @@ export interface WorkspaceMetadataState<State extends object> {
   delete(workspaceId: string): void;
 }
 
-/** A strict, atomically written adapter-owned state file under Workspace metadata. */
 export function createWorkspaceMetadataState<State extends object>(filename: string, parse: (value: JsonValue) => State, initial: () => State, options: { dataDir?: string } = {}): WorkspaceMetadataState<State> {
   const loaded = new Map<string, State>();
   const dataDir = options.dataDir ?? getAgentsInTheCloudRuntimeContext().agentsInTheCloudDataDir;

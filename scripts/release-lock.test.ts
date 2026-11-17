@@ -25,7 +25,6 @@ test("release lock excludes other processes and can be reacquired after closing"
       unlock();
     }
     expect(await contender(path).exited).toBe(0);
-    // A leftover lock file is not a stale lock.
     expect(await contender(path).exited).toBe(0);
   } finally {
     rmSync(directory, { recursive: true, force: true });

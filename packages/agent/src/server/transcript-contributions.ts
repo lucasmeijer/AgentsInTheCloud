@@ -9,7 +9,6 @@ export type AgentTranscriptAnchor = {
  * Anchors are resolved by the host for snapshots, lazy details and reveal requests;
  * they do not replace live tool/text DOM while it is streaming. */
 export interface AgentTranscriptSnapshot {
-  /** Messages that reached the Agent, placed by when they arrived. */
   messages: Extract<TranscriptItem, { type: "message" }>[];
   anchors: AgentTranscriptAnchor[];
   /**
@@ -17,9 +16,7 @@ export interface AgentTranscriptSnapshot {
    * `running`: the host shows its live progress, or that it was cut off when the calling tool ended first.
    */
   nested?: { toolCallId: string; calls: ToolView[] }[];
-  /** The script files code mode calls ran, by the call's ID. */
   scriptFiles?: { toolCallId: string; file: ScriptFileView }[];
-  /** Entries before this persisted marker are copied context; entries after it are local activity. */
   inheritedContext?: { boundaryEntryId: string; source: string };
 }
 
@@ -38,7 +35,6 @@ export function applyTranscriptContributions(items: TranscriptItem[], snapshot: 
     items.splice(next < 0 ? items.length : next, 0, item);
   };
   for (const item of snapshot.messages) {
-    // A message that arrives while a turn runs belongs to that turn; annotate already copied its items.
     const next = result.findIndex(candidate => time(candidate) > time(item));
     const previous = result[(next < 0 ? result.length : next) - 1];
     const end = previous?.type === "working" ? previous.completedAt ?? previous.stoppedAt : undefined;

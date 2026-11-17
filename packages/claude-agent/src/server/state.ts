@@ -1,10 +1,8 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { claudeBlocks, claudeText, claudeUserIntent, type ClaudeRow } from "./rows.ts";
 
-/** A content block Claude is still streaming, keyed by its position in the API message. */
 interface StreamingBlock { type: "text" | "thinking" | "tool_use"; text: string; id?: string; name?: string }
 
-/** A projection of Claude Code's native conversation. Committed messages replace streamed deltas. */
 export class ClaudeState {
   rows: ClaudeRow[] = [];
   streaming?: { messageId: string; startedAt: number; blocks: Map<number, StreamingBlock> };
@@ -19,7 +17,6 @@ export class ClaudeState {
    */
   merge(history: ClaudeRow[]) {
     const recorded = new Set(history.map(row => row.uuid));
-    // A slash command is recorded as Claude's own echo, not under the UUID it was sent with.
     const commands = history.flatMap(row => {
       const intent = row.kind === "user" ? claudeUserIntent(row) : undefined;
       return intent?.kind === "prompt" && intent.text.startsWith("/") ? [{ text: intent.text, timestamp: row.timestamp }] : [];
@@ -28,19 +25,16 @@ export class ClaudeState {
       const intent = row.kind === "user" ? claudeUserIntent(row) : undefined;
       return intent?.kind === "prompt" && commands.some(command => command.text === intent.text && command.timestamp >= row.timestamp - 2000);
     };
-    // A finished task is recorded under its own UUID, not the one it was announced with.
     const runs = new Set(history.flatMap(row => row.kind === "task" ? [row.runId] : []));
     this.rows = [...history, ...this.rows.filter(row => !recorded.has(row.uuid) && !echoed(row) && !(row.kind === "task" && runs.has(row.runId)))];
   }
   add(row: ClaudeRow) {
     if (!this.rows.some(existing => existing.uuid === row.uuid)) this.rows.push(row);
   }
-  /** Blocks of an API message already committed as rows; Claude commits one block per message. */
   private committedBlocks(messageId: string) {
     return this.rows.reduce((count, row) => row.kind === "assistant" && row.messageId === messageId ? count + row.content.length : count, 0);
   }
   receive(message: SDKMessage): void {
-    // Claude's own subagents report inside their Task tool, not in this conversation.
     if ("parent_tool_use_id" in message && message.parent_tool_use_id !== null) return;
     switch (message.type) {
       case "stream_event": {
@@ -61,7 +55,6 @@ export class ClaudeState {
       }
       case "assistant": {
         const content = claudeBlocks(message.message.content);
-        // A local command's output streams as a reply no model wrote; history records it as output under the same UUID.
         if (message.message.model === "<synthetic>" && message.error === undefined) {
           this.add({ kind: "output", uuid: message.uuid, timestamp: Date.now(), text: claudeText(content).trim(), error: false });
           break;
@@ -72,12 +65,10 @@ export class ClaudeState {
         break;
       }
       case "user":
-        // Prompts are added when sent. Only tool results arrive from Claude.
         if ("isReplay" in message && message.isReplay) break;
         if (message.uuid) this.add({ kind: "user", uuid: message.uuid, timestamp: Date.now(), content: claudeBlocks(message.message.content), meta: message.isSynthetic === true });
         break;
       case "system":
-        // Command output arrives as a synthetic reply.
         if (message.subtype === "compact_boundary") this.add({ kind: "compact", uuid: message.uuid, timestamp: Date.now() });
         break;
       case "result":

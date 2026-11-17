@@ -29,7 +29,6 @@ const docsMountPath = "/opt/agents-in-the-cloud/docs";
 export const agentsInTheCloudServerModule: WorkspaceModule = {
   id: "workspace",
   async initialize({ events, registerSocketHandler }) {
-    // Provisioning never outlives the app; whatever the last one left is gone.
     await clearAppTerminalProcesses();
     registerSocketHandler(terminalProcessSocket);
     await ensureSharedHome();

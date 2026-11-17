@@ -2,7 +2,6 @@ import { shellQuote } from "@agents-in-the-cloud/core";
 import type { WorkspaceAgentInput } from "@agents-in-the-cloud/shared";
 import { workspaceRoot } from "@agents-in-the-cloud/workspace";
 
-/** Resume launches restore native context without submitting a prompt. */
 export function emptyAgentInput(): WorkspaceAgentInput {
   return { text: "", images: [], attachmentNotes: [] };
 }
@@ -11,10 +10,8 @@ export function cliPromptText(input: WorkspaceAgentInput, extraNotes: string[] =
   return [input.text, ...input.attachmentNotes, ...extraNotes].filter(Boolean).join("\n\n");
 }
 
-/** Install once in shared home, then launch in tmux with visible startup diagnostics. */
 export function cliLaunchScript(options: { executable: string; label: string; npmPackage: string; version?: string; installDirectory?: string; args: string[]; setup?: string }): string {
   const { executable, label, npmPackage, version, installDirectory, args, setup = "" } = options;
-  // Pinned versions and explicit install directories must not reuse a different install from PATH.
   const directory = installDirectory ? `$HOME/${installDirectory}` : `$HOME/.${executable}-cli${version ? `/${version}` : ""}`;
   const resolveExecutable = version || installDirectory ? `executable="${directory}/node_modules/.bin/${executable}"` : `executable="$(command -v ${executable} || true)"
 case "$executable" in "$HOME"/*) ;; *) executable="$HOME/.local/bin/${executable}" ;; esac`;
@@ -43,7 +40,6 @@ cd ${shellQuote(workspaceRoot)}
 `;
 }
 
-/** Official installations own their layout and self-update without changing npm configuration. */
 export function managedCliLaunchScript(options: { agent: "codex" | "pi"; args: string[]; configOverrides?: string[]; setup?: string }): string {
   const { agent, args, configOverrides = [], setup = "" } = options;
   const label = agent === "codex" ? "Codex CLI" : "Pi";

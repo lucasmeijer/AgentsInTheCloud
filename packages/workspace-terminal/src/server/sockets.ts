@@ -14,7 +14,6 @@ export function createTerminalSocketHandler(): WorkspaceServerSocketHandler {
     if (!terminalId) return undefined;
     const terminal = (await listWorkspaceTerminals(workspaceId)).find((item) => item.id === terminalId);
     if (!terminal) throw new AgentsInTheCloudCoreError("terminal_not_found", `terminal not found: ${terminalId}`);
-    // Terminal processes have their own route, for every kind of viewer.
     if (terminal.sessionRelationship === "process") return undefined;
     return createObservableTerminalSocket({
       start: (start) => startInWorkspace(workspaceId, start),

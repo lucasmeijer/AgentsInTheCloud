@@ -296,10 +296,8 @@ describe("code mode scripts", () => {
   });
 
   test("keep string and template text exactly, whatever precedes it", async () => {
-    // Each script is an async function body of x, like code mode scripts.
     const run = (script: string) => new Function("x", `return (async () => {\n${script}\n})();`)(true);
     const scripts = {
-      // A backtick in a regex is not a template.
       regex: "const re = /`/;\nif (x) { const t = `a\n    kept`; return [re.source, t] }",
       escapedNewline: "if (x) { const t = `a\\\n    kept\n    also`; return t }",
       stringContinuation: "if (x) { const s = \"a\\\n    kept\"; return s }",

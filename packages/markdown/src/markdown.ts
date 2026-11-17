@@ -15,9 +15,7 @@ import { highlightCodeHtml } from "@agents-in-the-cloud/syntax";
 export interface MarkdownRenderOptions {
   sourcePath?: string;
   frontmatter?: boolean;
-  /** Opens linked files in this Files view instead of the workspace's preferred file viewer. */
   filesViewId?: string;
-  /** Files that inline code file references (see `markdownFileReferenceCandidates`) may link to. */
   linkableFiles?: ReadonlySet<string>;
 }
 
@@ -39,7 +37,6 @@ markdown.validateLink = (url) => /^file:\/\//i.test(url)
   ? agentsInTheCloudFileHref("", url) !== undefined
   : defaultValidateLink(url);
 
-// Only explicit http(s) URLs: fuzzy matching would link file names like README.md.
 markdown.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false, urlAuth: true });
 markdown.linkify.add("ftp:", null).add("//", null).add("mailto:", null);
 
@@ -165,7 +162,6 @@ function withoutFrontmatter(text: string): string {
   return text.replace(/^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/, "");
 }
 
-/** Absolute paths that inline code in the document may refer to; check which exist before rendering. */
 export function markdownFileReferenceCandidates(text: string, options: Pick<MarkdownRenderOptions, "sourcePath" | "frontmatter"> = {}): string[] {
   const source = options.frontmatter ? withoutFrontmatter(text) : text;
   const candidates = new Set<string>();
@@ -199,7 +195,6 @@ export function renderProvisionalMarkdownBlocks(workspaceId: string, text: strin
   let depth = 0;
   for (let index = 0; index <= tokens.length; index++) {
     const token = tokens[index];
-    // Disclosures don't nest during parsing (see details.ts), but their tokens enclose a block.
     if (token) depth += token.type === "details_open" ? 1 : token.type === "details_close" ? -1 : token.nesting;
     if (token && depth !== 0) continue;
     const html = markdown.renderer.render(tokens.slice(start, index + 1), markdown.options, environment).trim();

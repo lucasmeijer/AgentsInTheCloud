@@ -6,11 +6,9 @@ export interface ScenarioResult {
   name: string;
   description: string;
   checks: CheckResult[];
-  /** Files in the scenario folder (screenshots, video), relative to it. */
   files: string[];
 }
 
-/** One folder per run, one folder per scenario: trace JSON, chart, screenshots, and a summary. */
 export class Report {
   readonly scenarios: ScenarioResult[] = [];
 
@@ -61,7 +59,6 @@ export class ScenarioRecorder {
 
   private traces = 0;
 
-  /** Saves one transition's trace and its chart of element positions over time. */
   async trace(trace: Trace, title: string): Promise<void> {
     this.traces += 1;
     await this.file(`trace-${this.traces}.json`, JSON.stringify({ title, ...trace }));

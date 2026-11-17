@@ -89,7 +89,6 @@ ${elements.length ? `add element inet agents-in-the-cloud_workspaces private_net
  * /etc/resolv.conf to these after the firewall is installed. */
 export const tailscaleResolvers = ["100.100.100.100", "fd7a:115c:a1e0::53"];
 
-/** Private DNS is allowed only at configured resolvers on TCP/UDP port 53. */
 export function resolverAddresses(resolvConf: string): string[] {
   return resolvConf.split("\n").flatMap(line => {
     const match = /^\s*nameserver\s+(\S+)/.exec(line);
@@ -115,7 +114,7 @@ async function nft(rules: string, check = false) {
  * The caller has already created the cgroup. Only the missing-expression error
  * permits omitting client rules; every other preflight error is fatal. */
 export async function buildClientFirewallSupported(buildClientsCgroup: string): Promise<boolean> {
-  workspaceFirewallRules(buildClientsCgroup, []); // Validate before interpolation.
+  workspaceFirewallRules(buildClientsCgroup, []);
   const parts = buildClientsCgroup.split("/").filter(Boolean);
   const result = await nft(`add table inet aitc_socket_preflight
 add chain inet aitc_socket_preflight output { type filter hook output priority -10; policy accept; }
@@ -128,7 +127,6 @@ add rule inet aitc_socket_preflight output socket cgroupv2 level ${parts.length}
 
 export async function installWorkspaceFirewall(buildClientsCgroup: string, nameservers: string[]) {
   const protectBuildClients = await buildClientFirewallSupported(buildClientsCgroup);
-  // One atomic batch replaces all three family tables; Docker rules survive.
   const result = await nft(workspaceFirewallRules(buildClientsCgroup, nameservers, protectBuildClients));
   if (result.code !== 0)
     throw new Error(`Could not install workspace firewall: ${result.diagnostic}`);

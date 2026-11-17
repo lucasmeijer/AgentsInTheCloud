@@ -12,7 +12,6 @@ export interface PromptTemplate {
   prompt: string;
   composerButton?: boolean;
   shortcut?: string;
-  /** The body is a code mode script the builtin agent runs as its own call, instead of a prompt. */
   codemode?: boolean;
 }
 
@@ -48,9 +47,7 @@ function parseFrontmatter(markdown: string): ParsedPromptFrontmatter {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
     if (key === "description") frontmatter.description = value;
     if (key === "argument-hint") frontmatter.argumentHint = value;
-    // Older prompt files named this setting "quick-launch".
     if ((key === "composer-button" || key === "quick-launch") && (value === "true" || value === "false")) frontmatter.composerButton = value === "true";
-    // Older prompt files named this setting "hotkey".
     if ((key === "shortcut" || key === "hotkey") && /^[A-Za-z]$/.test(value)) frontmatter.shortcut = value.toLowerCase();
     if (key === "codemode" && (value === "true" || value === "false")) frontmatter.codemode = value === "true";
   }
@@ -142,7 +139,6 @@ export async function loadPromptTemplatesFromRoot(root: string): Promise<PromptT
   if (!byName.has("land")) {
     byName.set("land", { name: "land", trigger: "/land", description: builtinLandPrompt, prompt: builtinLandPrompt });
   }
-  // Built-in Slash commands cannot be replaced by repository Prompt templates.
   for (const command of builtinSlashCommands) byName.delete(command.name);
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -151,7 +147,6 @@ export async function listPromptTemplates(workspaceId: string): Promise<PromptTe
   return await loadPromptTemplatesFromRoot(workspaceWorkHostPath(workspaceId));
 }
 
-/** Templates for agents without code mode, which leave code mode templates out. */
 export async function listPromptOnlyTemplates(workspaceId: string): Promise<PromptTemplate[]> {
   return (await listPromptTemplates(workspaceId)).filter((template) => !template.codemode);
 }
@@ -162,7 +157,6 @@ function matchTemplate(text: string, templates: readonly PromptTemplate[]): { te
   return template ? { template, argumentsText: match[2] ?? "" } : undefined;
 }
 
-/** Code mode templates stay as typed: the builtin agent runs them when it reads the message. */
 export function expandPromptTemplateText(text: string, templates: readonly PromptTemplate[]): string {
   const matched = matchTemplate(text, templates);
   if (!matched || matched.template.codemode) return text;

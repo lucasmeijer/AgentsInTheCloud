@@ -13,7 +13,6 @@ import { delegationModels, delegationRequestIdentity } from "../../../subagents/
 import { Delegation, Mailbox, communicationStateEntry, type Receipt } from "../../../subagents/src/server/native-state.ts";
 import type { AgentMessageInput } from "../../../subagents/src/server/subagent-protocol.ts";
 
-// Exercise the production Models adapter through a real Durable journal and provider serializers.
 const envelope = "Message Type: MESSAGE\nTask name: /root\nSender: /root/review\nPayload:\nReview finished";
 const native: AgentMessageInput = { type: "agent_message", author: "/root/review", recipient: "/root", content: [{ type: "input_text", text: envelope }] };
 const token = `x.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "spike" } })).toString("base64url")}.x`;
@@ -69,7 +68,6 @@ for (const api of ["openai-codex-responses", "anthropic-messages"] as const) {
       await (await branch.submit({ type: "input", content: envelope, requestId: "fork-request" }, ctx)).wait(ctx);
       expect((await harness.snapshot(Delegation, ctx))?.receipts[receipt.id]?.prepared).toBeUndefined();
 
-      // Ordinary user text is deliberately identical to the attributed envelope.
       await (await conversation.submit({ type: "input", content: envelope, requestId: "first" }, ctx)).wait(ctx);
       await harness.close(ctx);
       harness = await open();
@@ -105,7 +103,7 @@ for (const api of ["openai-codex-responses", "anthropic-messages"] as const) {
       }
       expect((await harness.snapshot(Delegation, ctx))?.receipts[receipt.id]?.prepared?.format).toBe(api === "openai-codex-responses" ? "agent_message" : "user envelope");
       const preparation = (await reopened.entries({}, 100, undefined, ctx)).items.filter(communicationStateEntry.is);
-      expect(preparation).toHaveLength(1); // Replayed context is not another queue delivery.
+      expect(preparation).toHaveLength(1);
       expect(networkCalls).toBe(0);
     } finally {
       await harness.close(ctx);

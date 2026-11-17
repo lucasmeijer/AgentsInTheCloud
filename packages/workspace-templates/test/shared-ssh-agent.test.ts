@@ -181,7 +181,6 @@ describe("shared workspace-aware SSH agent", () => {
       expect(log).toHaveBeenCalled();
       await expect(first.request(signRequest(a.blob))).rejects.toThrow("closed");
       await expect(second.request(signRequest(b.blob))).rejects.toThrow("closed");
-      // Change authorization while the signer is down. Existing listeners remain.
       keys.set("a", []); keys.set("b", [replacement.private]);
       const [freshA, freshB, newWorkspace] = await Promise.all([client("a"), client("b"), client("new")]);
       const lists = await Promise.all([freshA.request(identities), freshB.request(identities), newWorkspace.request(identities)]);
@@ -192,7 +191,6 @@ describe("shared workspace-aware SSH agent", () => {
       expect((await freshA.request(signRequest(replacement.blob)))[0]).toBe(5);
       expect((await freshB.request(signRequest(b.blob)))[0]).toBe(5);
       expect((await freshB.request(signRequest(replacement.blob)))[0]).toBe(14);
-      // Live edits continue working after restart, including cached-key denial.
       keys.set("b", []);
       expect((await freshB.request(signRequest(replacement.blob)))[0]).toBe(5);
       keys.set("new", [a.private]);

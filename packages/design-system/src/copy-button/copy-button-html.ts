@@ -7,13 +7,10 @@ interface CopyButtonOptions {
   caption?: string;
   copyText?: string;
   disabled?: boolean;
-  /** Stimulus actions run before the copy action. */
   action?: string;
-  /** Caller-owned attributes. Attribute values containing external input must be escaped. */
   attributesHtml?: string;
 }
 
-/** Renders the canonical clipboard action with shared success feedback. */
 export function copyButtonHtml(options: CopyButtonOptions): string {
   return buttonConfirmationMarkup({
     type: "button", variant: "secondary", label: options.label,

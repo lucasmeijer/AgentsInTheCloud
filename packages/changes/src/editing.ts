@@ -4,7 +4,6 @@ export const maxChangesTextBytes = 1_000_000;
 export const maxChangesTextLines = 5_000;
 export type EditLineEnding = "lf" | "crlf";
 
-/** Mixed endings and bare CR stay read-only rather than being silently rewritten. */
 export function editLineEnding(contents: string): EditLineEnding | undefined {
   if (/\r(?!\n)/.test(contents)) return undefined;
   const crlf = contents.includes("\r\n");

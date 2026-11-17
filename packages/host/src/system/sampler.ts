@@ -13,7 +13,6 @@ export function cpuPercent(before: number, after: number, elapsedMs: number, cor
 export function effectiveCpu(limits: string[], cpus: number): number {
   return limits.reduce((limit, text) => { const [quota, period] = text.trim().split(/\s+/); return quota === "max" ? limit : Math.min(limit, Number(quota) / Number(period)); }, cpus);
 }
-/** Returns null when the filesystem has no fixed pool, like Btrfs inodes. */
 export function filesystemUsage(text: string) {
   const fields = text.trim().split("\n").at(-1)!.trim().split(/\s+/);
   if (fields.length < 6) throw new Error("Unrecognized filesystem usage output");

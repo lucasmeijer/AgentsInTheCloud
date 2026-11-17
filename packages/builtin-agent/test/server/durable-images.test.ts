@@ -13,7 +13,6 @@ import { openDurableWorkspace, type DurableWorkspace } from "../../src/server/du
 import { onValues } from "../../src/server/durable-watch.ts";
 
 const context = BACKGROUND_CONTEXT;
-// A valid 16×16 red PNG, deliberately larger than the test model's resize profile.
 const png = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=";
 const paths: string[] = [];
 const workspaces: DurableWorkspace[] = [];

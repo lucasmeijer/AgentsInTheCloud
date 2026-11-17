@@ -3,7 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Isolate dependency mocks and metadata caches; exercise the public module interface.
 async function scenario(script: string): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "cli-agent-"));
   try {

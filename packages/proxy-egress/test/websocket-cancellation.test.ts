@@ -36,7 +36,6 @@ async function stalledProxy(protocol: "http" | "https", exercise: (fixture: {
   const request = new Request("https://websocket.example.test/socket", { headers: {
     connection: "Upgrade", upgrade: "websocket", "sec-websocket-version": "13", "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
   } });
-  // Attach rejection handling immediately, including on the deliberately broken implementation.
   const result = bridgeWebSocket(request, client, Buffer.alloc(0), requestWebSocketUpgrade, value => value).then(() => undefined, (error: Error) => error);
   try {
     await exercise({ client, result, connected, closed, received: () => incoming });
@@ -65,7 +64,6 @@ test("handshake deadline rejects and closes a stalled CONNECT before the proxy r
     const error = await within(result, 32_000);
     expect(error?.message).toBe("WebSocket upstream handshake timed out");
     await within(closed, 1000);
-    // The caller must still be able to send its 502 response to the client.
     expect(client.destroyed).toBe(false);
   });
 }, 35_000);

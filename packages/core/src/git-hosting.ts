@@ -7,7 +7,6 @@ import { getAgentsInTheCloudRuntimeContext } from "./runtime-context.ts";
 
 export interface GitHostingCredential {
   token: string;
-  /** The account the token belongs to, for providers whose API needs it next to the token. */
   account?: string;
 }
 
@@ -32,32 +31,24 @@ export interface GitHostingRepositorySearch {
 }
 
 export interface GitHostingConnectForm {
-  /** Trusted HTML explaining how to create a token. */
   instructionsHtml: string;
   tokenPlaceholder: string;
   account?: { label: string; placeholder: string };
 }
 
-/** One place where people keep repositories, connected with a token that never enters a workspace. */
 export interface GitHostingProvider {
   id: string;
   label: string;
-  /** HTTPS git remotes on this host receive the token from the credential helper. */
   gitHost: string;
   gitUsername: string;
-  /** Workspace environment variable holding the token placeholder. */
   tokenEnvVar: string;
-  /** More workspace variables holding the same placeholder, for provider CLIs that read their own name. */
   tokenEnvAliases: string[];
-  /** Hosts where the egress proxy substitutes the real token. */
   tokenHosts: string[];
-  /** Verified known_hosts records trusted by default. */
   sshKnownHosts: string;
   connectForm: GitHostingConnectForm;
   credential(): GitHostingCredential | undefined;
   saveCredential(credential: GitHostingCredential): void;
   clearCredential(): void;
-  /** Non-secret workspace environment derived from the credential. */
   workspaceEnv(credential: GitHostingCredential): Record<string, string>;
   validateCredential(credential: GitHostingCredential): Promise<GitHostingValidation>;
   searchRepositories(query: string, credential: GitHostingCredential | undefined): Promise<GitHostingRepositorySearch>;
@@ -73,7 +64,6 @@ export class GitHostingRateLimitError extends Error {
   }
 }
 
-/** Short-lived lookups per credential, keyed by a hash so tokens never become map keys. */
 export function createGitHostingCache<T>(ttlMs: number): (credential: GitHostingCredential | undefined, key: string, load: () => Promise<T>) => Promise<T> {
   const entries = new Map<string, { expiresAt: number; value: T }>();
   return async (credential, key, load) => {
@@ -108,7 +98,6 @@ export function removeGitHostingCredentialFile(fileName: string): void {
   rmSync(gitHostingCredentialPath(fileName), { force: true });
 }
 
-/** Provider API responses are external input: undefined when they are not what we expect. */
 export async function parseGitHostingResponse<Schema extends TSchema>(response: Response, schema: Schema): Promise<Static<Schema> | undefined> {
   try {
     return Value.Parse(schema, await response.json());
@@ -119,7 +108,6 @@ export async function parseGitHostingResponse<Schema extends TSchema>(response: 
 
 type CredentialHelperProvider = Pick<GitHostingProvider, "gitHost" | "gitUsername" | "tokenEnvVar">;
 
-// Submodule URLs are repository-controlled, so each token is only offered to its own host.
 export function gitCredentialHelperShellBody(providers: readonly CredentialHelperProvider[]): string {
   const cases = providers.map((provider) => `    ${provider.gitHost}|${provider.gitHost}:443) username=${provider.gitUsername}; token="\${${provider.tokenEnvVar}:-}" ;;`).join("\n");
   return `test "$1" = get || exit 0

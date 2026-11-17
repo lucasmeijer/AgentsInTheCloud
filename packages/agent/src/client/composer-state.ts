@@ -9,13 +9,11 @@ export function agentComposerPrimaryAction(busy: boolean, text: string, attachme
   return busy ? busyMode : "send";
 }
 
-/** A prompt suggestion takes the composer's placeholder, unless staged attachments ask for something else. */
 export function composerPromptSuggestion(suggestion: string, attachmentCount: number): string | undefined {
   const text = suggestion.trim();
   return text && attachmentCount === 0 ? text : undefined;
 }
 
-/** What a key does to a suggestion showing in the empty composer: Tab or → writes it in, sending sends it, unless sending would stop work instead. */
 export function promptSuggestionKeyAction(event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">, sendable: boolean): "accept" | "send" | undefined {
   if (composerSubmitKey(event)) return sendable ? "send" : undefined;
   if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return undefined;

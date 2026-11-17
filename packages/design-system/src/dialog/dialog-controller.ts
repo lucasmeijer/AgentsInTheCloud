@@ -1,8 +1,5 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 
-/** Owns the native dialog lifecycle shared by server-rendered modal surfaces. */
 export class DialogController extends Controller<HTMLDialogElement> {
   private opener?: HTMLElement;
 

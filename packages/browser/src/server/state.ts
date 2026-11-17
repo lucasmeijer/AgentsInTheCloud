@@ -19,7 +19,6 @@ function parseBrowserViews(value: JsonValue): WorkspaceBrowserView[] {
 }
 
 const browserViews = createWorkspaceMetadataState("browser-work-views.json", parseBrowserViews, () => []);
-// Bumped on every navigation so re-navigating to the same URL still reloads the Browser iframe.
 const browserNavigationCounts = new Map<string, number>();
 
 function navigationCountKey(workspaceId: string, browserId: string): string {
@@ -80,7 +79,6 @@ export function normalizeBrowserUrl(input: string): string {
   } catch {
     return "";
   }
-  // Workspace files have no host; file://host would name another machine.
   if (parsed.protocol === "file:") return parsed.host ? "" : parsed.toString();
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
   if (!parsed.hostname) return "";

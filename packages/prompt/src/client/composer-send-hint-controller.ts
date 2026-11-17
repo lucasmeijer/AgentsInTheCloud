@@ -6,7 +6,6 @@ export function createComposerSendHintController(Controller: WorkspaceClientCont
   return class ComposerSendHintController extends Controller {
     declare readonly element: HTMLTextAreaElement;
 
-    // Runs once per element, unlike connect(), so moving the textarea never appends twice.
     initialize(): void {
       if (focusLikelyOpensSoftwareKeyboard()) return;
       const hint = ` · ${isApplePlatform() ? "⌘↩" : "Ctrl+↩"} to send`;

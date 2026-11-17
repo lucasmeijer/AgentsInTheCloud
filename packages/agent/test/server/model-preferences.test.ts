@@ -11,7 +11,6 @@ let dataDir: string;
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-custom-models-"));
   process.env.ATELIER_DATA_DIR = dataDir;
-  // Provider changes reach every running workspace; this instance has none.
   process.env.ATELIER_NAMESPACE = `model-preferences-${crypto.randomUUID()}`;
 });
 
@@ -30,7 +29,6 @@ describe("Agent model settings transactions", () => {
     ]);
 
     expect(await getAgentEnabledModels()).toEqual([{ provider: "openai-codex", id: "gpt-5.4", label: "My model", active: true }]);
-    // Selecting a model is a preference update, not a catalogue update.
     await setAgentModelPreference("builtin", { provider: "openai-codex", id: "not-enabled" });
     expect(await getAgentEnabledModels()).toEqual([{ provider: "openai-codex", id: "gpt-5.4", label: "My model", active: true }]);
     expect(await getAgentModelThinkingLevel("builtin", { provider: "openai-codex", id: "gpt-5.4" })).toBe("high");

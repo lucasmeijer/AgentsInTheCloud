@@ -1,6 +1,5 @@
 import { changeLayout, type ComposerQuote } from "@agents-in-the-cloud/shared";
 
-/** Height available above the arranged keyboard, or the full window when it is down. */
 export function composerViewportHeight(): number {
   const root = document.documentElement;
   const style = getComputedStyle(root);
@@ -8,7 +7,6 @@ export function composerViewportHeight(): number {
     - Number.parseFloat(style.getPropertyValue("--software-keyboard-top") || "0");
 }
 
-/** Content-sized editing, bounded by the host's height budget and the controls' minimum. */
 export function sizeComposer(composer: HTMLElement, maxComposer: number): void {
   const input = composer.querySelector<HTMLTextAreaElement>(".composer-input")!;
   if (!composer.checkVisibility()) return;
@@ -16,11 +14,8 @@ export function sizeComposer(composer: HTMLElement, maxComposer: number): void {
   const buttons = area.querySelector<HTMLElement>(":scope > .composer-buttons")!;
   const promptTemplateButtons = area.querySelector<HTMLElement>(":scope > .composer-prompt-template-buttons");
   const height = (element: HTMLElement | null): number => element?.checkVisibility() ? element.getBoundingClientRect().height : 0;
-  // Everything but the input area: thumbnails, status, footer.
   const chrome = composer.getBoundingClientRect().height - area.getBoundingClientRect().height;
-  // Measured before the probe below, which leaves the input as it found it.
   const current = input.getBoundingClientRect().height;
-  // Prompt template buttons make way as soon as there is something written.
   const hadText = composer.classList.contains("composer-has-text");
   const hasText = /\S/.test(input.value);
   // Measure without letting the pane reflow: the input area keeps its size,
@@ -32,7 +27,6 @@ export function sizeComposer(composer: HTMLElement, maxComposer: number): void {
   input.style.height = "0px";
   const content = Math.ceil(input.scrollHeight);
   const below = height(promptTemplateButtons);
-  // Buttons beside the text set its minimum; send floating over it (while typing) doesn't.
   const beside = getComputedStyle(buttons).position === "absolute" ? 0 : height(buttons);
   const minimum = Math.max(Number.parseFloat(getComputedStyle(input).minHeight) || 0, beside - below);
   const limit = Math.max(minimum, maxComposer - chrome - below);
@@ -51,12 +45,10 @@ export function sizeComposer(composer: HTMLElement, maxComposer: number): void {
   revealComposerCaret(input);
 }
 
-/** Large pastes, history recall and dictation should leave the end caret visible. */
 export function revealComposerCaret(input: HTMLTextAreaElement): void {
   if (document.activeElement === input && input.selectionEnd === input.value.length) input.scrollTop = input.scrollHeight;
 }
 
-/** Blank editor space is a typing target, but controls keep their native action. */
 export function focusComposerText(composer: HTMLElement, event: MouseEvent): void {
   const input = composer.querySelector<HTMLTextAreaElement>(".composer-input")!;
   const target = event.target instanceof Element ? event.target : null;
@@ -66,21 +58,17 @@ export function focusComposerText(composer: HTMLElement, event: MouseEvent): voi
   input.setSelectionRange(input.value.length, input.value.length);
 }
 
-/** A selection as Markdown: a blockquote that says where it came from. Code keeps its fence. */
 export function formatComposerQuote({ source, text, code }: ComposerQuote): string {
-  // Code keeps the first line's indentation; prose loses stray surrounding whitespace.
   const body = code ? text.replace(/^(?:[ \t]*\n)+|\s+$/g, "") : text.trim();
   const fence = "`".repeat(Math.max(3, ...[...body.matchAll(/`+/g)].map(run => run[0].length + 1)));
   const lines = code ? [fence, ...body.split("\n"), fence] : body.split("\n");
   return [`${source}:`, ...lines].map(line => line.trimEnd() ? `> ${line.trimEnd()}` : ">").join("\n");
 }
 
-/** Adds the quote and the start of its comment after the draft as one undoable edit, leaving the caret after them. */
 export function appendComposerQuote(input: HTMLTextAreaElement, quote: ComposerQuote, comment: string): void {
   const draft = input.value;
   const separator = !draft || draft.endsWith("\n\n") ? "" : draft.endsWith("\n") ? "\n" : "\n\n";
   input.focus({ preventScroll: true });
   input.setSelectionRange(draft.length, draft.length);
-  // Native insertion keeps the undo stack and notifies input listeners, so drafts save as typed.
   if (!document.execCommand("insertText", false, `${separator}${formatComposerQuote(quote)}\n\n${comment}`)) throw new Error("Could not add the quote to the composer.");
 }

@@ -68,7 +68,6 @@ test("selected legacy branch becomes passive native history with scoped images, 
   expect(image.headers.get("content-security-policy")).toContain("sandbox");
   expect((await controller.image(String(user.id), 0)).status).toBe(404);
   expect(await readFile(path, "utf8")).toBe(before);
-  // No Docker workspace, available model, or prompt preparation exists for this ID.
   const runtime = await getWorkspaceAgentPresentation(agent!);
   expect(runtime).toBeInstanceOf(AgentPresentation);
   expect(runtime.currentModel()).toBeUndefined();
@@ -76,7 +75,6 @@ test("selected legacy branch becomes passive native history with scoped images, 
   expect(await controller.userMessages()).toEqual(["Original input"]);
   await unloadWorkspaceAgentPresentation(workspace, record.agentId);
   const reopened = await durableWorkspaceOwner(workspace);
-  // Unload only detaches presentation; the pooled owner retains the same entries.
   expect((await (await reopened.agent(record)).historyView()).entries).toEqual(view.entries);
 });
 

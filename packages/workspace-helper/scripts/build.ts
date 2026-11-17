@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-/** Builds the helper into workspace_tools, for the platform the Docker daemon runs workspaces on. */
 import { buildGoProgram, requireDocker } from "@agents-in-the-cloud/core";
 import { fileURLToPath } from "node:url";
 

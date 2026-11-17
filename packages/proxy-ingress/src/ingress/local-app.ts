@@ -1,6 +1,5 @@
 import { isWorkspaceLoopbackHost, localhostSubdomain, type WorkspaceHttpAppBackend } from "@agents-in-the-cloud/shared";
 
-/** Only the current local app; never turn a redirect into publication of another port or *.localhost app. */
 export function isSameLocalApp(backend: WorkspaceHttpAppBackend, candidate: URL): boolean {
   const { target } = backend;
   return isWorkspaceLoopbackHost(target.hostname) && isWorkspaceLoopbackHost(candidate.hostname)
@@ -14,14 +13,12 @@ export function localAppHost(backend: WorkspaceHttpAppBackend): string {
   return `${backend.appHost ?? "localhost"}:${target.port || (target.protocol === "https:" ? "443" : "80")}`;
 }
 
-/** Translate only this hop's same-origin requests, never missing, opaque, or foreign Origins. */
 export function translateLocalAppOrigin(backend: WorkspaceHttpAppBackend, headers: Headers, receivingOrigin: string): void {
   if (headers.get("origin") !== receivingOrigin) return;
   const upstream = new URL(`${backend.target.protocol}//${localAppHost(backend)}`).origin;
   headers.set("origin", upstream);
 }
 
-/** Header-only compatibility. Response bodies and unrelated origins are untouched. */
 export function adaptLocalAppResponse(backend: WorkspaceHttpAppBackend, response: Response, publicOrigin: string): Response {
   const headers = new Headers(response.headers);
   const location = headers.get("location");
@@ -30,7 +27,6 @@ export function adaptLocalAppResponse(backend: WorkspaceHttpAppBackend, response
     base.host = localAppHost(backend);
     const destination = URL.parse(location, base);
     if (destination && isSameLocalApp(backend, destination)) {
-      // Concatenate so a path beginning with // cannot replace the public authority.
       headers.set("location", `${publicOrigin}${destination.pathname}${destination.search}${destination.hash}`);
     }
   }

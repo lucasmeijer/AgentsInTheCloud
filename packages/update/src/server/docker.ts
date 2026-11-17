@@ -54,7 +54,6 @@ export async function dockerImageInspect(reference: string, exec: DockerExec = d
   return image;
 }
 export interface SelfUpdateRuntime { currentRevision?: string; currentDigest: string; }
-/** Only System's managed app can ask its supervisor to replace it. */
 export async function detectSelfUpdateRuntime(exec: DockerExec = dockerExec, containerId = ownContainerId): Promise<SelfUpdateRuntime | undefined> {
   const id = await containerId();
   if (!id) return undefined;
@@ -65,7 +64,6 @@ export async function detectSelfUpdateRuntime(exec: DockerExec = dockerExec, con
   const image = await dockerImageInspect(container.Image, exec);
   return { currentRevision: image.Config?.Labels?.["org.opencontainers.image.revision"], currentDigest: image.RepoDigests?.find((ref) => ref.startsWith(`${appRepository}@`))?.split("@")[1] ?? image.Id };
 }
-/** Docker preserves images referenced by any container, including stopped containers. */
 export async function pruneUnusedAgentsInTheCloudImages(exec: DockerExec = dockerExec): Promise<void> {
   // Source alone also matches System and the shared Docker runtime. Only app
   // images carry both source and eagerly-preload; workspace images have a signature.
@@ -128,7 +126,6 @@ export async function prepareUpdate(reference: string, progress: (progress: Pull
   for (const image of images.values()) {
     if (image.reference !== appReference) await inspect(image.reference);
   }
-  // Keep declared mutable names usable by workspace creation, but only after all pulls succeed.
   for (const [alias, pinned] of aliases) {
     if (alias.includes("@")) continue;
     const result = await (deps.exec ?? dockerExec)(["image", "tag", pinned, alias]);

@@ -9,10 +9,8 @@ import { effectivePrivateNetworkAccess, formatPrivateNetworkDestination, onWorks
 
 type ResolveHost = (host: string) => Promise<string[]>;
 
-/** Re-resolve listed hostnames this often, so the firewall follows DNS changes. */
 const refreshInterval = 60_000;
 
-// Every sync repeats the same problems; report each one once.
 const reported = new Set<string>();
 function report(message: string): void {
   if (reported.has(message)) return;
@@ -54,7 +52,6 @@ export function startPrivateNetworkFirewallSync(events: AgentsInTheCloudEventBus
     for (const [workspaceId, workspaceTemplateId] of workspaceTemplates) workspaces.set(workspaceId, await effectivePrivateNetworkAccess(workspaceTemplateId));
     await hostRequest({ operation: "private-network-access", destinations: await privateNetworkFirewallDestinations(workspaces) });
   };
-  // One update at a time; changes arriving meanwhile coalesce into one more.
   const schedule = () => {
     if (running) { pending = true; return; }
     running = sync()
@@ -65,7 +62,6 @@ export function startPrivateNetworkFirewallSync(events: AgentsInTheCloudEventBus
       });
   };
 
-  // A workspace's bridge name is fixed by its ID, so its entries can be added before Docker creates the bridge.
   events.on("workspace_plan_prepare", ({ workspaceId, init }) => { workspaceTemplates.set(workspaceId, workspaceTemplateIdOfInit(init)); schedule(); });
   events.on("workspace_deleted", ({ workspaceId }) => { workspaceTemplates.delete(workspaceId); schedule(); });
   onWorkspaceTemplateStoreChanged(schedule);

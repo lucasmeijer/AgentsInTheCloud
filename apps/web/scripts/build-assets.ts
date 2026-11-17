@@ -130,7 +130,6 @@ async function fingerprintCssAssets(cssFiles: StaticFileRecord[]): Promise<Map<s
 }
 
 async function publishGespenstWorker(): Promise<void> {
-  // Gespenst resolves `assets/terminal-worker-*.js` relative to our `/assets/` client bundle.
   const packageJson = new URL(import.meta.resolve("@gespenst/core/package.json"));
   const packageAssets = new URL("./dist/assets/", packageJson);
   const workers = (await readdir(packageAssets)).filter((name) => /^terminal-worker-[\w-]+\.js$/.test(name));

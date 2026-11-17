@@ -8,9 +8,7 @@ interface ProgressButtonBase {
   initialContent: ProgressButtonContent;
   progressContent: ProgressButtonContent;
   variant: ButtonVariant;
-  /** Caller-owned attributes. Do not supply progress state, aria-busy, title, aria-label, data-controller, or data-action attributes here. Attribute values containing external input must be escaped. */
   attributesHtml?: string;
-  /** Stimulus controllers and actions; the button renders them alongside its own controller. */
   controllers?: string;
   actions?: string;
   type?: "button" | "submit";

@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { observableWebSocketUrl } from "@agents-in-the-cloud/observable-terminal/client";
 import { composerSubmitKey, errorMessage, focusLikelyOpensSoftwareKeyboard, notifyInputListeners, setTextInputValue, type WorkspaceClientControllerConstructor } from "@agents-in-the-cloud/shared";
 import { Type, type Static } from "typebox";
@@ -220,7 +218,6 @@ export function createDictationComposerController(Controller: WorkspaceClientCon
         this.socket?.close();
         return;
       }
-      // The streaming model holds back its last words until it hears what follows; a commit alone drops them.
       this.socket.send(new Int16Array(Math.round(sampleRate * trailingSilenceSeconds)).buffer);
       this.commitAudio();
     }
@@ -339,7 +336,6 @@ export function createDictationComposerController(Controller: WorkspaceClientCon
       const dictationStateChanged = this.element.hasAttribute("data-dictating") !== dictating;
       this.element.toggleAttribute("data-dictating", dictating);
       this.input.readOnly = dictating;
-      // Recognised words stream into the field; it can't take focus until dictation stops.
       this.input.inert = dictating;
       if (dictationStateChanged) notifyInputListeners(this.input);
       if (state === "finishing") this.setProgress(100);

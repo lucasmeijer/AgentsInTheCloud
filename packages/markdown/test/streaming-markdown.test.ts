@@ -27,7 +27,6 @@ describe("streaming Markdown", () => {
       "<details>\n<summary>S</summary>\n\n- ```js\n  x\n  ```\n\n</details>\n\nAfter\n\n",
       "<details>\n<summary>Outer</summary>\n\n- <details>\n  <summary>Inner</summary>\n\n  inner\n  </details>\n\nstill outer\n\n</details>\n\nAfter\n\n",
     ]) {
-      // Committed chunks are rendered separately, without the newlines that join blocks.
       const final = renderMarkdown(workspaceId, source).replaceAll("\n", "");
       const renderer = new StreamingMarkdownRenderer(workspaceId);
       let stable = "";

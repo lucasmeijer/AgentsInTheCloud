@@ -7,7 +7,6 @@ import { popupHtml } from "@agents-in-the-cloud/design-system/popup";
 import { dictationComposerController } from "@agents-in-the-cloud/dictation/server";
 import { domId, escapeHtml, type AgentLaunchFooterContext, type WorkspaceAgentType } from "@agents-in-the-cloud/shared";
 
-/** Host-owned launch composer content. */
 export interface AgentLaunchPresentation {
   attributesHtml: string;
   formAttributesHtml: string;
@@ -37,7 +36,6 @@ export async function renderLaunchAgentType(agentType: WorkspaceAgentType, agent
   </turbo-frame>`;
 }
 
-/** The host owns text and attachments; Agent type switches replace only the settings footer. */
 export async function launchComposerContent(options: { draftId: string; agentType: WorkspaceAgentType; agentTypes: readonly WorkspaceAgentType[]; context: AgentLaunchFooterContext; workspaceTemplateId?: string; initialPrompt: string }): Promise<AgentLaunchPresentation> {
   const { draftId } = options;
   const rowId = domId("agent_draft_attach", draftId);

@@ -35,7 +35,6 @@ async function ctr(container: string, ...args: string[]) {
   return exec(container, "ctr", "--namespace", "moby", ...args);
 }
 
-// Containerd records cache-backed layers as snapshot labels rather than symlinks.
 async function cachedLayerBlobs(container: string) {
   const keys = (await ctr(container, "snapshots", "--snapshotter", "erofs", "ls")).trim().split("\n").slice(1).map((line) => line.split(/\s+/)[0]!);
   const blobs: string[] = [];
@@ -168,7 +167,6 @@ tail -n +2 /tmp/cache-files | xargs stat -c '%n %i %Y' > /tmp/cache-before`);
   assert.match(await exec(consumer, "docker", "run", "--rm", "--network=none", "smoke:result"), /shared EROFS build works/);
   await assertNoBaseBlobs();
   assert.equal(await cacheHashes(), hashes);
-  // Failure of either managed daemon must terminate the container, not leave it healthy.
   await exec(consumer, "sh", "-c", "kill -TERM $(cat /var/run/docker.pid)");
   const exitCode = await command(["docker", "wait", consumer]);
   assert.equal(exitCode.stdout.trim(), "0");

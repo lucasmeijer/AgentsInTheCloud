@@ -6,7 +6,6 @@ import { AgentsInTheCloudCoreError } from "@agents-in-the-cloud/core";
 import { codemodeTemplateScript, type PromptTemplate } from "@agents-in-the-cloud/agent/server/prompt-templates";
 import { withStreamSimple } from "./durable-models.ts";
 
-/** Code mode calls a template made start with this, so the code mode tool can tell them from the model's own. */
 const callIdPrefix = "codemode_template_";
 
 /**
@@ -15,10 +14,8 @@ const callIdPrefix = "codemode_template_";
  */
 const origin = { api: "agents-in-the-cloud-codemode-template", provider: "agents-in-the-cloud", model: "codemode-template" } as const;
 
-/** Written when a template's call ends its run, so the transcript ends the turn there too. */
 export const codemodeTemplateRunEndEntry = defineEntry<{ callId: string }>("agents-in-the-cloud.codemode-template-run-end");
 
-/** The user messages the next response answers: those after the last message of any other kind. */
 function unansweredUserMessages(messages: readonly Message[]): Message[] {
   const start = messages.findLastIndex(message => message.role !== "user") + 1;
   return messages.slice(start);
@@ -39,14 +36,12 @@ export function codemodeTemplateResponse(messages: readonly Message[], templates
   return { role: "assistant", ...origin, content: calls, usage, stopReason: "toolUse", timestamp: now };
 }
 
-/** For a message with attachments: a template takes only its typed arguments, and an attachment would end up among them. */
 export function assertNoTemplateAttachments(text: string, templates: readonly PromptTemplate[]): void {
   if (codemodeTemplateScript(text, templates) !== undefined) {
     throw new AgentsInTheCloudCoreError("invalid_arguments", "Code mode templates can't take attachments. Remove them and send again.");
   }
 }
 
-/** How many calls the response holding `callId` made, and the user entries it answered. */
 async function answeredEntries(tx: Tx, conversationId: ConversationId, callId: string): Promise<{ calls: number; users: EntryId[] }> {
   let calls: number | undefined;
   const users: EntryId[] = [];
@@ -61,7 +56,6 @@ async function answeredEntries(tx: Tx, conversationId: ConversationId, callId: s
         continue;
       }
       if (CompactionEntry.is(entry) || ResetEntry.is(entry)) return { calls, users };
-      // Bookkeeping and system prompt entries can sit between the messages and their response.
       if (!entry.model?.some(message => message.role !== "system")) continue;
       if (entry.model.some(message => message.role !== "user")) return { calls, users };
       users.push(entry.id);
@@ -83,7 +77,6 @@ async function templateEndsRun(api: Pick<ToolExecutionApi, "callId" | "conversat
     inputs: [...(await tx.doc(LiveDoc, api.conversationId)).run?.inputs ?? []],
     ...await answeredEntries(tx, api.conversationId, api.callId),
   }), context);
-  // A call per message: every message the response answered was a template.
   if (users.length !== calls || inputs.length !== users.length) return false;
   for (const id of inputs) {
     const input = await (await harness.submission(id, context))!.status(context);
@@ -110,7 +103,6 @@ export function createCodemodeTemplates(templates: () => Promise<readonly Prompt
     },
   }) }], hooks: [hook(GenerationTask, {
     async beforeRequest(request) {
-      // Only a slash command can be a template; other requests don't read the templates.
       if (!unansweredUserMessages(request.messages).some(message => contentText(message.content).trimStart().startsWith("/"))) return undefined;
       const response = codemodeTemplateResponse(request.messages, await templates());
       if (response) responses.set(request.messages.at(-1)!, response);

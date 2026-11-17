@@ -3,7 +3,6 @@
 // body keys are never substituted, and signed credentials (AWS, Google service
 // accounts) can't work through placeholders at all.
 const defaults: ReadonlyArray<readonly [names: readonly string[], hosts: string]> = [
-  // AI and ML
   [["ANTHROPIC_API_KEY"], "api.anthropic.com"],
   [["OPENAI_API_KEY"], "api.openai.com"],
   [["GEMINI_API_KEY"], "generativelanguage.googleapis.com"],
@@ -34,7 +33,6 @@ const defaults: ReadonlyArray<readonly [names: readonly string[], hosts: string]
   [["E2B_API_KEY"], "api.e2b.app, api.e2b.dev"],
   [["BROWSERBASE_API_KEY"], "api.browserbase.com"],
   [["WANDB_API_KEY"], "api.wandb.ai"],
-  // Search, agent tooling and vector databases
   [["TAVILY_API_KEY"], "api.tavily.com"],
   [["EXA_API_KEY"], "api.exa.ai"],
   [["BRAVE_API_KEY", "BRAVE_SEARCH_API_KEY"], "api.search.brave.com"],
@@ -45,7 +43,6 @@ const defaults: ReadonlyArray<readonly [names: readonly string[], hosts: string]
   [["PINECONE_API_KEY"], "*.pinecone.io"],
   [["QDRANT_API_KEY"], "*.cloud.qdrant.io"],
   [["WEAVIATE_API_KEY", "WCD_API_KEY"], "*.weaviate.cloud, *.weaviate.network"],
-  // Code, packages and registries
   [["GITHUB_TOKEN", "GH_TOKEN"], "github.com, api.github.com, uploads.github.com"],
   [["GITLAB_TOKEN"], "gitlab.com"],
   [["BITBUCKET_TOKEN", "BITBUCKET_API_TOKEN"], "bitbucket.org, api.bitbucket.org"],
@@ -57,7 +54,6 @@ const defaults: ReadonlyArray<readonly [names: readonly string[], hosts: string]
   [["DOCKERHUB_TOKEN", "DOCKER_HUB_TOKEN"], "auth.docker.io"],
   [["EXPO_TOKEN"], "api.expo.dev"],
   [["TFE_TOKEN"], "app.terraform.io"],
-  // CI, code quality and observability
   [["SENTRY_AUTH_TOKEN"], "sentry.io, *.sentry.io"],
   [["DD_API_KEY", "DATADOG_API_KEY"], "*.datadoghq.com, *.datadoghq.eu"],
   [["NEW_RELIC_API_KEY"], "api.newrelic.com, api.eu.newrelic.com"],
@@ -69,7 +65,6 @@ const defaults: ReadonlyArray<readonly [names: readonly string[], hosts: string]
   [["CODECOV_TOKEN"], "codecov.io, api.codecov.io, ingest.codecov.io"],
   [["SNYK_TOKEN"], "api.snyk.io, snyk.io"],
   [["VIRUSTOTAL_API_KEY", "VT_API_KEY"], "www.virustotal.com"],
-  // Hosting, cloud and data
   [["CLOUDFLARE_API_TOKEN"], "api.cloudflare.com"],
   [["VERCEL_TOKEN"], "api.vercel.com"],
   [["NETLIFY_AUTH_TOKEN"], "api.netlify.com"],
@@ -87,13 +82,11 @@ const defaults: ReadonlyArray<readonly [names: readonly string[], hosts: string]
   [["TURSO_AUTH_TOKEN"], "*.turso.io"],
   [["UPSTASH_REDIS_REST_TOKEN"], "*.upstash.io"],
   [["ALGOLIA_API_KEY"], "*.algolia.net, *.algolianet.com"],
-  // Auth, payments and commerce
   [["CLERK_SECRET_KEY"], "api.clerk.com"],
   [["STRIPE_SECRET_KEY", "STRIPE_API_KEY"], "api.stripe.com, files.stripe.com"],
   [["PADDLE_API_KEY"], "api.paddle.com, sandbox-api.paddle.com"],
   [["LEMONSQUEEZY_API_KEY"], "api.lemonsqueezy.com"],
   [["SHOPIFY_ACCESS_TOKEN"], "*.myshopify.com"],
-  // Messaging and email
   [["SLACK_BOT_TOKEN", "SLACK_TOKEN"], "slack.com"],
   [["DISCORD_BOT_TOKEN", "DISCORD_TOKEN"], "discord.com"],
   [["TELEGRAM_BOT_TOKEN"], "api.telegram.org"],
@@ -104,7 +97,6 @@ const defaults: ReadonlyArray<readonly [names: readonly string[], hosts: string]
   [["RESEND_API_KEY"], "api.resend.com"],
   [["MAILCHIMP_API_KEY"], "*.api.mailchimp.com"],
   [["BREVO_API_KEY"], "api.brevo.com"],
-  // Productivity and SaaS
   [["LINEAR_API_KEY"], "api.linear.app"],
   [["NOTION_API_KEY", "NOTION_TOKEN"], "api.notion.com"],
   [["ATLASSIAN_API_TOKEN", "JIRA_API_TOKEN", "CONFLUENCE_API_TOKEN"], "*.atlassian.net, api.atlassian.com"],

@@ -59,9 +59,7 @@ interface EditorFormOptions {
 interface EditorLocation { section: TemplateSettingsSection; editor?: string }
 const editorKey = (section: TemplateSettingsSection, editor?: string) => `${section}:${editor ?? ""}`;
 
-/** Renders the editors for one scope's records: where their forms post and which editor is open or just saved. */
 interface Editors {
-  /** Global sections are prefixed so their editors stay distinct within a template's settings. */
   section(name: ConfigurationSectionName): TemplateSettingsSection;
   form(path: string, contents: string, options: EditorFormOptions): string;
   disclosure(section: TemplateSettingsSection, editor: string | undefined, label: string, contents: string, description?: string, attributesHtml?: string): string;
@@ -69,7 +67,6 @@ interface Editors {
   actionUrl(path: string): string;
 }
 
-/** viewTemplateId is the template whose settings page shows global records, which re-renders after their changes. */
 function editors(scope: ConfigurationScope, location: EditorLocation, saved: boolean, viewTemplateId?: string): Editors {
   const base = isGlobalScope(scope) ? globalWorkspaceSettingsPath : `/workspace-templates/${encodeURIComponent(scope)}`;
   const query = viewTemplateId ? `?workspaceTemplate=${encodeURIComponent(viewTemplateId)}` : "";
@@ -103,7 +100,6 @@ function selection(label: string, name: string, value: string, options: { value:
   return `<div class="form-section"><span>${label}</span><input type="hidden" name="${name}" value="${value}">${toggleHtml({ variant: "button", label, name, value, options, element: { dataAction: `change->settings-editor#toggleChanged` } })}</div>`;
 }
 
-/** The other list of records; a Secret or Environment variable named in both is labelled with describe. */
 interface Counterpart { records: ScopeConfiguration; describe(name: string): string }
 
 function secretEditor(e: Editors, secret?: WorkspaceTemplateSecretSummary): string {
@@ -175,7 +171,6 @@ function assertRecordExists(e: Editors, records: ScopeConfiguration, { section, 
   if (section === e.section("secrets") && !records.secrets.some(secret => secret.id === editor) || section === e.section("environment") && !records.environment.some(variable => variable.id === editor) || section === e.section("ssh") && editor !== "known-hosts" && !records.sshKeys.some(key => key.id === editor)) throw invalidArguments("Settings record not found");
 }
 
-/** Every setting of one scope, including its change bucket text. */
 type ScopeSettings = ScopeConfiguration & { changeBuckets: string };
 async function scopeSettings(scope: ConfigurationScope): Promise<ScopeSettings> {
   const [records, changeBuckets] = await Promise.all([getConfiguration(scope), getChangeBuckets(scope)]);
@@ -240,7 +235,6 @@ export async function renderTemplateSettings(id: string, location: TemplateSetti
   </div>`;
 }
 
-/** Global workspace settings as their own editor frame, shown in app Settings. */
 export async function renderGlobalWorkspaceSettingsFrame(location: TemplateSettingsLocation = {}, saved = false, submittedPath?: string): Promise<string> {
   const records = await scopeSettings(globalWorkspaceConfiguration);
   const section = sectionFor(location.section);

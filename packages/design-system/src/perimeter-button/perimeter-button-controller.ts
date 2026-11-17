@@ -1,6 +1,5 @@
 import { Controller } from "@hotwired/stimulus";
 
-/** Crossfading labels may overlap visually, but only the current label is accessible. */
 export class PerimeterButtonController extends Controller<HTMLButtonElement> {
   private observer = new MutationObserver(() => this.syncLabels());
 

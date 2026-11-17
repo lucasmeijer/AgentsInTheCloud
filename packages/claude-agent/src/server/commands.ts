@@ -3,7 +3,6 @@ import type { BuiltinSlashCommand } from "@agents-in-the-cloud/agent/server/buil
 import type { SlashCommand } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudeSessionSummary } from "./rows.ts";
 
-/** Commands AgentsInTheCloud runs itself, besides /new, /name and /park; every other slash command goes to Claude Code. */
 export const claudeAgentCommands = [
   { kind: "builtin", source: "claude", name: "resume", trigger: "/resume", description: "Choose a saved Claude Code conversation.", argumentHint: "[session-id]", preserveArguments: true },
   { kind: "builtin", source: "claude", name: "fork", trigger: "/fork", description: "Continue in a copy of this conversation." },
@@ -11,14 +10,12 @@ export const claudeAgentCommands = [
 ] as const satisfies readonly BuiltinSlashCommand[];
 const handledElsewhere = new Set(["new", "resume", "fork", "name", "park", "model"]);
 
-/** Claude's own commands for the completion menu; its interactive-only ones are not offered headless, and the repository's Prompt templates replace same-named ones. */
 export function claudeNativeCommands(commands: readonly SlashCommand[], templateNames: ReadonlySet<string>): BuiltinSlashCommand[] {
   return commands.filter(command => !handledElsewhere.has(command.name) && !templateNames.has(command.name)).map(command => ({
     kind: "builtin", source: "claude", name: command.name, trigger: `/${command.name}`, description: command.description, argumentHint: command.argumentHint || undefined, preserveArguments: true,
   }));
 }
 
-/** Claude Code session IDs and the prompt UUIDs it records. */
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type ClaudeCommand = { kind: "new" | "fork" } | { kind: "resume"; sessionId?: string } | { kind: "model"; model: string };
@@ -28,7 +25,6 @@ export function parseClaudeCommand(text: string): ClaudeCommand | undefined {
   const match = text.trim().match(/^\/(new|fork|resume|model)(?:\s+([\s\S]*))?$/);
   if (!match) return undefined;
   const args = match[2]?.trim() ?? "";
-  // The model control below the prompt owns the selection; typing /model uses the same path.
   if (match[1] === "model") {
     if (!/^[\w.-]+$/.test(args)) throw invalidArguments("Use /model with a model name, such as /model opus");
     return { kind: "model", model: args };

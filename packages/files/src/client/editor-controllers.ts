@@ -9,10 +9,9 @@ function createFileEditorNavigationController(Controller: WorkspaceClientControl
     declare readonly lineValue: number;
     declare readonly columnValue: number;
     requestValueChanged(): void {
-      // Deliver the position after the permanent editor has been restored.
       queueMicrotask(() => {
         const editor = document.getElementById(this.editorValue);
-        if (!editor) return; // The surface may have been removed before this callback.
+        if (!editor) return;
         editor.dataset.fileEditorLineValue = String(this.lineValue);
         editor.dataset.fileEditorColumnValue = String(this.columnValue);
         editor.dataset.fileEditorPositionRequestValue = this.requestValue;

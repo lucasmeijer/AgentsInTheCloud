@@ -2,15 +2,12 @@ import type { ChangesCommit } from "./history-model.ts";
 export interface AncestryEdge { from: string; to: string }
 
 export type ComparisonCommit = Pick<ChangesCommit, "id" | "parents">;
-/** Omit base for a single commit: its first parent is the base. */
 export interface DiffEndpoints { target: string; base?: string | null }
 export interface ResolvedDiffEndpoints {
   base: string | null;
   target: string;
   implicitBase: boolean;
-  /** ALL nodes on directed routes from Base to Target, excluding Base. */
   path: string[];
-  /** Real parent edges from loaded path nodes, including edges INTO Base. */
   trace: AncestryEdge[];
   selectedRows: string[];
 }
@@ -70,7 +67,6 @@ export function resolveDiffEndpoints(commits: readonly ComparisonCommit[], endpo
   const pathIds = new Set(path), loadedIds = new Set(loaded);
   const trace = commits.flatMap(commit => loadedIds.has(commit.id) && pathIds.has(commit.id)
     ? commit.parents.filter(parent => corridor.has(parent)).map(parent => ({ from: commit.id, to: parent })) : []);
-  // An inferred parent defines the diff and path, not an explicit user selection.
   const selectedRows = loaded.filter(id => id === target || (endpoints.base !== undefined && id === base));
   return { base, target, implicitBase: endpoints.base === undefined, path, trace, selectedRows };
 }

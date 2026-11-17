@@ -1,6 +1,5 @@
 import type { WorkspaceClientControllerConstructor } from "@agents-in-the-cloud/shared";
 
-/** Priorities are declared in markup: lower numbers yield space first. */
 export function createAgentFooterController(Controller: WorkspaceClientControllerConstructor) {
   return class AgentFooterController extends Controller {
     private resizeObserver!: ResizeObserver;
@@ -55,11 +54,9 @@ export function createAgentFooterController(Controller: WorkspaceClientControlle
       }
       if (thinking && required() > available) {
         const width = thinking.getBoundingClientRect().width - (required() - available);
-        // Reuse the control's height as its minimum usable width, including touch sizing.
         thinking.hidden = width < thinking.getBoundingClientRect().height;
         if (!thinking.hidden) thinking.style.maxWidth = `${width}px`;
       }
-      // A model wider than the entire pane stays full width and can be scrolled.
       footer.style.overflowX = required() > available ? "auto" : "hidden";
     }
   };

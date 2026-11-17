@@ -61,19 +61,16 @@ export function installDetails(markdown: MarkdownIt): void {
   markdown.renderer.rules.details_close = () => `${disclosureClosingHtml}\n`;
 }
 
-/** A line's text without its container indentation, unless it is indented code. */
 function blockLine(state: StateBlock, line: number): string | undefined {
   if (state.sCount[line]! - state.blkIndent >= 4) return undefined;
   return state.src.slice(state.bMarks[line]! + state.tShift[line]!, state.eMarks[line]);
 }
 
-/** Whether the current container, or optionally any enclosing one, has an open disclosure. */
 function hasOpenDetails(state: StateBlock, includeEnclosing: boolean): boolean {
   let level = state.level;
   let closed = 0;
   for (let index = state.tokens.length - 1; index >= 0; index--) {
     const token = state.tokens[index]!;
-    // Nested containers' tokens sit at deeper levels; a shallower token opens this container.
     if (token.level > level) continue;
     if (token.level < level) {
       if (!includeEnclosing) return false;
@@ -86,7 +83,6 @@ function hasOpenDetails(state: StateBlock, includeEnclosing: boolean): boolean {
   return false;
 }
 
-/** A disclosure still open when its container ends closes there, as one being streamed does. */
 function closeAtContainerEnd(state: StateCore): void {
   const tokens: Token[] = [];
   const open: ("container" | "details")[] = [];
@@ -108,7 +104,6 @@ function closeAtContainerEnd(state: StateCore): void {
   state.tokens = tokens;
 }
 
-/** Disclosure summaries are plain-text labels, so inline Markdown contributes only its text. */
 function plainText(markdown: MarkdownIt, source: string): string {
   const text = (tokens: Token[]): string => tokens.map(token => token.children ? text(token.children) : token.type === "text" || token.type === "code_inline" ? token.content : "").join("");
   return text(markdown.parseInline(source, {})).trim() || "Details";

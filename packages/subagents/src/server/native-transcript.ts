@@ -13,13 +13,11 @@ export function nativeDelegationTranscript(view: Pick<ConversationView, "entries
     if (communicationStateEntry.is(entry) && incoming.has(entry.data.id)) Object.assign(incoming.get(entry.data.id)!, entry.data.change);
   }
   const inherited = view.entries.find(inheritedBoundaryEntry.is);
-  // The call that gave the sender its latest task, such as spawn_agent or followup_task.
   const dispatch = (receipt: Receipt) => sent.findLast(task => task.kind === "task" && task.to === receipt.from && task.timestamp <= receipt.timestamp)?.callId;
   const messages = [...incoming.values()].map(receipt => ({ receipt, dispatch: dispatch(receipt) }));
   return { inheritedContext: inherited ? { boundaryEntryId: String(inherited.id), source: inherited.data.source } : undefined, anchors: sent.flatMap<AgentTranscriptAnchor>(receipt => receipt.callId ? [{ anchor: receipt.id, target: { toolCallId: receipt.callId } }]  : receipt.sourceEntry === undefined ? [] : [{ anchor: receipt.id, target: { entryId: String(receipt.sourceEntry) } }]), messages: messages.map(({ receipt, dispatch }) => ({
     type: "message", key: receipt.id, anchor: receipt.id, timestamp: receipt.timestamp,
     sender: receipt.author, title: receipt.kind, bodyMarkdown: receipt.text, dispatchedByToolCallId: dispatch,
-    // A subagent this Agent gave work to is one of its background activities.
     senderActivityKey: dispatch ? receipt.from : undefined,
     details: {
       Handling: receipt.handling === "idle-task" ? "Starts a turn" : receipt.handling === "idle-message" ? "Waits for the next turn" : receipt.handling === "waiting" ? "Wakes the agent’s wait" : "Queued for the next model boundary",

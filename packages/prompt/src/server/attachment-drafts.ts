@@ -32,7 +32,6 @@ export function validDraftId(draftId: string): boolean {
   return /^[a-zA-Z0-9_-]{8,80}$/.test(draftId);
 }
 
-/** Stable composer draft identity for one immutable Workspace/Agent pair. */
 export function agentAttachmentDraftId(workspaceId: string, agentId: string): string {
   const digest = createHash("sha256").update(JSON.stringify([workspaceId, agentId])).digest("hex");
   return `agent-${digest}`;
@@ -139,7 +138,6 @@ async function deliverFileAttachment(workspaceId: string, staged: StagedAttachme
   return `[Attached file copied into the workspace at ${target}]`;
 }
 
-/** Copy a staged attachment to a caller-owned path in its workspace. */
 export async function copyAttachmentIntoWorkspace(workspaceId: string, staged: StagedAttachment, target: string): Promise<void> {
   const content = await readFile(staged.path);
   const result = await execWorkspaceShell(

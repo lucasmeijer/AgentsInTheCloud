@@ -10,12 +10,9 @@ import { WorkspaceFileSystem } from "@agents-in-the-cloud/builtin-agent/server/d
 import { resolveScript, scriptFileDescription, type ReadScriptFile } from "./script-file.ts";
 
 const textSchema = Type.String();
-/** A tool with a structured output schema whose value carries its output, such as bash's. */
 const outputValueSchema = Type.Object({ output: Type.String() });
-/** A schema-less tool's output with several items; images are not text. */
 const contentListSchema = Type.Array(Type.Union([Type.Object({ type: Type.Literal("text"), text: Type.String() }), Type.Object({ type: Type.String() })]));
 const imageBlockSchema = Type.Object({ type: Type.Literal("image"), data: Type.String() });
-/** Larger arguments are left out of a call's record. */
 const maxRecordedArgumentsChars = 64 * 1024;
 
 export type CallStart = { phase: "start"; name: string; arguments?: JsonValue };
@@ -30,12 +27,10 @@ export type CallEnd = { phase: "end"; isError: boolean; cancelled: boolean; dura
 export type CodemodeCallRecord = { callId: string; key: string } & (CallStart | CallEnd);
 export const codemodeCallEntry = defineEntry<CodemodeCallRecord>("agents-in-the-cloud.codemode-call");
 
-/** A value as JSON for people to read: image data, which is long and unreadable, shows as its length. */
 function displayJson(value: JsonValue, indent?: number): string {
   return JSON.stringify(value, (_key: string, item: JsonValue) => Value.Check(imageBlockSchema, item) ? { ...item, data: `${item.data.length} base64 characters` } : item, indent);
 }
 
-/** The text a nested call gave the script: its output, or the value it returned as JSON. */
 function outputText(structuredOutput: NestedToolExecutionResult["structuredOutput"]): string | undefined {
   if (structuredOutput === undefined) return undefined;
   if (Value.Check(textSchema, structuredOutput)) return structuredOutput;
@@ -59,24 +54,20 @@ function callEnd(result: NestedToolExecutionResult): CallEnd {
   return end;
 }
 
-/** A finished call's details as the transcript shows them; a cancelled call counts as aborted. */
 export function callEndDetails(end: CallEnd): ToolViewDetails | undefined {
   const details = isToolViewDetails(end.details) ? end.details : undefined;
   return end.cancelled ? { ...details, aborted: true } : details;
 }
 
-/** How a call ended, for the model, in the words its row in the transcript uses. */
 function endSummary(end: CallEnd): string {
   const outcome = toolOutcomeLabel(callEndDetails(end), end.isError);
   return outcome === "failed" ? `failed: ${(end.error ?? end.output ?? "").split("\n")[0]!.slice(0, 200)}` : outcome || "ok";
 }
 
-/** A code mode call's API, recording each call its script makes, with a line of running output as it starts and ends. */
 function recordingCalls(api: ToolExecutionApi): ToolExecutionApi {
   return {
     ...api,
     async executeTool(name, toolArgs, callContext, options) {
-      // Code mode names each call `c<VM call id>`, so a rerun after a restart reattaches to it.
       const key = options?.key;
       if (key === undefined) throw new Error("Code mode calls tools by key");
       const record = (data: CallStart | CallEnd) => api.commit(async tx => {
@@ -101,7 +92,6 @@ function recordingCalls(api: ToolExecutionApi): ToolExecutionApi {
  */
 export function createWorkspaceCodemodeExtension(workspaceId: string, sandbox: CodemodeSandbox, readScriptFile: ReadScriptFile): Extension {
   const extension = createCodemodeExtension({ sandbox });
-  // Code mode saves the images a script shows to files in the workspace, so the agent can use them later.
   const env = new WorkspaceFileSystem(workspaceId);
   return { ...extension, tools: extension.tools?.map(tool => tool.name !== CODEMODE_TOOL_NAME ? tool : {
     ...tool,

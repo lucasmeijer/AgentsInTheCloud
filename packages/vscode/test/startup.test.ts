@@ -9,7 +9,6 @@ import { vscodeStartupScript } from "../src/server/startup.ts";
 async function runStartup(port: number, identity?: { executable: string; entry: string }) {
   const directory = await mkdtemp(join(tmpdir(), "vscode-startup-"));
   try {
-    // A launcher sentinel makes any attempt to start over a conflicting service visible.
     const launcher = join(directory, "launcher");
     await writeFile(launcher, `#!/bin/sh\necho launched > '${directory}/launched'\nexit 42\n`, { mode: 0o755 });
     const script = vscodeStartupScript(join(directory, "workspace.code-workspace"))

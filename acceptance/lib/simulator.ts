@@ -10,7 +10,6 @@ import { samplerSource, type Trace } from "./trace.ts";
 const viewer = "http://localhost:4101";
 
 export class Simulator {
-  /** Portrait screen size in points; taps are normalized against the current orientation. */
   screen = { width: 393, height: 852 };
 
   private constructor(readonly udid: string, readonly root: string, private readonly token: string, private readonly touches: WebSocket) {}
@@ -18,9 +17,7 @@ export class Simulator {
   static async connect(): Promise<Simulator> {
     // SAFETY: serve-sim's viewer /api contract (see the ios-serve-sim skill).
     const api = await (await fetch(`${viewer}/api`)).json() as { device: string; execToken: string; serveSimBin: string; wsUrl: string };
-    // The managed workspace directory on the Mac: …/workspaces/<id>/npm/node_modules/.bin/serve-sim
     const root = api.serveSimBin.replace(/\/npm\/node_modules\/\.bin\/serve-sim$/, "");
-    // One upstream WebSocket for touches, as serve-sim's own tap command uses.
     const touches = new WebSocket(api.wsUrl);
     touches.binaryType = "arraybuffer";
     await new Promise((resolve, reject) => { touches.onopen = resolve; touches.onerror = reject; });
@@ -35,7 +32,6 @@ export class Simulator {
     this.touches.send(message);
   }
 
-  /** Taps at screen points (393×852 on an iPhone 15 Pro in portrait). */
   async tap(x: number, y: number): Promise<void> {
     this.touch("begin", x, y);
     await Bun.sleep(40);
@@ -43,7 +39,6 @@ export class Simulator {
     await Bun.sleep(30);
   }
 
-  /** A vertical swipe, as a finger scrolling content. */
   async swipe(x: number, fromY: number, toY: number, durationMs = 300): Promise<void> {
     this.touch("begin", x, fromY);
     const steps = 12;
@@ -54,7 +49,6 @@ export class Simulator {
     this.touch("end", x, toY);
   }
 
-  /** Runs a shell command on the Mac through the viewer's token-gated /exec. */
   async exec(command: string): Promise<string> {
     const response = await fetch(`${viewer}/exec`, { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ command }) });
     // SAFETY: serve-sim's /exec response shape.
@@ -83,7 +77,6 @@ export class Simulator {
     return Buffer.from(data, "base64");
   }
 
-  /** Starts `simctl io recordVideo`; the returned function stops it and returns the movie. */
   async recordVideo(): Promise<() => Promise<Uint8Array>> {
     const file = `${this.root}/recording.mp4`;
     await this.exec(`rm -f ${file}; (nohup xcrun simctl io ${this.udid} recordVideo --codec=h264 --force ${file} > ${this.root}/recording.log 2>&1 & echo $! > ${this.root}/recording.pid); for i in $(seq 1 50); do grep -q "Recording started" ${this.root}/recording.log && break; sleep 0.1; done`);
@@ -120,14 +113,11 @@ export class Simulator {
   }
 }
 
-/** Runtime.evaluate's result with returnByValue. */
 interface EvaluateResult { result: { value?: unknown; description?: string }; wasThrown?: boolean }
 
-/** One page over the raw WebKit inspector protocol (multi-target: messages go through Target). */
 export class WebKitPage {
   private nextId = 0;
   private readonly pending = new Map<number, { resolve(value: EvaluateResult): void; reject(error: Error): void }>();
-  /** Resize messages the page sent on terminal WebSockets. */
   readonly resizes: { url: string; payload: string; t: number }[] = [];
   private readonly sockets = new Map<string, string>();
 
@@ -152,7 +142,6 @@ export class WebKitPage {
     });
   }
 
-  /** Connects to the page whose URL starts with `origin` in a standalone web app (the PWA) or Safari. */
   static async open(inspectorUrl: string, choose: (page: { url: string; appId: string }) => boolean): Promise<WebKitPage> {
     // SAFETY: ios_webkit_debug_proxy's /json page listing.
     const pages = await (await fetch(`${inspectorUrl}/json`)).json() as { url: string; appId: string; webSocketDebuggerUrl: string }[];
@@ -168,7 +157,6 @@ export class WebKitPage {
     return result;
   }
 
-  /** Starts reporting WebSocket frames (for counting terminal resize messages). */
   async enableNetwork(): Promise<void> {
     await this.send("Network.enable", {});
   }

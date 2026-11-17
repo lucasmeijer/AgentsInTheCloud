@@ -1,4 +1,3 @@
-// Run explicitly with: bun packages/core/test/docker-cancellation.integration.ts
 import assert from "node:assert/strict";
 import { runDocker, requireDocker } from "../src/docker.ts";
 import { withCommandSignal } from "../src/command-scope.ts";

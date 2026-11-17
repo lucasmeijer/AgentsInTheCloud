@@ -8,18 +8,13 @@ export type SubscriptionUsage = {
   limitReached: boolean | null;
   credits?: { unlimited: boolean; balance: string | null };
   resets?: { available: number };
-  /** Prepaid money rather than allowance windows; amounts are in currency units. */
   balance?: { currency: string; available: number; monthSpend: number };
-  /** Short labelled facts that don't fit a window, like unlimited allowances or exact counts. */
   details?: { label: string; value: string }[];
   windows: { limitName: string; meteredFeature: string | null; kind: "primary" | "secondary"; usedPercent: number; durationSeconds: number; resetsAt: string | null;
-    /** The provider said this window ran out. Only set by providers that report it per window. */
     limitReached?: boolean }[];
 };
 
-/** Expected provider/authentication failures that can be shown in the usage overview. */
 export class SubscriptionUsageError extends Error {
-  /** Seconds the provider asked us to wait before asking again, when it said. */
   constructor(message: string, readonly retryAfterSeconds: number | null = null) { super(message); }
 }
 
@@ -33,7 +28,6 @@ export type SubscriptionUsageMessages = {
   unrecognized: string;
 };
 
-/** The usual wording for a provider whose usage endpoint reports subscription usage. */
 export function subscriptionUsageMessages(provider: string, reconnect: string = provider): SubscriptionUsageMessages {
   return {
     unreachable: `Could not reach ${provider} to check subscription usage. Try again.`,

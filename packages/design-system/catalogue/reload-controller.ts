@@ -1,6 +1,5 @@
 import { Controller } from "@hotwired/stimulus";
 
-/** Optional host-supplied development revision endpoint; never enabled in production. */
 export class CatalogueReloadController extends Controller {
   static values = { url: String };
   declare urlValue: string;

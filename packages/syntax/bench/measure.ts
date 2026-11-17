@@ -19,7 +19,6 @@ export async function measure(path: HighlightPath, fixture: Fixture, chunkSize =
     stdout: "pipe", stderr: "pipe",
   });
   let timedOut = false;
-  // This timer lives OUTSIDE the process doing regex work, so it can preempt a stall.
   const timeout = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, budgetMs);
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
@@ -43,7 +42,6 @@ export function summary(result: Measurement) {
     highlightCalls: result.samples.reduce((sum, sample) => sum + sample.highlightCalls, 0),
     highlightedCharacters: result.samples.reduce((sum, sample) => sum + sample.highlightedCharacters, 0),
     maxHighlightMs: Math.max(0, ...result.samples.map((sample) => sample.maxHighlightMs)),
-    // Full cases distinguish first use from the two repeated calls; streamed cases retain each prefix.
     samples: result.samples,
   };
 }

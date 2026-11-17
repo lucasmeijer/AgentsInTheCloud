@@ -20,7 +20,6 @@ export function renderAttachmentChip(attachment: { id: string; name: string; siz
   </span>`;
 }
 
-/** Keep the native picker and its Stimulus wiring together in both composers. */
 export function renderAttachmentPicker(kind: "caption" | "icon-only" = "caption"): string {
   return `<input type="file" multiple hidden data-agent-attachments-target="file" data-action="change->agent-attachments#choose">
     ${buttonHtml({

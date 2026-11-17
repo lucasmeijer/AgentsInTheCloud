@@ -14,12 +14,10 @@ export interface ObservableTerminalEvents {
 
 export interface ObservableTerminalAttachOptions {
   session: string;
-  /** Attach only; never start a replacement server for a missing execution. */
   requireExistingServer?: boolean;
   cols: number;
   rows: number;
   readonly?: boolean;
-  /** Starts the tmux client, in a workspace or on this machine. */
   start: StartWorkspaceProcess;
   user?: WorkspaceHelperUser;
   workdir?: string;
@@ -86,7 +84,6 @@ export function attachObservableTerminal(options: ObservableTerminalAttachOption
     close: () => {
       if (closed) return;
       closed = true;
-      // Hang up this client, never the tmux server or the program in its pane.
       client.signal("SIGHUP");
     },
   };

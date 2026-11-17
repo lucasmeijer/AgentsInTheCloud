@@ -6,14 +6,11 @@ import { usesProviderSubscription } from "./subscription.ts";
 
 type AccountRuntime = Pick<ModelRuntime, "getProviders" | "getProviderAuthStatus" | "listCredentials" | "getAuth">;
 
-/** One connection to a provider: a subscription sign-in, a stored API key, or a key from the environment. */
 export interface Account {
-  /** Pi stores one credential per provider, so an account's id is its provider id for now. */
   id: string;
   provider: string;
   label: string;
   method: "subscription" | "api_key" | "environment";
-  /** Which account or key this is, e.g. "ada@example.com · Max". */
   description?: string;
   connection: Exclude<ProviderConnection, "disconnected">;
 }
@@ -22,7 +19,6 @@ export function providerLabel(provider: { id: string; name?: string }): string {
   return provider.id === "openai-codex" ? "ChatGPT / Codex" : provider.id === "openai" ? "OpenAI - Sign in with ChatGPT" : provider.name ?? provider.id;
 }
 
-/** Popular providers first, then by name. */
 export function sortByPopularity<T extends { provider: string; label: string }>(items: T[]): T[] {
   const rank = (provider: string) => getPopularProviderRank(provider) ?? Number.MAX_SAFE_INTEGER;
   return items.sort((a, b) => rank(a.provider) - rank(b.provider) || a.label.localeCompare(b.label));

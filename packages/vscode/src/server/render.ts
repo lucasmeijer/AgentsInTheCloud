@@ -22,11 +22,9 @@ export function renderVSCodeView(workspaceId: string, title: string): string {
 }
 
 export function renderVSCodeNavigationSignal(workspaceId: string): string {
-  // Live workspace morphs must not drop a navigation that is still waiting for its view.
   return `<span id="${domId("vscode_navigation", workspaceId)}" data-turbo-permanent hidden></span>`;
 }
 
-/** VS Code's `path:line:column` form; a bare path when the target has no position. */
 export function vscodeFileLocation(target: WorkspaceFileTarget): { file: string; gotoLine: boolean } {
   const line = target.line ?? (target.column ? 1 : undefined);
   return line ? { file: `${target.path}:${line}:${target.column ?? 1}`, gotoLine: true } : { file: target.path, gotoLine: false };
@@ -40,7 +38,6 @@ export function vscodeFileNavigationStream(workspaceId: string, title: string, t
   const { file, gotoLine } = vscodeFileLocation(target);
   const query = new URLSearchParams({
     agentsInTheCloudOpenFile: file,
-    // Repeated links must still navigate after the user switches files inside VS Code.
     agentsInTheCloudNavigation: randomUUID(),
   });
   if (gotoLine) query.set("agentsInTheCloudGotoLine", "1");

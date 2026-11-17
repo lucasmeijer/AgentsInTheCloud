@@ -3,7 +3,6 @@ import { decodeWorkingFileWrite, decodeRepositoryBatch, repositoryBatchRunner, t
 import { workspaceRoot, type WorkspaceCommandOptions } from "./index.ts";
 
 export interface GitResult { stdout: Buffer; stderr: string; exitCode: number }
-/** `contents` is absent when the content is larger than the bound it was read with. */
 export interface RepositoryContent { size: number; contents?: Buffer }
 export interface WorkingFile extends RepositoryContent { mode: string }
 export interface WorkingFileRevision { hash: string; mode: string }
@@ -12,9 +11,7 @@ const writes = new Map<string, Promise<void>>();
 
 export interface Repository {
   gitResult(args: string[]): Promise<GitResult>;
-  /** Reads at most `maxBytes`; larger files report only their size. */
   workingFile(path: string, maxBytes: number, editable?: true): Promise<WorkingFile | undefined>;
-  /** Any Git object expression, such as `HEAD:path`; undefined unless it names a blob. Reads at most `maxBytes`. */
   blob(object: string, maxBytes: number): Promise<RepositoryContent | undefined>;
   captureIndexTree(): Promise<Buffer>;
   writeWorkingFile(path: string, expected: WorkingFileRevision, contents: string): Promise<WorkingFileWriteResult>;
@@ -26,7 +23,6 @@ export function safeGitArguments(args: string[]): string[] {
   return ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "log.showSignature=false", "-c", "color.ui=false", command, ...options, ...args.slice(1)];
 }
 
-/** All repository-controlled execution and file reads stay in the workspace, as its regular user. */
 export function createWorkspaceRepository(
   workspaceId: string,
   path: string,
@@ -43,7 +39,6 @@ export function createWorkspaceRepository(
     const batch = pending;
     pending = [];
     try {
-      // Avoid runner startup for operations such as a single history page.
       if (batch.length === 1 && batch[0]!.request.kind === "git") {
         const result = await execute(workspaceId, safeGitArguments(batch[0]!.request.args), { workdir, user: "agents-in-the-cloud" });
         batch[0]!.resolve(result);
@@ -95,14 +90,12 @@ export function createWorkspaceRepository(
   };
 }
 
-/** Prepared commands the batch runner uses to read a bounded blob. */
 export const blobArguments = {
   resolveArgs: safeGitArguments(["rev-parse", "--verify", "--quiet", "--end-of-options"]),
   checkArgs: safeGitArguments(["cat-file", "--batch-check"]),
   readArgs: safeGitArguments(["cat-file", "blob"]),
 };
 
-/** Exit 44: absent. Exit 46: larger than the bound, reported by size alone. */
 function decodeContent(result: GitResult, bytes: Buffer): RepositoryContent {
   return result.exitCode === 46 ? { size: Number(bytes.toString()) } : { size: bytes.length, contents: bytes };
 }
@@ -127,7 +120,6 @@ export async function git(root: Repository, args: string[], allowFailure = false
   return result.exitCode === 0 ? result.stdout : Buffer.alloc(0);
 }
 
-/** Root and initialized nested submodules, expressed as workspace-relative paths. */
 export async function repositoryPaths(root: Repository): Promise<string[]> {
   const inside = await root.gitResult(["rev-parse", "--is-inside-work-tree"]);
   if (inside.exitCode !== 0) {

@@ -17,19 +17,13 @@ import type { NativeAgentRendering } from "./render.ts";
 export type NativeAgentField = (key: string) => JsonValue | FormDataEntryValue | undefined;
 type CommandResult = { kind: string };
 
-/** The composer, transcript and command routes every native Agent shares. */
 export function createNativeAgentRoutes<Runtime extends NativeAgentRuntime, Command, Result extends CommandResult>(agents: NativeAgents<Runtime>, rendering: NativeAgentRendering<Runtime>, options: {
-  /** Shown when the commands endpoint receives something that is not one of the harness's commands. */
   unknownCommand: string;
   parseCommand(text: string): Command | undefined;
-  /** A `done` result is accepted; any other result opens the command's dialog. */
   runCommand(runtime: Runtime, command: Command, request: { requestId: string; field: NativeAgentField }): Promise<Result>;
   renderCommandDialog(runtime: Runtime, result: Result): string;
-  /** The user's prompts, for suggesting an Agent name. */
   promptText(runtime: Runtime): string;
-  /** Whether a prompt with this request ID already reached the harness. */
   delivered(runtime: Runtime, requestId: string): boolean;
-  /** Slash commands the harness runs itself are sent as typed, never expanded as prompt templates. */
   isHarnessCommand?(runtime: Runtime, text: string): boolean;
   newConversation?(runtime: Runtime): Promise<void>;
   sessionImage(runtime: Runtime, entryId: string, index: number): Response;
@@ -76,7 +70,6 @@ export function createNativeAgentRoutes<Runtime extends NativeAgentRuntime, Comm
       const draft = agentAttachmentDraftId(workspaceId, agentId);
       if (form && field("attachmentDraft") !== draft) throw invalidArguments("Invalid attachment draft");
       const consumedHeaders = { "x-agents-in-the-cloud-attachment-draft-consumed": "true" };
-      // A lost response after attachment removal must not cause a second delivery.
       if (form && options.delivered(runtime, id)) return success(true, consumedHeaders);
       const attachmentIds = form?.getAll("attachment").map(String) ?? [];
       const attachments = await deliverAttachmentDraft(workspaceId, draft, attachmentIds);
@@ -108,7 +101,6 @@ export function createNativeAgentRoutes<Runtime extends NativeAgentRuntime, Comm
         return success();
       }
       if (path === undefined && request.method === "GET") {
-        // Turbo names the frame it loads into: a drill-in page, or an inline row.
         const page = request.headers.get("turbo-frame") === ids.backgroundPage(ctx);
         if (!activity) return response(renderBackgroundGone(ctx, key, page));
         const detail = await rendering.background.detail(runtime, activity, ctx);

@@ -2,7 +2,6 @@ import type { EditedCommentRange } from "./editing.ts";
 
 interface LineChange { range: { start: { line: number; character?: number }; end: { line: number; character?: number } }; text: string }
 
-/** Changes are expressed against the previous document; apply bottom-up to retain line anchors. */
 export function moveCommentRanges(ranges: readonly EditedCommentRange[], changes: readonly LineChange[]): EditedCommentRange[] {
   const edits = [...changes].sort((a, b) => b.range.start.line - a.range.start.line || (b.range.start.character ?? 0) - (a.range.start.character ?? 0));
   function move(line: number, edge: "start" | "end"): number {

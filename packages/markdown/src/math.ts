@@ -17,7 +17,6 @@ function renderMath(source: string, displayMode: boolean, raw: string): string {
     });
     return displayMode ? `<div class="markdown-math-display">${html}</div>\n` : html;
   } catch (error) {
-    // Math is external input. Unsupported commands must not break a message.
     if (!(error instanceof ParseError)) throw error;
     return renderMathSource(raw);
   }
@@ -27,7 +26,6 @@ function renderMathSource(raw: string): string {
   return `<span class="markdown-math-source">${escapeHtml(raw)}</span>`;
 }
 
-/** Parse Markdown math on the server, regardless of which agent wrote it. */
 export function installMath(markdown: MarkdownIt): void {
   markdown.use(tex, {
     delimiters: "all",

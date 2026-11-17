@@ -5,7 +5,6 @@ import { attributesHtml, classNames, htmlContent, type HtmlContent } from "../ht
 export type TransientFeedbackContent = HtmlContent;
 
 type TransientFeedbackElement = ({ tag: "button"; variant?: ButtonVariant } | { tag: "div" }) & {
-  /** Caller-owned attributes. Do not supply feedback state or controller attributes here. Attribute values containing external input must be escaped. */
   attributesHtml?: string;
 }
 
@@ -14,7 +13,6 @@ export interface TransientFeedbackOptions {
   initialContent: TransientFeedbackContent;
   feedbackContent: TransientFeedbackContent;
   state: "initial" | "feedback";
-  /** Keeps button controls interactive while their feedback content is visible. */
   keepEnabledDuringFeedback?: boolean;
 }
 

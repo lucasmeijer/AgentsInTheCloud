@@ -9,24 +9,19 @@ import type { WorkspaceInitInstruction } from "@agents-in-the-cloud/workspace";
 
 export type WorkspaceTemplateSummary = Omit<WorkspaceTemplateRecord, "secrets" | "sshKeys" | "sshKnownHosts" | "environment" | "privateNetworkAccess" | "changeBuckets"> & {
   configurationFingerprint?: string;
-  /** Adding a template counts as using it, as does creating a workspace from it. */
   lastUsedAt?: number;
 };
 export type StoredWorkspaceTemplateSecret = Static<typeof storedWorkspaceTemplateSecretSchema>;
-/** workspaceTemplateId is absent for global entries. */
 export type WorkspaceTemplateSecretSummary = Omit<StoredWorkspaceTemplateSecret, "projectId" | "encryptedSecret" | "annotation"> & { workspaceTemplateId?: string; annotation: string; configured: boolean };
 export type StoredWorkspaceTemplateSshKey = Static<typeof storedWorkspaceTemplateSshKeySchema>;
 export type WorkspaceTemplateSshKeySummary = Omit<StoredWorkspaceTemplateSshKey, "projectId" | "encryptedPrivateKey"> & { workspaceTemplateId?: string };
 export type StoredWorkspaceTemplateEnvironmentVariable = Static<typeof workspaceTemplateEnvironmentVariableSchema>;
 export type WorkspaceTemplateEnvironmentVariable = Omit<StoredWorkspaceTemplateEnvironmentVariable, "projectId"> & { workspaceTemplateId?: string };
 export type WorkspaceTemplateRecord = Static<typeof workspaceTemplateRecordSchema>;
-/** Records that own Secrets, SSH keys, trusted SSH servers, Environment variables and Private network access. */
 export type ConfigurationRecord = Static<typeof configurationRecordSchema>;
 export type WorkspaceTemplateStore = { workspaceTemplates: WorkspaceTemplateRecord[]; global: ConfigurationRecord };
 
-/** Global workspace settings apply to every new workspace; a template's own entry with the same name wins. */
 export const globalWorkspaceConfiguration = { kind: "global" } as const;
-/** A workspace template ID, or the global workspace settings. */
 export type ConfigurationScope = string | typeof globalWorkspaceConfiguration;
 
 export interface WorkspaceTemplateListResult {
@@ -83,9 +78,7 @@ const configurationProperties = {
   sshKeys: Type.Optional(Type.Array(storedWorkspaceTemplateSshKeySchema)),
   sshKnownHosts: Type.Optional(Type.String()),
   environment: Type.Optional(Type.Array(workspaceTemplateEnvironmentVariableSchema)),
-  /** Canonical `host:port` entries; absent in files saved before Private network access existed. */
   privateNetworkAccess: Type.Optional(Type.Array(Type.String())),
-  /** Change bucket lines as typed; absent means the defaults globally and none for a template. */
   changeBuckets: Type.Optional(Type.String()),
 };
 
@@ -97,7 +90,6 @@ const workspaceTemplateRecordSchema = Type.Object({
   gitUrl: Type.String(),
   branch: Type.Union([Type.String(), Type.Null()]),
   sessionShareKey: Type.String(),
-  /** Absent on templates added before this was recorded. */
   createdAt: Type.Optional(Type.Number()),
   lastWorkspaceCreatedAt: Type.Optional(Type.Number()),
   swatchColor: Type.Optional(Type.String({ pattern: "^#[0-9a-fA-F]{6}$" })),
@@ -108,7 +100,6 @@ const workspaceTemplateRecordSchema = Type.Object({
   preloadImages: Type.Optional(Type.Array(Type.String())),
 });
 
-// This discriminator and projectId are part of the existing init.json format.
 const gitWorkspaceTemplateInitSchema = Type.Object({
   type: Type.Literal("project.git"),
   configurationFingerprint: Type.Optional(Type.String()),
@@ -129,7 +120,6 @@ declare module "@agents-in-the-cloud/workspace" {
 
 const workspaceTemplateStoreSchema = Type.Object({
   projects: Type.Array(workspaceTemplateRecordSchema),
-  /** Absent in files saved before global workspace settings existed. */
   global: Type.Optional(configurationRecordSchema),
 });
 
@@ -169,11 +159,9 @@ export async function readWorkspaceTemplateStore(file: string): Promise<Workspac
   try {
     const stored = Value.Parse(workspaceTemplateStoreSchema, JSON.parse(await readFile(file, "utf8")));
     const store: WorkspaceTemplateStore = { workspaceTemplates: stored.projects, global: stored.global ?? {} };
-    // Ignore the retired requirement flag in older saved secrets.
     for (const workspaceTemplate of store.workspaceTemplates) for (const secret of workspaceTemplate.secrets ?? []) {
       Reflect.deleteProperty(secret, "optional");
     }
-    // Older records may contain derived SSH metadata; keep only the encrypted key and its label.
     for (const workspaceTemplate of store.workspaceTemplates) for (const key of workspaceTemplate.sshKeys ?? []) {
       Reflect.deleteProperty(key, "publicKey");
       Reflect.deleteProperty(key, "fingerprint");
@@ -192,13 +180,11 @@ export function onWorkspaceTemplateStoreChanged(listener: () => void): () => voi
   return () => { workspaceTemplateStoreListeners.delete(listener); };
 }
 
-/** Owns the complete read-modify-write operation so concurrent changes cannot overwrite one another. */
 export async function updateWorkspaceTemplateStore<Result>(file: string, mutate: (store: WorkspaceTemplateStore) => Result | Promise<Result>): Promise<Result> {
   const release = await acquireFileLock(`${file}.lock`, "projects");
   try {
     const store = await readWorkspaceTemplateStore(file);
     const result = await mutate(store);
-    // Preserve the existing on-disk envelope; this is serialization, not a data migration.
     await writeJsonAtomic(file, { projects: store.workspaceTemplates, global: store.global });
     for (const listener of workspaceTemplateStoreListeners) listener();
     return result;
@@ -221,19 +207,16 @@ export function findConfigurationRecord(store: WorkspaceTemplateStore, scope: Co
   return isGlobalScope(scope) ? store.global : findWorkspaceTemplateRecord(store, scope);
 }
 
-/** The scopes configuring a workspace, global first so a template's own entries win. Empty workspaces have no template. */
 export function workspaceScopes(workspaceTemplateId?: string): ConfigurationScope[] {
   return workspaceTemplateId ? [globalWorkspaceConfiguration, workspaceTemplateId] : [globalWorkspaceConfiguration];
 }
 
 const globalConfigurationKey = "global";
 
-/** Identifies a scope in stored records and encryption. Template IDs end in a digest, so they never equal the global key. */
 export function configurationScopeKey(scope: ConfigurationScope): string {
   return isGlobalScope(scope) ? globalConfigurationKey : scope;
 }
 
-/** The workspaceTemplateId summary field for a stored record's projectId; absent for global entries. */
 export function configurationScopeSummary(projectId: string): { workspaceTemplateId?: string } {
   return projectId === globalConfigurationKey ? {} : { workspaceTemplateId: projectId };
 }
@@ -259,7 +242,6 @@ export function workspaceTemplateConfigurationFingerprint(workspaceTemplate: Pic
     dockerfile: workspaceTemplate.dockerfile ?? "",
     ...configurationSnapshot(workspaceTemplate),
   };
-  // Omitted while empty, so fingerprints saved before global settings existed stay valid.
   const configuration = globalSnapshot.environment.length || globalSnapshot.secrets.length || globalSnapshot.sshKnownHosts ? { ...templateConfiguration, global: globalSnapshot } : templateConfiguration;
   return createHash("sha256").update(JSON.stringify(configuration)).digest("hex");
 }
@@ -301,7 +283,6 @@ function workspaceTemplateEnvironmentVariableSummaries(configuration: Configurat
   return (configuration.environment ?? []).map(workspaceTemplateEnvironmentVariableSummary).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Non-sensitive settings derived from a single persisted template snapshot. */
 export async function getWorkspaceTemplateConfiguration(workspaceTemplateId: string, file = workspaceTemplatesFile()): Promise<WorkspaceTemplateConfiguration> {
   const store = await readWorkspaceTemplateStore(file);
   const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
@@ -325,7 +306,6 @@ export interface ScopeConfiguration {
   privateNetworkAccess: string[];
 }
 
-/** Non-sensitive Secrets, SSH keys, trusted SSH servers, Environment variables and Private network access of a template or the global workspace settings. */
 export async function getConfiguration(scope: ConfigurationScope, file = workspaceTemplatesFile()): Promise<ScopeConfiguration> {
   const configuration = findConfigurationRecord(await readWorkspaceTemplateStore(file), scope);
   return {
@@ -360,7 +340,6 @@ export async function addWorkspaceTemplate(spec: string, file = workspaceTemplat
   });
 }
 
-/** Retained independently of workspaces so parking or deletion cannot erase recency. */
 export async function recordWorkspaceCreation(workspaceTemplateId: string, createdAt = Date.now(), file = workspaceTemplatesFile()): Promise<void> {
   await updateWorkspaceTemplateStore(file, (store) => {
     const workspaceTemplate = findWorkspaceTemplateRecord(store, workspaceTemplateId);
@@ -402,7 +381,6 @@ export function workspaceInitFromTemplate(workspaceTemplate: WorkspaceTemplateSu
   return { type: "project.git", configurationFingerprint: workspaceTemplate.configurationFingerprint, projectId: workspaceTemplate.id, name: workspaceTemplate.name, gitUrl: workspaceTemplate.gitUrl, branch: workspaceTemplate.branch, sessionShareKey: workspaceTemplate.sessionShareKey };
 }
 
-/** Read the template identity from the unchanged persisted initialization format. */
 export function workspaceTemplateIdFromInit(init: GitWorkspaceTemplateInitInstruction): string {
   return init.projectId;
 }
@@ -416,7 +394,6 @@ export function isGitWorkspaceTemplateInit(init: unknown): init is GitWorkspaceT
   return Value.Check(gitWorkspaceTemplateInitSchema, init);
 }
 
-/** The template a workspace was created from; empty workspaces have none. */
 export function workspaceTemplateIdOfInit(init: WorkspaceInitInstruction | undefined): string | undefined {
   return isGitWorkspaceTemplateInit(init) ? workspaceTemplateIdFromInit(init) : undefined;
 }
@@ -443,7 +420,6 @@ export function validateWorkspaceTemplatePreloadImage(image: string): void {
   }
 }
 
-/** Changes the preload set for future workspaces; existing workspace configuration is unchanged. */
 export async function setWorkspaceTemplatePreloadImages(id: string, images: string[], file = workspaceTemplatesFile()): Promise<UpdateWorkspaceTemplateResult> {
   const preloadImages = [...new Set(images.map((image) => image.trim()))];
   preloadImages.forEach(validateWorkspaceTemplatePreloadImage);
@@ -454,7 +430,6 @@ export async function setWorkspaceTemplatePreloadImages(id: string, images: stri
   });
 }
 
-/** Host-authorized opt-in; agent-editable workspace settings cannot grant privilege. */
 export async function setWorkspaceTemplatePrivileged(id: string, privileged: boolean, file = workspaceTemplatesFile()): Promise<UpdateWorkspaceTemplateResult> {
   return updateWorkspaceTemplateStore(file, (store) => {
     const workspaceTemplate = findWorkspaceTemplateRecord(store, id);
@@ -463,7 +438,6 @@ export async function setWorkspaceTemplatePrivileged(id: string, privileged: boo
   });
 }
 
-/** Only host template settings authorize exporting configuration into a workspace. */
 export async function setWorkspaceTemplateSeedConfigEnabled(id: string, enabled: boolean, file = workspaceTemplatesFile()): Promise<UpdateWorkspaceTemplateResult> {
   return updateWorkspaceTemplateStore(file, (store) => {
     const workspaceTemplate = findWorkspaceTemplateRecord(store, id);

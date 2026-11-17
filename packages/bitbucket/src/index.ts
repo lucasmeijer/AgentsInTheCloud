@@ -26,7 +26,6 @@ const repositoriesResponseSchema = Type.Object({
   })),
 });
 
-// Atlassian API tokens authenticate REST calls with the account email and git with a fixed username.
 function headers(credential: GitHostingCredential): HeadersInit {
   return { accept: "application/json", "user-agent": "agents-in-the-cloud", authorization: `Basic ${btoa(`${credential.account ?? ""}:${credential.token}`)}` };
 }
@@ -66,7 +65,6 @@ async function fetchBitbucket(url: URL | string, credential: GitHostingCredentia
 
 const workspaceCache = createGitHostingCache<string[]>(60_000);
 
-// Bitbucket retired cross-workspace repository listing, so search each workspace you belong to.
 async function loadWorkspaceSlugs(credential: GitHostingCredential): Promise<string[]> {
   const slugs: string[] = [];
   let next: string | undefined = `${apiBase}/user/workspaces?pagelen=100`;
@@ -95,7 +93,6 @@ async function searchWorkspace(slug: string, query: string, credential: GitHosti
   }));
 }
 
-/** Bitbucket has no public repository search, so this only finds repositories in your workspaces. */
 export async function searchBitbucketRepositories(query: string, credential: GitHostingCredential | undefined): Promise<GitHostingRepositorySearch> {
   if (!credential) return { repositories: [], notice: "Connect Bitbucket to search your repositories." };
   try {
@@ -114,7 +111,6 @@ export const bitbucketProvider: GitHostingProvider = {
   gitHost: "bitbucket.org",
   gitUsername: "x-bitbucket-api-token-auth",
   tokenEnvVar: "BITBUCKET_API_TOKEN",
-  // bkt, the Bitbucket CLI in the workspace image, runs config-free from BKT_* variables.
   tokenEnvAliases: ["BKT_TOKEN"],
   tokenHosts: ["bitbucket.org", "api.bitbucket.org"],
   sshKnownHosts: bitbucketKnownHosts,

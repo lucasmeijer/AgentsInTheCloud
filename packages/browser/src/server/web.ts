@@ -113,7 +113,6 @@ export const browserWorkspaceModule: WorkspaceModule = {
   },
 };
 
-/** Show a workspace file, such as an HTML page, in the first Browser view. */
 export async function openFileInBrowser(workspaceId: string, path: string, openWorkView: WorkspaceModuleRouteContext["openWorkView"], fragment?: string): Promise<Response> {
   const browser = listWorkspaceBrowserViews(workspaceId)[0] ?? createWorkspaceBrowserView(workspaceId);
   const url = new URL("file://");

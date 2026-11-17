@@ -1,6 +1,5 @@
 import { Controller } from "@hotwired/stimulus";
 
-/** System events invalidate a server-rendered Turbo frame; no client-side markup. */
 export class ConnectionModeSettingsController extends Controller<HTMLElement & { reload(): void }> {
   source?: EventSource;
   connect() {

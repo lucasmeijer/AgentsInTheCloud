@@ -19,7 +19,6 @@ afterEach(async () => { for (const owner of owners.splice(0)) await owner.suspen
 const oneShot = "You are a one-shot agent working for a code mode script.";
 const schema = { type: "object", required: ["count"], additionalProperties: false, properties: { count: { type: "integer" } } };
 
-/** The request's system message, with its prompt sections. */
 const system = (request: Parameters<FauxResponseFactory>[0]) => {
   const [message] = request.messages;
   return message?.role === "system" ? Object.values(message.sections ?? {}).join("\n") : "";
@@ -28,7 +27,6 @@ const system = (request: Parameters<FauxResponseFactory>[0]) => {
 async function setup(script: string, child: FauxResponseFactory) {
   const path = await mkdtemp(join(tmpdir(), "one-shot-agent-")); paths.push(path);
   const models = createModels(); const faux = fauxProvider({ tokensPerSecond: 100000 }); models.setProvider(faux.provider);
-  // The workspace's own tools and code mode, as the builtin agent assembles them; the agents never call them.
   const registry = createDurableWorkspaceRegistry("one-shot");
   registry.install(codemodeIntegration.extension!("one-shot", models));
   const owner = await openDurableAgentRuntime(path, "one-shot", {}, {
@@ -59,7 +57,6 @@ test("a script's one-shot agent answers with validated JSON, retrying an unusabl
   );
   expect(output).toEndWith('Output:\n{"count":3}');
   expect(requests).toHaveLength(3);
-  // Only the chosen tools, and no scripts or delegation of its own.
   expect(requests[0]!.tools).toEqual(["read"]);
   expect(requests[0]!.system).toContain("Testing one-shot agents.");
   expect(requests[0]!.system).not.toContain("<codemode>");
@@ -82,10 +79,8 @@ test("what a one-shot agent costs is its script call's, and its caller's", async
   const usage = (await owner.harness.snapshot(UsageDoc, record.durableId, context))!;
   const outputTokens = Object.values(usage.models).reduce((sum, item) => sum + item.output, 0);
   expect(outputTokens).toBeGreaterThan(0);
-  // The script's row shows what it used.
   const [call] = codemodeTool(projectDurableTranscript(view))!.nested!;
   expect(call).toMatchObject({ name: "agent", status: "ok", childAgentId: record.agentId, usage: { outputTokens, cost: 0 } });
-  // The faux provider charges nothing: price what it used, which counts toward the Agent's total.
   const cost = 0.25;
   await owner.harness.commit(async tx => { Object.values((await tx.doc(UsageDoc, record.durableId)).models)[0]!.cost.total = cost; }, context);
   expect(await root.descendantCost()).toBe(cost);

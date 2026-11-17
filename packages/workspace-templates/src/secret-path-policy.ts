@@ -1,4 +1,3 @@
-// Exact hosts only: broad wildcards or mixed destinations must opt in explicitly.
 export const secretPathInjectionDefaultHosts: readonly string[] = ["api.telegram.org"];
 
 export function workspaceTemplateSecretHosts(pattern: string): string[] {

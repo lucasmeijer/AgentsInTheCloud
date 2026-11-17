@@ -20,7 +20,6 @@ function unescapeHtmlAttribute(value: string): string {
   return value.replaceAll("&quot;", '"').replaceAll("&amp;", "&");
 }
 
-// Coalesce concurrent checks, but never cache ownership across requests.
 const pendingServerChecks = new Map<string, Promise<void>>();
 
 type VSCodeThemeDefaults = {

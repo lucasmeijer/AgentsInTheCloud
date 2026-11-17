@@ -118,7 +118,6 @@ test("installs the AgentsInTheCloud syntax theme in the shared home with termina
   const [code] = await run(`CODEX_HOME=${shellQuote(`${home}/session-codex`)}\n${launch(empty, [])}`);
   expect(code).toBe(0);
   const theme = await readFile(`${home}/.codex/themes/agents-in-the-cloud.tmTheme`, "utf8");
-  // Inline code uses palette slot 12 (bright blue), AgentsInTheCloud's accent.
   expect(theme).toContain("<string>markup.inline.raw.string.markdown, markup.raw.inline.markdown</string><key>settings</key><dict><key>foreground</key><string>#0c000000</string>");
 });
 

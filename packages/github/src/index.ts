@@ -4,7 +4,6 @@ import { validateGitHubToken } from "./auth.ts";
 import { gitHubKnownHosts } from "./host-keys.ts";
 import { searchGitHubRepositories } from "./repository-search.ts";
 
-// Keep the existing credential paths so older installations retain their GitHub connection.
 const tokenFile = "github-token";
 const disabledHostTokenFile = "github-token-disabled";
 
@@ -41,7 +40,6 @@ gh auth token</pre>
   },
   clearCredential() {
     removeGitHostingCredentialFile(tokenFile);
-    // A GH_TOKEN inherited from the host stays disconnected until a token is connected again.
     writeGitHostingCredentialFile(disabledHostTokenFile, "");
   },
   workspaceEnv: () => ({}),

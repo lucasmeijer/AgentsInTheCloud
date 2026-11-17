@@ -7,7 +7,6 @@ import { getProviderUsageOverview, supportedUsageProviders, type ProviderUsageOv
  * xAI caches on a best-effort basis and occasionally misses; see `promptSuggestionCacheMissLimit`. */
 export const promptSuggestionProviders: ReadonlySet<string> = new Set(["openai-codex", "xai", "anthropic"]);
 
-/** Misses in a row after which an Agent stops suggesting. One miss can be bad luck; repeated misses mean the request no longer matches the turn's. */
 export const promptSuggestionCacheMissLimit = 2;
 
 // The first and last lines keep reasoning models brief: they must think at the turn's level to read its cache.
@@ -27,10 +26,8 @@ export function promptSuggestionRequest(timestamp: number): UserMessage {
   return { role: "user", content: instruction, timestamp };
 }
 
-/** Context the turn's last request didn't read from cache; more than this and a suggestion is no longer cheap. */
 const uncachedTokenLimit = 10_000;
 
-/** A finished turn worth suggesting after: not the first, ended normally, and its last request was mostly cached. */
 export function promptSuggestionEligible(messages: readonly Message[]): boolean {
   const last = messages.at(-1);
   if (last?.role !== "assistant" || last.stopReason !== "stop") return false;
@@ -38,19 +35,16 @@ export function promptSuggestionEligible(messages: readonly Message[]): boolean 
   return last.usage.input + last.usage.output <= uncachedTokenLimit;
 }
 
-/** Most of the suggestion's context should come from the turn's cache; otherwise each one costs as much as a fresh request. */
 export function promptSuggestionMissedCache(usage: Pick<Usage, "input" | "cacheRead">): boolean {
   return usage.cacheRead < (usage.input + usage.cacheRead) / 2;
 }
 
-/** After three ignored suggestions in a row, only every third finished turn gets one, until one is used. */
 export function promptSuggestionDue(ignoredInARow: number, turnsSinceBackoff: number): boolean {
   return ignoredInARow < 3 || turnsSinceBackoff % 3 === 0;
 }
 
 const shortReplies = new Set(["yes", "yeah", "yep", "sure", "ok", "okay", "continue", "commit", "push", "deploy", "stop", "no"]);
 
-/** The model's guess, if it reads like something the user would type; anything else stays unsaid. */
 export function acceptablePromptSuggestion(reply: string): string | undefined {
   const text = reply.trim().replace(/^(["'“])(.*)(["'”])$/s, "$2").trim();
   const lower = text.toLowerCase();
@@ -77,17 +71,14 @@ export function subscriptionNearLimit(overview: Pick<ProviderUsageOverview, "rep
   return Boolean(reported && (reported.limitReached || reported.windows.some(window => window.usedPercent >= 90)));
 }
 
-/** A subscription close to its limit keeps what's left for real prompts. */
 export async function providerNearUsageLimit(provider: string): Promise<boolean> {
   const usageProvider = supportedUsageProviders.find(candidate => candidate.id === provider);
   return usageProvider ? subscriptionNearLimit(await getProviderUsageOverview(usageProvider)) : false;
 }
 
-/** Adds a suggestion's usage to the conversation's model usage, keyed and summed as pi-durable records its own responses. */
 export function addModelUsage(models: Record<string, JsonRepresentation<Usage>>, key: string, usage: Usage): void {
   const total = Object.hasOwn(models, key) ? models[key] : undefined;
   if (!total) {
-    // Drafts take strict JSON: optional counters a provider left undefined are omitted.
     const { cacheWrite1h, reasoning, cost, ...counts } = usage;
     const copy: JsonRepresentation<Usage> = { ...counts, cost: { ...cost } };
     if (cacheWrite1h !== undefined) copy.cacheWrite1h = cacheWrite1h;

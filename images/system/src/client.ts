@@ -21,7 +21,6 @@ class ProgressController extends Controller<HTMLElement> {
       this.element
         .querySelector("[data-progress-content]")!
         .replaceChildren(template.content);
-      // Re-rendered spinners would restart at 0°; share one clock so they keep turning smoothly.
       for (const animation of this.element.getAnimations({ subtree: true })) animation.startTime = 0;
       const nextLog = this.element.querySelector<HTMLElement>("[data-progress-log]")!;
       nextLog.scrollTop = atEnd ? nextLog.scrollHeight : scrollTop;

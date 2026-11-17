@@ -12,7 +12,6 @@ interface AgentMcpServerOptions {
   instructions(identity: AgentMcpIdentity): string | Promise<string>;
 }
 
-/** Authentication is checked on every HTTP request, independently of MCP session identity. */
 export function createAgentMcpServer(options: AgentMcpServerOptions) {
   const sessions = new Map<string, { identity: AgentMcpIdentity; transport: WebStandardStreamableHTTPServerTransport; server: Server }>();
   return {
@@ -26,7 +25,6 @@ export function createAgentMcpServer(options: AgentMcpServerOptions) {
         return session.transport.handleRequest(request);
       }
       if (request.method !== "POST") return new Response("MCP initialization required", { status: 400 });
-      // Tool visibility is fixed for the workspace lifetime; build definitions once per session.
       const tools = new Map(options.tools(identity).map((tool) => [tool.name, tool]));
       const server = new Server({ name: "agents-in-the-cloud", version: "1.0.0" }, { capabilities: { tools: {} }, instructions: identity.instructionDelivery === "system-prompt" ? undefined : await options.instructions(identity) });
       const transport = new WebStandardStreamableHTTPServerTransport({

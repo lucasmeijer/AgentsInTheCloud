@@ -16,7 +16,6 @@ file -b --mime-encoding -- "$1"`;
   if (result.exitCode === 45) throw new EditableFileError("Only regular files can be opened", 422);
   if (result.exitCode !== 0) throw new Error(result.stderr.trim() || "Unable to inspect file");
   const [size, mime, encoding] = result.stdout.toString("utf8").trim().split("\n");
-  // Extension-based MIME types also cover formats that `file` reports as containers.
   const mediaMime = Bun.file(path).type.split(";")[0]!;
   if (isImageFile(path) || mime!.startsWith("image/") || mediaMime.startsWith("image/")) return "image";
   if (mime!.startsWith("video/") || mediaMime.startsWith("video/")) return "video";

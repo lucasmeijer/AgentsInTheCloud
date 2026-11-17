@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import type { TerminalBufferRow, TerminalTheme } from "@gespenst/core";
 import { copyTextToClipboard, errorMessage } from "@agents-in-the-cloud/shared";
 import { encodeObservableTerminalMessage, terminalEndedCloseCode } from "../shared/index.ts";
@@ -92,7 +90,6 @@ export class TerminalTouchFocus {
 
   private isTap(touch: Touch): boolean {
     const start = this.touch;
-    // Screen coordinates exclude keyboard-induced viewport panning.
     return start !== undefined && touch.identifier === start.identifier
       && Math.hypot(touch.screenX - start.screenX, touch.screenY - start.screenY) <= 10;
   }
@@ -102,16 +99,12 @@ export interface ObservableTerminalViewer {
   dispose(): void;
   focus(): void;
   refresh(): void;
-  /** Reattach after a disconnect; never creates or restarts the session. */
   reconnect(): void;
   sendInput(data: string): void;
   getSelection(): Promise<string>;
   dragPointer(event: PointerEvent, action: "press" | "motion" | "release", select: boolean): void;
-  /** Send a touch scroll through the terminal's wheel path, including TUI mouse reporting. */
   scrollTouch(deltaY: number, clientX: number, clientY: number): void;
-  /** Resolve a completed touch tap against the painted terminal, before sending TUI input. */
   activateLinkAt(clientX: number, clientY: number): Promise<boolean>;
-  /** Hide the input cursor while reading CLI history without changing the PTY. */
   setHistoryCursorHidden(hidden: boolean): void;
   paste(text: string): void;
   pressEnter(): void;
@@ -120,7 +113,6 @@ export interface ObservableTerminalViewer {
 
 type TerminalConnectionState = "connecting" | "connected" | "reconnecting" | "unavailable" | "ended";
 
-/** Update the server-rendered status for any interactive terminal pane. */
 function setTerminalConnectionStatus(status: HTMLElement, state: TerminalConnectionState): void {
   status.hidden = state === "connected";
   status.dataset.state = state;
@@ -141,14 +133,10 @@ interface ObservableTerminalViewerOptions {
   disconnectedMessage?: string;
   errorMessage?: string;
   transformInput?: (data: string) => string;
-  /** Preserve native editing context for CLI prose; shell terminals remain literal. */
   nativeTextInput?: boolean;
   onOutput?: (text: string) => void;
-  /** Opt-in file and web link navigation for agent terminals, not arbitrary shell terminals. */
   onLink?: (link: TerminalLink) => void;
-  /** Server-rendered status for an interactive terminal. */
   connectionStatus?: HTMLElement;
-  /** Hide the cursor while keyboard focus is elsewhere, without changing the PTY. */
   hideUnfocusedCursor?: boolean;
   onConnectionStateChange?: (state: TerminalConnectionState) => void;
 }
@@ -166,7 +154,6 @@ export function observableWebSocketUrl(path: string): string {
   return `${protocol}//${location.host}${path}`;
 }
 
-/** A handle owns initialization too: disposal never waits for WASM or a worker. */
 export function createObservableTerminalViewer(options: ObservableTerminalViewerOptions): ObservableTerminalViewer {
   const mount = document.createElement("div");
   mount.className = "observable-terminal-mount";
@@ -230,7 +217,6 @@ export function createObservableTerminalViewer(options: ObservableTerminalViewer
 
 async function initializeTerminalViewer(options: ObservableTerminalViewerOptions, mount: HTMLElement, isDisposed: () => boolean): Promise<ObservableTerminalViewer | undefined> {
   let theme = options.theme ?? DEFAULT_OBSERVABLE_TERMINAL_THEME;
-  // Validate external configuration before acquiring a terminal/worker.
   const websocketUrl = new URL(options.websocketUrl);
   const fontSize = options.fontSize ?? (options.mode === "fixed-readonly" ? 11 : 13);
   const fontFamily = options.fontFamily ?? "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
@@ -279,14 +265,12 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
     // Only measurable panes can change the PTY size: workspace selection itself
     // must not resize tmux or make TUIs like Pi redraw their whole history.
     let ptySize = { cols: term.geometry.cols, rows: term.geometry.rows };
-    // The size the server already has: the attach URL's, or the last one sent.
     let sentSize = ptySize;
     const measurePtySize = (): boolean => {
       const { width, height } = term.element.getBoundingClientRect();
       if (width && height) ptySize = { cols: term.geometry.cols, rows: term.geometry.rows };
       return width > 0 && height > 0;
     };
-    // Resizing makes tmux and its TUI redraw everything; only send real changes.
     const sendSize = (): void => {
       if (!measurePtySize() || ws?.readyState !== WebSocket.OPEN) return;
       if (ptySize.cols === sentSize.cols && ptySize.rows === sentSize.rows) return;
@@ -336,7 +320,6 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
     let historyCursorHidden = false;
     let focused = false;
     let cursorHidden = false;
-    // The application's own cursor visibility, restored when AgentsInTheCloud stops hiding it.
     let cursorWasVisible: boolean | undefined;
     let cursorVisibilityRevision = 0;
     const hideCursor = (): void => {
@@ -375,7 +358,6 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
         return;
       }
       awaitingFirstOutput = false;
-      // Keep the pane background visible until the first output has been rendered.
       void term.writeAsync(data).then(() => {
         if (!disposed) { hideCursor(); term.element.classList.add("observable-terminal-painted"); }
       }).catch((error: Error) => {
@@ -434,7 +416,6 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
         }
         if (interactive) {
           if (suspended || document.hidden) return;
-          // A failed attach can open and immediately close; do not count it as recovery.
           if (openedAt && Date.now() - openedAt >= 10_000) retryAttempts = 0;
           if (retryAttempts >= retryDelays.length) { status("unavailable"); return; }
           status("reconnecting");
@@ -531,7 +512,6 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
       term.element.addEventListener("pointerdown", (event) => {
         if (event.pointerType === "touch") return;
         pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
-        // Do not send mouse input to a TUI when tapping a known link.
         if (linkAt(event)) { event.preventDefault(); event.stopImmediatePropagation(); }
       }, { capture: true });
       term.element.addEventListener("pointerup", (event) => {
@@ -545,7 +525,6 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
           event.stopImmediatePropagation();
           options.onLink!(link);
         } else {
-          // A first touch can arrive before the viewport read completes.
           void updateRows().then(() => { if (!disposed) { const target = linkAt(event); if (target) options.onLink!(target); } });
         }
       }, { capture: true });
@@ -589,7 +568,6 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
           anyButtonPressed: action !== "release",
           forceSelection: select,
           rectangle: event.altKey,
-          // Shift chooses application mouse input, not an application modifier.
           modifiers: (event.ctrlKey ? KeyModifiers.control : 0)
             | (event.altKey ? KeyModifiers.alt : 0)
             | (event.metaKey ? KeyModifiers.meta : 0),
@@ -634,7 +612,6 @@ async function initializeTerminalViewer(options: ObservableTerminalViewerOptions
 }
 
 const latin1 = new TextDecoder("latin1");
-/** The final state an output chunk sets a DEC private mode to, such as DECTCEM (25), if any. */
 function lastPrivateMode(text: string, mode: number): boolean | undefined {
   const set = text.lastIndexOf(`\x1b[?${mode}h`);
   const reset = text.lastIndexOf(`\x1b[?${mode}l`);

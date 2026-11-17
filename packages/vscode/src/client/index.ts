@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import type { WorkspaceClientModule } from "@agents-in-the-cloud/shared";
 
 function cssVariable(name: string): string {
@@ -42,7 +40,6 @@ export const vscodeClientModule: WorkspaceClientModule = {
       private observer?: MutationObserver;
 
       connect(): void {
-        // The presentation stream activates the view; its body may still be loading.
         this.observer = new MutationObserver(() => this.navigate());
         this.observer.observe(document.body, { childList: true, subtree: true });
         this.navigate();

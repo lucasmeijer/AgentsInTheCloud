@@ -4,7 +4,6 @@ import type { Context } from "@earendil-works/chord";
 import type { ScriptFileView } from "@agents-in-the-cloud/agent/server/transcript";
 import { execWorkspaceCommand } from "@agents-in-the-cloud/workspace";
 
-/** A call's script file, pinned before it first runs, so a rerun after a restart runs the same code. */
 const ScriptFileDoc = defineDoc<{ file?: ScriptFileView }>({
   kind: "agents-in-the-cloud.codemode-script-file",
   version: 1,
@@ -13,7 +12,6 @@ const ScriptFileDoc = defineDoc<{ file?: ScriptFileView }>({
   checkpointWhen: () => false,
 });
 
-/** The script file a code mode call ran, by the call's ID, for the transcript; the task's document is gone once it ends. */
 export const codemodeScriptFileEntry = defineEntry<{ callId: string } & ScriptFileView>("agents-in-the-cloud.codemode-script-file");
 
 export const scriptFileDescription = "To run a script file instead, make the code a line `// @path: <file>`, optionally after an `// @options:` line. To give the script input, follow the path line with a JSON value; the script gets it as `input`. The file holds a script like any other; edit it and call again to iterate. Each call runs the file as it was when the call started.";
@@ -41,10 +39,8 @@ function scriptFileReference(code: string): { options: string; path: string; inp
   }
 }
 
-/** Reads a script file: its text, or why it can't. */
 export type ReadScriptFile = (path: string) => Promise<{ text: string } | { error: string }>;
 
-/** Reads script files in a workspace; relative paths start at its root. */
 export function workspaceScriptFiles(workspaceId: string): ReadScriptFile {
   return async path => {
     const result = await execWorkspaceCommand(workspaceId, ["cat", "--", path]);
@@ -64,7 +60,6 @@ export async function resolveScript(readFile: ReadScriptFile, code: string, api:
   const reference = scriptFileReference(code);
   if (!reference) return { code };
   if ("error" in reference) return { error: errorResult(reference.error) };
-  // The document is a draft of its transaction: copy the file out of it.
   let file = await api.commit(async tx => {
     const pinned = (await tx.doc(ScriptFileDoc, api.taskId)).file;
     return pinned && { ...pinned };

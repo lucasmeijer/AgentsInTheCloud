@@ -18,6 +18,5 @@ test("messages that arrive while a turn runs join that turn; others sit between 
   expect(result.map(item => item.key)).toEqual(["prompt", "turn", "answer", "between", "live"]);
   expect(result[1]?.type === "working" && result[1].items.map(item => item.key)).toEqual(["before", "during", "after"]);
   expect(result[4]?.type === "working" && result[4].items.map(item => item.key)).toEqual(["live"]);
-  // The input transcript is left as it was.
   expect(items[1]?.type === "working" && items[1].items.map(item => item.key)).toEqual(["before", "after"]);
 });

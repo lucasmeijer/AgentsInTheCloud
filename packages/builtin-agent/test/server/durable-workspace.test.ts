@@ -91,7 +91,6 @@ describe("Durable workspace journal", () => {
     const reopened = await open(path, options);
     expect((await reopened.agent(record)).id).toBe(one.id);
     expect((await reopened.harness.inspect(context)).scheduling).toBe("paused");
-    // Raw journals remain searchable without a separate transcript export.
     const main = await readFile(join(path, "main.jsonl"), "utf8");
     const files = await Array.fromAsync(new Bun.Glob("*.jsonl").scan(path));
     const journal = (await Promise.all(files.map((file) => readFile(join(path, file), "utf8")))).join("\n");

@@ -1,10 +1,7 @@
-/// <reference lib="dom" />
-
 import { Controller } from "@hotwired/stimulus";
 
 const enabledItemSelector = ':not([hidden]):not(:disabled):not([aria-disabled="true"])';
 
-/** Moves focus through an explicitly marked vertical sequence without wrapping. */
 export class LinearNavigationController extends Controller<HTMLElement> {
   static targets = ["item"];
   declare readonly itemTargets: HTMLElement[];

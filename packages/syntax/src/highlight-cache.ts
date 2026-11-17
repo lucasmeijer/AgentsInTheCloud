@@ -1,6 +1,5 @@
 import type { HighlightedCode } from "./highlight.ts";
 
-/** LRU bounded by both entry count and retained source/output UTF-16 units. */
 export class HighlightCache {
   private readonly entries = new Map<string, { result: HighlightedCode; size: number }>();
   private retained = 0;

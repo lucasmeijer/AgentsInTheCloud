@@ -18,7 +18,6 @@ export interface ReviewComparison {
   endpoints: DiffEndpoints; head?: string; resolvedBase: string | null;
 }
 
-/** Follow mutable comparisons by their meaning, while explicit commit pairs stay pinned. */
 export function reviewComparisonKey(comparison: ReviewComparison): string {
   const { endpoints, resolvedBase, head } = comparison;
   if (endpoints.target === "working" && resolvedBase === "staged") return "unstaged";
@@ -43,7 +42,6 @@ export function captureCommentAnchor(contents: string, start: number, end: numbe
   return { code: lines.slice(start - 1, end), before: lines.slice(Math.max(0, start - 4), start - 1), after: lines.slice(end, end + 3) };
 }
 
-/** Exact code plus context must match uniquely. Never prefer the old line number in an ambiguous match. */
 export function locateCommentAnchor(anchor: ReviewComment["anchor"], contents: string): { start: number; end: number } | undefined {
   const lines = textLines(contents);
   const needle = [...anchor.before, ...anchor.code, ...anchor.after];
@@ -90,7 +88,6 @@ export function exportReviewComments(comments: readonly CommentPlacement[]): str
     const language = languageFromPath(comment.path);
     const body = [...before, ...userComment(comment.body, language), ...after].join("\n");
     const filename = `${comment.path.replaceAll("\n", "\\n").replaceAll("\r", "\\r")}:${start}-${end}`;
-    // The renderer also accepts a bare filename, including quotes and spaces.
     const info = `${language === "json" ? "jsonc" : language ?? "text"} ${filename.includes('"') ? filename : `filename="${filename}"`}`;
     const marker = info.includes("`") ? "~" : "`";
     const runs = marker === "`" ? /`+/g : /~+/g;

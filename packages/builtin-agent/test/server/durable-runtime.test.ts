@@ -203,7 +203,6 @@ test("reset changes active context but retains journal history and settings", as
   await agent.reset();
   const active = await agent.context(context);
   expect(JSON.stringify(active.messages)).not.toContain("Old input");
-  // The view holds the history; the transcript shows what the model sees, from the reset on.
   await (await agent.submit({ requestId: "new", text: "New input" })).wait(context);
   const watch = await agent.watch(context);
   expect(JSON.stringify(watch.value.entries)).toContain("Old input");
@@ -724,7 +723,6 @@ test.each(["offline", "commit-crash"] as const)("Stop %s boundary withdraws stee
   expect((await reopened.admission())?.closed).toEqual([]);
   expect((await reopened.admission())?.deleted).toBe(false);
   load.ready = async () => {};
-  // No successful cleanup retry is required before the next genuine message.
   faux.setResponses([fauxAssistantMessage("Later genuine answer"), fauxAssistantMessage("Independent answer")]);
   expect((await (await restored.submit({ requestId: "later", text: "New genuine input" })).wait(context)).status).toBe("done");
   expect(executions).toBe(1);
@@ -801,7 +799,6 @@ test("Stop does not signal another root's active tool", async () => {
 });
 
 
-/** A `hold` tool that runs until it is cancelled, whose start `held` reports. */
 function installHold(registry: ReturnType<typeof createRegistry>) {
   const held = Promise.withResolvers<void>();
   registry.install(defineExtension({ name: "hold-test-tool", tools: [defineTool({
@@ -852,7 +849,6 @@ test("execution owner publishes busy and finished turns without a presentation m
     const agent = await runtime.agent(record);
     const turn = await agent.submit({ requestId: "headless", text: "Run without a viewer" });
     await entered.promise;
-    // No presentation or viewer watch was created.
     expect(busy).toEqual([true]);
     expect(currentNotificationTurn({ workspaceId: "native-workspace", agentId: record.agentId })).toBeDefined();
     expect(finished).toEqual([]);
@@ -944,7 +940,6 @@ test("owner resumes retained work and emits completion without callers acquiring
   await runtime.suspend();
   const reopened = await open();
   expect(executions).toBe(1);
-  // No caller acquires a controller, watch, or presentation in the new owner.
   await reopened.resume();
   expect(await finished.promise).toEqual({ workspaceId: "native-workspace", agentId: record.agentId });
   expect(executions).toBe(2);
@@ -1107,7 +1102,6 @@ test("a follow-up promoted to steering joins the running turn after its current 
   expect((await promoted.wait(context)).status).toBe("done");
   expect(faux.state.callCount).toBe(2);
   expect(JSON.stringify((await agent.context(context)).messages)).not.toContain("Remove me");
-  // Steering ends the block it interrupted and gets its own.
   const watch = await agent.watch(context);
   const items = projectDurableTranscript(watch.value);
   await watch.stop();
@@ -1179,7 +1173,6 @@ test("a follow-up left behind by a turn that failed is shown as not sent, and St
   expect((await followUp.wait(context)).status).toBe("done");
   expect(faux.state.callCount).toBe(3);
   const after = await agent.watch(context);
-  // The bookkeeping write that resumed the queue shows nothing.
   expect(projectDurableTranscript(after.value).map(item => item.type)).toEqual(["user", "working", "error", "user", "working", "text"]);
   await after.stop();
   expect(JSON.stringify((await agent.context(context)).messages)).toContain("Later please");
@@ -1212,7 +1205,6 @@ test("sending the newest of three follow-ups a failed turn left behind keeps the
   const third = await agent.submit({ requestId: "third", text: "Third follow-up", whenBusy: "followUp" });
   release.resolve();
   expect((await original.wait(context)).status).toBe("unanswered");
-  // Cmd+Enter in an empty composer sends the newest one shown.
   expect(await agent.steerQueuedInput(String(third.id))).toBe(true);
   for (const submission of [first, second, third]) expect((await submission.wait(context)).status).toBe("done");
   const users = (await agent.context(context)).messages.filter(message => message.role === "user").map(message => JSON.stringify(message.content));
@@ -1250,7 +1242,6 @@ test("work cut off by repeated crashes ends with an error instead of keeping the
     async execute() { executions++; return { output: [{ type: "text", text: "Recovered tool" }] }; },
   })] }));
   const runtime = await openDurableAgentRuntime(journal, "native-workspace", {}, {
-    // One crash is enough to end the step here; the app keeps pi's default.
     harness: async () => ({ models, registry, settings: { restartLimit: 1 } }),
     prepare: async (): Promise<AgentChange> => { throw new Error("Must not reprepare"); },
     expand: async (_workspace: string, text: string) => text,

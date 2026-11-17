@@ -12,24 +12,18 @@ export interface VideoAnalysis {
   frames: number;
   width: number;
   height: number;
-  /** Rows excluded at the top (status bar: the clock may tick). */
   statusRows: number;
-  /** Regions excluded because their content is live (a terminal's output), in video pixels. */
   masks: readonly Mask[];
-  /** Mean luminance difference within a 2×2-point block treated as codec noise. */
   tolerance: number;
-  /** Differing pixels allowed per frame: twice the noise floor measured on still frames, plus a blinking caret. */
   allowance: number;
   noise: number;
   firstChanged: number | null;
   settledKeyboardTop: number;
-  /** Per analysed frame: time, detected keyboard top (px), and pixels above it that differ from the settled frame. */
   perFrame: { index: number; time: number; keyboardTop: number; differing: number }[];
   worst: { index: number; time: number; differing: number; firstRow: number } | null;
   pass: boolean;
 }
 
-/** Rows whose mean luminance is at least this are keyboard (the app is dark, the keyboard light). */
 const keyboardLuminance = 110;
 
 async function probe(file: string): Promise<{ width: number; height: number; times: number[] }> {
@@ -52,7 +46,6 @@ function keyboardTop(frame: Uint8Array, width: number, height: number): number {
     let sum = 0;
     const offset = row * width;
     for (let column = 0; column < width; column += 3) sum += frame[offset + column]!;
-    // Dark rows may also sit below the keyboard (the bar slides away last, over the home indicator).
     if (sum / Math.ceil(width / 3) >= keyboardLuminance) {
       top = row;
       dark = 0;
@@ -63,13 +56,10 @@ function keyboardTop(frame: Uint8Array, width: number, height: number): number {
 
 interface Difference { count: number; firstRow: number }
 
-/** Block edge in pixels: 2×2 points at 3×. Codec noise averages out inside a block; moved content does not. */
 const block = 6;
 
-/** [left, top, width, height] in video pixels. */
 export type Mask = [number, number, number, number];
 
-/** Pixels in blocks whose mean luminance differs by more than `tolerance`, outside the masks. */
 function differing(a: Uint8Array, b: Uint8Array, width: number, fromRow: number, toRow: number, tolerance: number, masks: readonly Mask[] = []): Difference {
   let count = 0;
   let firstRow = -1;
@@ -115,17 +105,14 @@ export async function analyseKeyboardVideo(file: string, options: { statusBarPoi
     for (let index = 1; index < count; index++) {
       if (differing(frame(index), first, width, statusRows, pageRows(frame(index), firstTop), tolerance).count > 1500) { firstChanged = index; break; }
     }
-    // Noise floor: still frames before anything changed.
     let noise = 0;
     for (let index = 1; index < (firstChanged ?? count); index++) noise = Math.max(noise, differing(frame(index), first, width, statusRows, pageRows(frame(index), firstTop), tolerance, options.masks).count);
-    // A text caret (one line tall, straddling two blocks) blinks on or off between any frame and the settled one.
     const caret = 2 * block * Math.ceil(27 * (width / 393) / block + 1) * block;
     const allowance = 2 * noise + caret;
     const perFrame: VideoAnalysis["perFrame"] = [];
     let worst: VideoAnalysis["worst"] = null;
     for (let index = firstChanged ?? count; index < count; index++) {
       const current = frame(index);
-      // Rows just above the keyboard can carry its rounded corners and shadow.
       const result = differing(current, settled, width, statusRows, pageRows(current, settledKeyboardTop), tolerance, options.masks);
       perFrame.push({ index, time: times[index] ?? index / 60, keyboardTop: keyboardTop(current, width, height), differing: result.count });
       if (!worst || result.count > worst.differing) worst = { index, time: times[index] ?? index / 60, differing: result.count, firstRow: result.firstRow };

@@ -3,7 +3,6 @@ import { createRegistry, defineExtension, defineTool, type AgentChange } from "@
 import { Type } from "typebox";
 import { openDurableAgentRuntime } from "../../../src/server/durable-runtime.ts";
 
-/** Runs a tool that never finishes and says so, for the test to SIGKILL this process mid-step. */
 const [journal] = process.argv.slice(2);
 const models = createModels();
 const faux = fauxProvider({ tokensPerSecond: 100_000 });

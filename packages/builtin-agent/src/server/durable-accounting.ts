@@ -4,7 +4,6 @@ import { defineExtension, GenerationTask, hook, type ContextView } from "@earend
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { hasUsageLimits, recordSubscriptionInference, supportedUsageProviders } from "@agents-in-the-cloud/llm/server";
 
-/** Same head-cutoff rule as native automatic compaction, over derived context. */
 export function durableContextTokens(view: ContextView): number {
   const cutoff = view.head?.id ?? Number.NEGATIVE_INFINITY;
   let measured;
@@ -17,9 +16,7 @@ export function durableContextTokens(view: ContextView): number {
     + view.messages.slice(from).reduce((sum, message) => sum + estimateMessageTokens(message), 0);
 }
 
-/** Pacing activity, not billing: no secondary transcript or exactly-once claim. Also for responses outside a turn, like prompt suggestions. */
 export async function recordDurableSubscriptionActivity(models: Pick<ModelRuntime, "getAuth">, message: AssistantMessage, record = recordSubscriptionInference): Promise<void> {
-  // Only these subscriptions report limits we can fetch for pacing.
   if (!["openai-codex", "github-copilot", "opencode-go"].includes(message.provider) || message.stopReason === "error" || message.stopReason === "aborted" || message.stopReason === "deferred") return;
   const provider = supportedUsageProviders.find((supported) => supported.id === message.provider)!;
   if (hasUsageLimits(provider, await models.getAuth(provider.id))) record(provider.id);

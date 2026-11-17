@@ -35,9 +35,7 @@ export type ChangesIndex =
   | { phase: "not-git" }
   | { phase: "ready"; files: ChangesFileSummary[] };
 
-/** Diffs show text up to maxChangesTextBytes and images up to this; larger files are only measured. */
 const maxChangesContentBytes = 16 * 1024 * 1024;
-/** Unchanged media is loaded whole for a single preview. */
 export const maxUnchangedMediaBytes = 64 * 1024 * 1024;
 
 function decodeText(content: Buffer | undefined): string | undefined {
@@ -98,7 +96,6 @@ function changesFileFromContents(
       : modes.oldMode !== modes.newMode ? "File mode changed" : "No textual changes" };
 }
 
-/** Git reports an untracked nested repository as its directory, with a trailing slash, instead of its files. */
 function isNestedRepository(entry: GitStatusEntry): boolean {
   return entry.code === "??" && entry.path.endsWith("/");
 }
@@ -228,7 +225,6 @@ export async function collectCommitChangesStats(root: Repository, commit: string
   }));
 }
 
-/** Compare against the first parent; root commits compare against an empty tree. */
 export async function collectCommitChangesFile(root: Repository, commit: string, path: string): Promise<ChangesFile | undefined> {
   const { entries } = await commitEntries(root, commit);
   const entry = entries.find((candidate) => candidate.path === path);
@@ -241,7 +237,6 @@ export async function collectCommitChangesFile(root: Repository, commit: string,
   return changesFileFromContents(entry, before, after, entry);
 }
 
-/** Collect a fixed Git comparison, or compare its base with the working tree without touching the index. */
 export async function collectChangesComparison(root: Repository, base: string, end?: string): Promise<{ index: ChangesIndex; stats: ChangesFileStats[]; files: Map<string, ChangesFile> }> {
   const [entries, status, numstat] = await Promise.all([
     comparisonEntries(root, base, end),
@@ -292,15 +287,12 @@ export async function collectChangesComparison(root: Repository, base: string, e
   return { index: { phase: "ready", files: capturedStats.map(({ additions: _a, deletions: _d, binarySizes: _b, ...summary }) => summary) }, stats: capturedStats, files };
 }
 
-/** Files at the comparison's target that it leaves unchanged. Submodules have no contents to show. */
 export async function collectUnchangedPaths(root: Repository, target: string | undefined, changed: ReadonlySet<string>): Promise<string[]> {
   const records = (output: Buffer) => output.toString("utf8").split("\0").filter(Boolean);
   let paths: string[];
   if (target) {
-    // <mode> SP <type> SP <object> TAB <path>
     paths = records(await git(root, ["ls-tree", "-r", "-z", "--full-tree", target])).filter(record => record.split(" ")[1] === "blob").map(record => record.slice(record.indexOf("\t") + 1));
   } else {
-    // <mode> SP <object> SP <stage> TAB <path>
     const [indexed, deleted] = await Promise.all([git(root, ["ls-files", "-z", "--stage"]), git(root, ["ls-files", "-z", "--deleted"])]);
     const missing = new Set(records(deleted));
     paths = [...new Set(records(indexed).filter(record => !record.startsWith("160000 ")).map(record => record.slice(record.indexOf("\t") + 1)))].filter(path => !missing.has(path));
@@ -313,7 +305,6 @@ export type UnchangedFile =
   | { kind: "image" | "video" | "audio"; contentType: string }
   | { kind: "binary" | "large" };
 
-/** Images, video and audio are recognised by name, like the Files view, and streamed rather than read here. */
 export function unchangedMediaType(path: string): string | undefined {
   const contentType = imageMimeByExtension[extensionOf(path)] ?? Bun.file(path).type.split(";")[0]!;
   return /^(?:image|video|audio)\//.test(contentType) ? contentType : undefined;

@@ -49,7 +49,6 @@ function serializeResponse(response: IncomingMessage, headers: Headers, scrubHea
   return `HTTP/1.1 ${response.statusCode} ${scrubHeader(response.statusMessage ?? "")}\r\n${[...headers].filter(([name]) => scrubHeader(name) === name).map(([name, value]) => `${name}: ${scrubHeader(value)}\r\n`).join("")}\r\n`;
 }
 
-/** Preserve the negotiated protocol and raw frames, including masking, compression and control frames. */
 export async function bridgeWebSocket(request: Request, client: Duplex, head: Buffer, open: UpgradeRequest, scrubHeader: (value: string) => string): Promise<void> {
   const headers = forwardingHeaders(request.headers);
   headers.set("connection", "Upgrade");
@@ -64,12 +63,10 @@ export async function bridgeWebSocket(request: Request, client: Duplex, head: Bu
       if (committed || cancelled) return;
       cancelled = true;
       clearHandshake();
-      // Settle independently of ClientRequest events: its agent may still be awaiting CONNECT.
       reject(error);
       controller.abort();
       upstream.destroy();
     };
-    // This deadline covers DNS, proxy CONNECT, TLS, and the HTTP handshake, not the WebSocket lifetime.
     const timeout = setTimeout(() => cancel(new Error("WebSocket upstream handshake timed out")), 30_000);
     const abort = () => cancel(new Error("WebSocket client disconnected during handshake"));
     client.once("close", abort);
@@ -89,7 +86,6 @@ export async function bridgeWebSocket(request: Request, client: Duplex, head: Bu
       if (cancelled) { response.destroy(); return; }
       committed = true;
       clearHandshake();
-      // Forward rejections (including 401, 429 and redirects) without following redirects or exposing credentials elsewhere.
       const outgoing = forwardingHeaders(responseHeaders(response));
       outgoing.set("connection", "close");
       client.write(serializeResponse(response, outgoing, scrubHeader));
@@ -118,7 +114,6 @@ export async function bridgeWebSocket(request: Request, client: Duplex, head: Bu
       outgoing.set("connection", "Upgrade");
       outgoing.set("upgrade", "websocket");
       client.write(serializeResponse(response, outgoing, scrubHeader));
-      // Both parsers can read beyond the headers. These bytes must precede piped traffic.
       if (upstreamHead.length) client.write(upstreamHead);
       if (head.length) socket.write(head);
       socket.pipe(client);

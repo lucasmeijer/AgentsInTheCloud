@@ -17,7 +17,6 @@ const extensionLanguages = new Map(Object.entries({
 const basenameLanguages = new Map(Object.entries({
   dockerfile: "docker", containerfile: "docker", makefile: "make", gnumakefile: "make", "cmakelists.txt": "cmake",
 }));
-/** Filename-based language detection shared by server highlighting and browser exports. */
 export function languageFromPath(filePath: string | undefined): string | undefined {
   if (!filePath) return undefined;
   const basename = filePath.slice(filePath.lastIndexOf("/") + 1).toLowerCase();

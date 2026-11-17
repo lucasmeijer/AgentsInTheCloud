@@ -83,7 +83,6 @@ test("a turn has settled once Claude's stop hook summary follows its last messag
   const thinking = row("t", "u", "assistant", [{ type: "thinking", thinking: "Rhymes" }]);
   const answer = row("a", "t", "assistant", [{ type: "text", text: "Fish glide free" }]);
   const summary = system("s", "a", "stop_hook_summary");
-  // As written when the Stop hook fires: the answer is still in Claude's write queue.
   expect(claudeTurnSettled([prompt, thinking].join("\n"))).toBe(false);
   expect(claudeTurnSettled([prompt, thinking, answer].join("\n"))).toBe(false);
   expect(claudeTurnSettled([prompt, thinking, answer, summary, system("d", "s", "turn_duration")].join("\n") + "\n")).toBe(true);

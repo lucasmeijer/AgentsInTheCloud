@@ -1,6 +1,5 @@
 import { type WorkspaceClientControllerConstructor } from "@agents-in-the-cloud/shared";
 
-/** Retain native editing context for CLI prose, without changing hardware terminal input. */
 export function createNativeTerminalTextInputController(Controller: WorkspaceClientControllerConstructor) {
   return class extends Controller {
     declare readonly element: HTMLTextAreaElement;
@@ -23,7 +22,6 @@ export function createNativeTerminalTextInputController(Controller: WorkspaceCli
     keydown(event: KeyboardEvent): void {
       if (this.nativeEditing && !event.ctrlKey && !event.altKey && !event.metaKey
         && (event.key.length === 1 || event.key === "Backspace" || event.key === "Unidentified")) {
-        // Let Safari edit its textarea; Gespenst otherwise prevents every keydown.
         event.stopImmediatePropagation();
         return;
       }
@@ -50,7 +48,6 @@ export function createNativeTerminalTextInputController(Controller: WorkspaceCli
     }
 
     private sendEdit(): void {
-      // Safari uses NBSP after sentence replacement; terminals need ordinary spaces.
       const next = this.element.value.replaceAll("\u00a0", " ");
       const previous = Array.from(this.graphemes.segment(this.previous), ({ segment }) => segment);
       const current = Array.from(this.graphemes.segment(next), ({ segment }) => segment);

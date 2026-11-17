@@ -3,7 +3,6 @@ import { Value } from "typebox/value";
 
 const accountClaimsSchema = Type.Object({ "https://api.openai.com/auth": Type.Object({ chatgpt_account_id: Type.String({ minLength: 1 }) }) });
 
-/** Sign in with ChatGPT access tokens are JWTs; this decodes their unverified payload. */
 export function codexTokenClaims<Schema extends TSchema>(token: string, schema: Schema): Static<Schema> {
   return Value.Parse(schema, JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString()));
 }

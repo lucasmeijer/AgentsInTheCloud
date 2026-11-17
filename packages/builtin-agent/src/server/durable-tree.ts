@@ -7,7 +7,6 @@ import { treeFilterOptions, type TreeFilterMode } from "./session-tree.ts";
 
 type Controller = Awaited<ReturnType<DurableAgentRuntime["agent"]>>;
 
-/** Native history is a union of immutable fork prefixes, not a legacy SessionManager tree. */
 export function renderDurableTree(history: Awaited<ReturnType<Controller["tree"]>>, options: { filter: TreeFilterMode; query: string; historyPath?: string }) {
   const parents = new Map<number, number | undefined>(history.nodes.map(node => [node.entry.id, node.parentId]));
   const active = new Set<number>();

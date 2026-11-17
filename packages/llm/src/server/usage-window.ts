@@ -7,17 +7,13 @@ export type UsageWindowTiming = {
   paceDifferencePoints: null;
   paceDifferenceSeconds: null;
 } | {
-  /** Inferred from the provider's reset timestamp minus its window duration. */
   startsAt: string;
   elapsedPercent: number;
   state: "not-started" | "active" | "reset-due";
-  /** Usage minus elapsed time, in percentage points. Not meaningful outside the active window. */
   paceDifferencePoints: number | null;
-  /** Signed distance along the linear allowance schedule; positive means consumption is ahead. */
   paceDifferenceSeconds: number | null;
 }
 
-/** A linear pacing reference, not a prediction of provider allowance consumption. */
 export function usageWindowTiming(window: SubscriptionUsage["windows"][number], at: Date): UsageWindowTiming {
   if (window.resetsAt === null) return { state: "unknown", startsAt: null, elapsedPercent: null, paceDifferencePoints: null, paceDifferenceSeconds: null };
   const reset = new Date(window.resetsAt).getTime();
@@ -41,7 +37,6 @@ export function estimatedTimeToHitLimitSeconds({ reported, timing }: PacedUsageW
   if (timing.state !== "active") return Infinity;
   if (reported.usedPercent >= 100) return 0;
   if (reported.usedPercent === 0 || timing.elapsedPercent === 0) return Infinity;
-  // Usage at or below elapsed time reaches 100% at or after the reset.
   if (reported.usedPercent <= timing.elapsedPercent) return Infinity;
   const elapsedSeconds = timing.elapsedPercent / 100 * reported.durationSeconds;
   return (100 - reported.usedPercent) / reported.usedPercent * elapsedSeconds;

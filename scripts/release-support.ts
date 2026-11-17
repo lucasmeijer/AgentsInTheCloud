@@ -26,7 +26,6 @@ const configSchema = Type.Object({
 export async function inspectImage(run: Run, ref: string, optional = false) {
   const result = await run(["docker", "buildx", "imagetools", "inspect", ref, "--format", "{{json .Manifest}}"], { allowFailure: optional });
   if (result.code !== 0) {
-    // Only a registry's explicit absence is a cache miss, never authentication/network failures.
     if (optional && /manifest unknown|: not found\b/i.test(result.stderr)) return undefined;
     throw new Error(`Cannot inspect ${ref}: ${result.stderr}`);
   }
@@ -39,7 +38,6 @@ export async function inspectImage(run: Run, ref: string, optional = false) {
   return manifest;
 }
 
-/** The labels of each platform image in a multi-platform manifest. */
 export async function platformLabels(run: Run, repository: string, manifest: NonNullable<Awaited<ReturnType<typeof inspectImage>>>): Promise<Record<string, string>[]> {
   return await Promise.all(manifest.manifests.map(async (entry) => {
     const result = await run(["docker", "buildx", "imagetools", "inspect", `${repository}@${entry.digest}`, "--format", "{{json .Image}}"]);
@@ -88,7 +86,6 @@ export async function ensureBuilders(run: Run, directory: string) {
   const probe = join(directory, "probe");
   mkdirSync(probe);
   writeFileSync(join(probe, "marker"), "AgentsInTheCloud release builder check\n");
-  // Exercise COPY, RUN and image export on each daemon, without emulation or registry writes.
   for (const [builder, platform] of [[local, nativePlatform], [remote, remotePlatform]]) {
     const machine = platform === "linux/amd64" ? "x86_64" : "aarch64";
     writeFileSync(join(probe, "Dockerfile"), `FROM ubuntu:26.04\nCOPY marker /marker\nRUN cat /marker && test "$(uname -m)" = "${machine}"\n`);
@@ -97,7 +94,6 @@ export async function ensureBuilders(run: Run, directory: string) {
   return { local, remote, nativePlatform };
 }
 
-// Shared command transport; each publisher retains its own orchestration and logs.
 export function commandRunner(cwd: string, output: (text: string) => void) {
   let active: ReturnType<typeof Bun.spawn> | undefined;
   const run: Run = async (args, options = {}) => {

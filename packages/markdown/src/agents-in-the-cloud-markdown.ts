@@ -46,7 +46,6 @@ export function agentsInTheCloudFileHref(workspaceId: string, rawHref: string, s
   return target ? workspaceFileOpenUrl(workspaceId, target.path, target, filesViewId) : undefined;
 }
 
-/** Inline code naming a file, such as `src/main.ts:12`, with the absolute paths it may mean, most specific first. */
 export function inlineCodeFileReference(code: string, sourcePath?: string): Omit<WorkspaceFileTarget, "path"> & { candidates: string[] } | undefined {
   const reference = parseFileReference(code.trim());
   if (!reference) return undefined;

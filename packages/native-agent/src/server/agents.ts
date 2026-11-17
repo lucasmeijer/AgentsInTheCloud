@@ -9,21 +9,16 @@ import type { CliModelSettings, createCliModelSettings } from "@agents-in-the-cl
 
 export interface NativeAgentRecord { id: string; title: string; model?: string; thinkingLevel?: string }
 
-/** A harness that runs in the workspace and renders into AgentsInTheCloud's own transcript and composer. */
 export interface NativeAgentRuntime {
   readonly workspaceId: string;
   readonly agentId: string;
   readonly record: NativeAgentRecord;
   readonly state: { readonly notices: readonly string[] };
   readonly failure?: Error;
-  /** Not yet settled: in a turn, or waiting on work it will report on. */
   readonly isBusy: boolean;
-  /** In a turn. Work outside one can still be stopped while the conversation takes prompts. */
   readonly isTurnRunning: boolean;
-  /** Waits for a connecting harness. */
   systemPrompt(): Promise<string>;
   readonly completionCatalog: string;
-  /** A predicted next prompt, shown in the empty composer. */
   readonly promptSuggestion?: string;
   readonly presentation: ReturnType<typeof createLivePresentation>;
   refreshCompletionCatalog(): Promise<void>;
@@ -35,12 +30,10 @@ export interface NativeAgentRuntime {
   dispose(): Promise<void>;
 }
 
-/** Each workspace keeps its native Agents of one type in one metadata file. */
 export function createNativeAgentStore<Record extends NativeAgentRecord>(filename: string, label: string, parse: (value: JsonValue) => Record[]) {
   const metadata = createWorkspaceMetadataState(filename, value => ({ agents: parse(value) }), () => ({ agents: [] }));
   const list = (workspaceId: string) => metadata.read(workspaceId).agents;
   return {
-    /** The title of an Agent nobody has named yet. */
     label,
     list,
     get(workspaceId: string, id: string) {
@@ -55,7 +48,6 @@ export function createNativeAgentStore<Record extends NativeAgentRecord>(filenam
 }
 export type NativeAgentStore<Record extends NativeAgentRecord> = ReturnType<typeof createNativeAgentStore<Record>>;
 
-/** One connected runtime per Agent, opened on first use and reconnected after a failure. */
 export function createNativeAgents<Record extends NativeAgentRecord, Runtime extends NativeAgentRuntime>(options: {
   store: () => NativeAgentStore<Record>;
   settings: Pick<ReturnType<typeof createCliModelSettings>, "prepare">;
@@ -120,7 +112,6 @@ export function createNativeAgents<Record extends NativeAgentRecord, Runtime ext
     return suggestAgentSlug(prompts, runtime.record.model ? parseModelRef(runtime.record.model) : undefined);
   }
   const naming = new Set<string>();
-  /** Like Builtin Agents, an unnamed Agent tries again with each prompt: an early one can be too short to name it by. */
   async function nameFromPrompts(runtime: Runtime, prompts: string) {
     if (!prompts.trim() || runtime.record.title !== store().label || naming.has(runtime.agentId)) return;
     naming.add(runtime.agentId);

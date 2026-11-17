@@ -66,7 +66,6 @@ function providerChoices(runtime: Runtime): ProviderChoice[] {
 
 type CatalogueEntry = ModelRef & { label: string; providerLabel: string; enabled: boolean };
 
-/** Every model the connected accounts offer, popular providers and models first. */
 async function catalogue(runtime: Runtime, accounts: Account[]): Promise<CatalogueEntry[]> {
   const enabledModels = new Set((await getEnabledModels()).map(modelKey));
   const perProvider = await Promise.all(accounts.filter((account) => account.connection === "connected").map(async (account) => {
@@ -84,7 +83,6 @@ function providerIcon(provider: string, label: string): string {
   return `<span aria-hidden="true">${providerBadgeHtml(provider, label, "settings-provider-icon")}</span>`;
 }
 
-/** What the card says in place of usage limits; undefined when it can show them. */
 function usageNote(account: Account): string | undefined {
   const usage = supportedUsageProviders.find((supported) => supported.id === account.provider);
   if (account.connection === "needs_attention") return usage
@@ -96,7 +94,6 @@ function usageNote(account: Account): string | undefined {
   return undefined;
 }
 
-/** The only place a connected provider shows up: rings while closed, limits and actions when open. */
 function renderAccountCard(account: Account, host: ModelsHost, open: boolean): string {
   const usagePath = `/usage/providers/${encodeURIComponent(account.id)}`;
   const note = usageNote(account);
@@ -125,7 +122,6 @@ function renderAccountCard(account: Account, host: ModelsHost, open: boolean): s
     trailingHtml: rings,
   };
   const actions = `<div class="model-account__actions">${reconnect}${disconnect}</div>`;
-  // Signing in again happens right here in the card, in place of its actions.
   const actionsHtml = reconnect ? `<turbo-frame id="${ids.reconnect(host, account.provider)}" class="model-connect">${actions}</turbo-frame>` : actions;
   return `<div class="model-account">${disclosureHtml({ summary, open: open || account.connection === "needs_attention", bodyHtml: `<div class="form-section">${usage}${actionsHtml}</div>` })}</div>`;
 }
@@ -157,7 +153,6 @@ function connectFrame(host: ModelsHost, body: string, frameId = ids.connect(host
   return `<turbo-frame id="${frameId}" class="model-connect">${body}</turbo-frame>`;
 }
 
-/** Providers without an account yet, split into popular ones and the rest. */
 function unconnectedProviders(runtime: Runtime, accounts: Account[]) {
   const connected = new Set(accounts.map((account) => account.provider));
   const choices = providerChoices(runtime).filter((provider) => !connected.has(provider.provider));
@@ -165,7 +160,6 @@ function unconnectedProviders(runtime: Runtime, accounts: Account[]) {
   return { popular, other: choices.filter((provider) => !popular.includes(provider)) };
 }
 
-/** Always offer popular providers up front, with the rest behind a search. */
 function renderConnectChoices(host: ModelsHost, runtime: Runtime, accounts: Account[]): string {
   const { popular, other } = unconnectedProviders(runtime, accounts);
   return connectFrame(host, `<div class="model-provider-groups">
@@ -279,9 +273,7 @@ function renderCustomModelsSettings(view: CustomModelsView): string {
 }
 
 type PanelOptions = {
-  /** An account id to open, or "models" to start in the model search. */
   focus?: string;
-  /** Replaces the connect area, e.g. with a sign-in already under way. */
   connectHtml?: string;
   error?: string;
   customModels?: Omit<CustomModelsView, "source">;
@@ -315,7 +307,6 @@ function modelsDialogHtml(host: DialogHost, bodyHtml: string): string {
   });
 }
 
-/** The Models dialog; onboarding shows the same panel as its last step. */
 export async function renderModelsDialog(options: { host?: DialogHost; focus?: string; connect?: string } = {}): Promise<string> {
   const host = options.host ?? "dialog";
   const connectHtml = options.connect ? await connectStep(options.connect, host) : undefined;
@@ -333,14 +324,11 @@ function providerHeading(provider: Pick<ProviderChoice, "provider" | "label">): 
 function backToChoices(host: ModelsHost): string {
   return actionLinkHtml({ href: `/models/connect?${hostQuery(host)}`, variant: "secondary", content: { kind: "caption", caption: "Back" } });
 }
-/** Every connection state supplies content; this shell alone owns its placement. */
 function renderConnectionStep(provider: Pick<ProviderChoice, "provider" | "label">, host: ModelsHost, options: {
   bodyHtml: string;
   actionsHtml?: string;
   attributesHtml?: string;
-  /** About the provider account itself, which its card shows once connected. */
   noticeHtml?: string;
-  /** Signing in again inside the provider's card, which already names the provider and shows its notice. */
   reconnect?: boolean;
 }): string {
   return connectFrame(host, `<div id="model_connection_step" class="model-provider-connection${options.reconnect ? " model-provider-connection--reconnect" : ""}"${options.attributesHtml ? ` ${options.attributesHtml}` : ""}>
@@ -402,7 +390,6 @@ function renderCustomEndpointStep(host: ModelsHost, protocol: typeof customOpenA
   });
 }
 
-/** The next connection step for a provider: its sign-in methods, or the only one it has. */
 async function connectStep(providerId: string, host: ModelsHost, requestedMethod?: string): Promise<string> {
   const runtime = await createPiModelRuntime();
   const provider = providerChoices(runtime).find((candidate) => candidate.provider === providerId);
@@ -552,7 +539,6 @@ function oauthRedirectFormId(flow: PendingOAuthFlow): string {
   return domId("oauth_redirect_form", flow.id);
 }
 
-/** `copyCodeHint` replaces the visible label: the field then only carries the hint as its placeholder. */
 function oauthPromptForm(flow: PendingOAuthFlow, copyCodeHint?: string): string {
   if (!flow.prompt) return "";
   const prompt = flow.prompt.input;
@@ -562,7 +548,6 @@ function oauthPromptForm(flow: PendingOAuthFlow, copyCodeHint?: string): string 
   return `<form id="${oauthRedirectFormId(flow)}" class="settings-oauth-card" method="post" action="${oauthFlowPath(flow, "prompt")}" data-turbo="true">${label}<input id="${inputId}" class="settings-input text-field" type="${prompt.type === "secret" ? "password" : "text"}" name="value" data-1p-ignore placeholder="${escapeHtml(placeholder)}"${copyCodeHint ? ` aria-label="${escapeHtml(copyCodeHint)}"` : ""}${prompt.type === "manual_code" || prompt.type === "secret" ? " required" : ""}></form>`;
 }
 
-/** Providers either redirect to a localhost page that won't load here, or show a code to copy on their own page. */
 function oauthRedirectsToLocalhost(flow: PendingOAuthFlow): boolean {
   const redirect = flow.authUrl ? new URL(flow.authUrl).searchParams.get("redirect_uri") : null;
   return !redirect || ["localhost", "127.0.0.1"].includes(new URL(redirect).hostname);
@@ -634,7 +619,6 @@ function renderOAuthConnectionStep(flow: PendingOAuthFlow): string {
   });
 }
 
-/** Providers or models changed: re-render the panel, and the composers' pickers follow. */
 async function panelResponse(host: ModelsHost, renderPickerUpdates: () => Promise<string>, options: PanelOptions = {}): Promise<Response> {
   return stream(replace(ids.panel(host), await renderModelsPanel(host, options)) + await renderPickerUpdates());
 }
@@ -647,7 +631,6 @@ export async function handleModelsRequest(request: Request, url: URL, renderPick
   if (url.pathname !== "/models" && !url.pathname.startsWith("/models/")) return undefined;
   const host = hostFrom(url);
   if (!host) return response("Unknown models host", { status: 400 });
-  // Direct navigation to /models renders the app shell around the dialog; see app.ts.
   if (url.pathname === "/models" && request.method === "GET") {
     const dialogHost = host === "onboarding" ? "onboarding" : "dialog";
     const html = await renderModelsDialog({ host: dialogHost, focus: url.searchParams.get("focus") ?? undefined, connect: url.searchParams.get("connect") ?? undefined });
@@ -679,7 +662,6 @@ export async function handleModelsRequest(request: Request, url: URL, renderPick
     };
     try { await connectCustomOpenAIEndpoint({ ...values, api: protocol.id, apiKey: String(form.get("secret") ?? "") }, action === "discover"); }
     catch (error) {
-      // Do not reflect keys or upstream diagnostics into HTML, even if the server echoes them.
       const message = error instanceof CustomEndpointInputError ? error.message : "Couldn't connect the endpoint. Check its settings and try again.";
       return stream(replace(ids.connect(host), renderCustomEndpointStep(host, protocol, values, message)));
     }
@@ -806,7 +788,6 @@ async function handleEnabledModelsAction(request: Request, enable: boolean, rend
   }
   await setEnabledModels(current);
   const ready = await hasAvailableEnabledModel();
-  // Every host on the page shows the same enabled models, so all of them follow along.
   const updates = await Promise.all(modelsHosts.map(async (host) => replace(ids.enabledModels(host), await renderEnabledModelsList(runtime, host))
     + (entry ? replace(ids.catalogueRow(host, entry), catalogueRow({ ...entry, enabled: enable }, host)) : "")
     + (host === "onboarding" ? replace(ids.continue(host), continueButton(host, ready)) : "")));

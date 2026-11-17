@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import {
   agentsInTheCloudObservableTerminalTheme,
   createObservableTerminalViewer,
@@ -80,7 +78,6 @@ function createTerminalViewController(Controller: WorkspaceClientControllerConst
         this.viewer.reconnect();
         this.viewer.refresh();
       }
-      // Never take focus from a text field, such as an Agent composer shown beside it.
       if (document.hasFocus() && !focusLikelyOpensSoftwareKeyboard() && !isTextEntry(document.activeElement)) this.viewer.focus();
     }
 
@@ -115,7 +112,6 @@ function createTerminalViewController(Controller: WorkspaceClientControllerConst
     finishTerminalTouch(event: TouchEvent): void { this.touchFocus.finish(event); }
 
     dragPointer(event: PointerEvent): void {
-      // Leave touch scrolling/taps and non-primary buttons to Gespenst.
       if (event.pointerType === "touch") return;
       const host = event.currentTarget;
       if (!(host instanceof HTMLElement)) throw new Error("terminal pointer action must come from its host");
@@ -129,7 +125,6 @@ function createTerminalViewController(Controller: WorkspaceClientControllerConst
       }
       const drag = this.pointerDrag;
       if (!drag || drag.id !== event.pointerId) return;
-      // Capture before Gespenst handles the event so each gesture is sent once.
       event.stopImmediatePropagation();
       event.preventDefault();
       const action = event.type === "pointerdown" ? "press"

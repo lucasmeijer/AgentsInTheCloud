@@ -31,7 +31,6 @@ function piCustomModelsJsonPath(): string { return join(piConfigDir(), "custom-m
 function piAuthJsonPath(): string { return join(piConfigDir(), "auth.json"); }
 function piDeviceIdPath(): string { return join(piConfigDir(), "device-id"); }
 
-/** Sign in with ChatGPT identifies each installation by a stable UUID. */
 async function piDeviceId(): Promise<string> {
   const path = piDeviceIdPath();
   await mkdir(dirname(path), { recursive: true });
@@ -61,7 +60,7 @@ function enabledModelFromJson(value: JsonValue | undefined): EnabledModel | unde
 }
 
 function parseModelSettings(stored: JsonObject): ModelSettings {
-  const enabledModels = stored.enabledModels ?? stored.picker; // Read the previously saved app-owned list.
+  const enabledModels = stored.enabledModels ?? stored.picker;
   return {
     providers: isJsonObject(stored.providers) ? stored.providers : undefined,
     enabledModels: Array.isArray(enabledModels) ? enabledModels.flatMap((entry) => {
@@ -181,31 +180,26 @@ export async function setEnabledModels(models: EnabledModel[]): Promise<void> {
 }
 
 let modelRuntime: Promise<ModelRuntime> | undefined;
-/** The provider's model with the lowest input price, for small housekeeping requests. */
 export function cheapestProviderModel(runtime: Pick<ModelRuntime, "getModels">, provider: string) {
   return runtime.getModels(provider).toSorted((a, b) => a.cost.input - b.cost.input)[0];
 }
 
 const agentsInTheCloudUserAgent = `AgentsInTheCloud (${platform()} ${release()}; ${arch()})`;
 
-/** Introduces AgentsInTheCloud to providers instead of pi, and keeps subscription usage current. Caller headers and callbacks still apply. */
 export function instrumentModelRuntime(runtime: ModelRuntime): ModelRuntime {
   const usesAnthropicSubscription = (model: Model<Api>) => model.provider === "anthropic" && runtime.isUsingOAuth(model.provider);
   const withIdentity = (model: Model<Api>, headers: ProviderHeaders | undefined): ProviderHeaders | undefined => {
     const identity: ProviderHeaders = model.api === "openai-codex-responses" ? { "User-Agent": agentsInTheCloudUserAgent, originator: "AgentsInTheCloud" }
-      // Pi signs Anthropic subscription requests as Claude Code, in lowercase headers.
       : usesAnthropicSubscription(model) ? { "user-agent": agentsInTheCloudUserAgent, "x-app": null }
       : { "User-Agent": agentsInTheCloudUserAgent };
     return { ...identity, ...headers };
   };
-  // Anthropic responses carry the subscription's limits, as Claude Code's do through the workspace proxy.
   const observingUsage = (model: Model<Api>, onResponse: ((response: ProviderResponse, model: Model<Api>) => void | Promise<void>) | undefined) => usesAnthropicSubscription(model)
     ? async (response: ProviderResponse, responseModel: Model<Api>) => {
       observeAnthropicSubscriptionResponse(new Headers(response.headers), response.status >= 200 && response.status < 300);
       await onResponse?.(response, responseModel);
     }
     : onResponse;
-  // Instance overrides also catch completeSimple, fetchDeferred, and the runtime's own re-entry when it routes virtual models.
   const streamSimple = runtime.streamSimple.bind(runtime);
   const streamDeferred = runtime.streamDeferred.bind(runtime);
   runtime.streamSimple = (model, context, options) => streamSimple(model, context, { ...options, headers: withIdentity(model, options?.headers), onResponse: observingUsage(model, options?.onResponse) });
@@ -220,7 +214,6 @@ export function createPiModelRuntime(): Promise<ModelRuntime> {
   })();
 }
 
-/** The stored credential as Pi last saved it; `getAuth` refreshes it first when it is due. */
 export function readStoredPiCredential(providerId: string) {
   return readStoredCredential(providerId, piAuthJsonPath());
 }
@@ -259,7 +252,6 @@ export async function loginPiOAuthProvider(providerId: string, interaction: Auth
   await refreshConnectedProviderCatalogue(runtime, providerId, interaction.signal);
 }
 
-/** Probe stored catalogue models or a not-yet-saved custom model using an in-memory credential. */
 export async function validateModelProviderApiKey(provider: string, key: string, customModel?: Model<Api>): Promise<void> {
   const trimmed = key.trim();
   if (!trimmed) throw new Error("API key is required");
@@ -270,7 +262,6 @@ export async function validateModelProviderApiKey(provider: string, key: string,
   const models = runtime.getModels(provider);
   const model = models[Math.floor(Math.random() * models.length)];
   if (!model) throw new Error(`No models found for provider "${provider}"`);
-  // A probe is its own one-request conversation. OpenCode Go rejects requests without a session ID.
   const response = await runtime.completeSimple(model, { messages: [{ role: "user", content: "Reply with exactly: ok", timestamp: Date.now() }] }, { maxTokens: 1, sessionId: crypto.randomUUID(), signal: customModel ? AbortSignal.timeout(15_000) : undefined });
   if (response.stopReason === "error" || response.stopReason === "aborted") throw new Error(response.errorMessage ?? "Provider rejected the API key");
 }

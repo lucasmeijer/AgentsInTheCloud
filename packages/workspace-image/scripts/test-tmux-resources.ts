@@ -33,7 +33,6 @@ try {
   const environment = await exec("cat", "/.agents-in-the-cloud/environment");
   assert.doesNotMatch(environment, /^(HOME|USER|LOGNAME|SHELL)=/m);
   assert.match(environment, /^LANG="C.UTF-8"$/m);
-  // Like production, align identity before starting tmux, then run project hooks.
   await exec("sh", "-ec", "sed -i -E 's/^(agents-in-the-cloud:[^:]*:)[0-9]+:[0-9]+:/\\12345:2345:/' /etc/passwd; sed -i -E 's/^(agents-in-the-cloud:[^:]*:)[0-9]+:/\\12345:/' /etc/group; chown agents-in-the-cloud:agents-in-the-cloud /work /home/agents-in-the-cloud");
   await docker(["exec", "-i", name, "tee", "/.agents-in-the-cloud/init.sh"], 'set -e\nsystemctl start agents-in-the-cloud-tmux.service\nsu agents-in-the-cloud -c "tmux -N show-options -g" > /tmp/init-tmux-options\n');
   await exec("systemctl", "daemon-reload");
@@ -85,7 +84,6 @@ printf '%s' "$?" > /tmp/command-exit`);
   assert.equal(await exec("systemctl", "is-active", "resource-test-gateway"), "active");
   assert.equal(await exec("systemctl", "show", "-p", "MainPID", "--value", "agents-in-the-cloud-tmux.service"), serverPid);
   await exec("su", "agents-in-the-cloud", "-c", "tmux kill-session -t devserver");
-  // Empty servers must remain owned by systemd, not be lazily recreated.
   await Bun.sleep(200);
   assert.equal(await exec("systemctl", "show", "-p", "MainPID", "--value", "agents-in-the-cloud-tmux.service"), serverPid);
   await exec("kill", "-KILL", serverPid);

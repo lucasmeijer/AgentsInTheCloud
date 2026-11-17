@@ -1,4 +1,3 @@
-/** Parse NUL-delimited Git output without interpreting quoted or whitespace-containing paths. */
 export interface GitStatusEntry {
   code: string;
   path: string;

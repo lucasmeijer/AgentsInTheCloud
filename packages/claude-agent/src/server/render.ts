@@ -9,7 +9,6 @@ export const rendering = createNativeAgentRendering<ClaudeRuntime>({
   transcript: runtime => projectClaudeTranscript(runtime.state, runtime.isTurnRunning),
   background: { activities: claudeBackgroundActivities, detail: claudeBackgroundDetail, route: claudeBackgroundRoute, stop: (runtime, activity) => runtime.stopTask(activity.key) },
   stats(runtime) {
-    // Claude reports one usage per API message, repeated on each of its content blocks.
     const usage = [...new Map(runtime.state.rows.flatMap(row => row.kind === "assistant" && row.usage ? [[row.messageId, row.usage] as const] : [])).values()];
     const selection = runtime.selection;
     return {

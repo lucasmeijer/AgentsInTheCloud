@@ -4,12 +4,10 @@ import { buttonHtml } from "../button/button-html.ts";
 import { dialogHtml } from "../dialog/dialog-html.ts";
 import { Icons } from "../icons/icons-html.ts";
 
-/** Icon-only button that natively opens the dialog with id `dialogId`. */
 export function qrCodeButtonHtml(dialogId: string, label: string, disabled = false): string {
   return buttonHtml({ type: "button", variant: "secondary", content: { kind: "icon-only", iconHtml: Icons.QrCode, label }, disabled, attributesHtml: `commandfor="${escapeHtml(dialogId)}" command="show-modal"` });
 }
 
-/** Dialog with a QR code for `url`. Render it outside forms; it contains a close form. */
 export function qrCodeDialogHtml(id: string, url: string): string {
   const code = qrcode(0, "M");
   code.addData(url);

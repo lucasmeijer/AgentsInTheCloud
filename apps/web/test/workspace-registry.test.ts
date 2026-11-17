@@ -48,7 +48,6 @@ describe("phase-owned workspace activity", () => {
     registry.setAgentBusy("a", "agent:first", true);
     registry.setDeletion("a", { status: "deleting", forced: false });
 
-    // Agent teardown still ends its turn; deletion owns workspace activity.
     registry.setAgentBusy("a", "agent:first", false);
     registry.requestAttention("a");
     expect(registry.get("a")!.phase.busy).toBe(true);

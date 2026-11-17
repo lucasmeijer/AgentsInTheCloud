@@ -16,10 +16,8 @@ test("the bar lists running work before idle work, each followed by the work it 
   expect(html).toContain('3 running <span class="status-indicator"');
   expect(html).toContain("· 1 inactive");
   expect(html).toContain('style="--agent-background-depth: 1" data-background-key="checker"');
-  // Rows are titles with a spinner while running; what sort of work it is shows once opened.
   expect(html.match(/status-spinner/g)?.length).toBe(4);
   expect(html).not.toContain("subagent");
-  // A subagent opens its own page; a command loads its output in place once opened. Neither row offers Stop.
   expect(html).toContain('href="/workspaces/ws/claude-code-agents/agent/background/writer" data-action="agent-background#open"');
   expect(html).toContain('src="/workspaces/ws/claude-code-agents/agent/background/suite" loading="lazy"');
   expect(html).not.toContain("Stop");
@@ -30,7 +28,6 @@ test("Stop and the facts show once an activity is opened, and detail read on req
   const command = activity("suite", { kind: "command", opens: "inline", startedBy: { itemKey: "toolu_1", label: "Tool call" }, details: { Type: "shell" } });
   const inline = renderBackgroundInlineDetail(ctx, command, refreshingBackgroundDetail(command, backgroundOutputHtml("tick 1", "Output · the last part")));
   expect(inline).toContain('action="/workspaces/ws/claude-code-agents/agent/background/suite/stop"');
-  // Stopping can't be undone, so it asks first.
   expect(inline).toContain('class="destructive-confirmation"');
   expect(inline).toContain(">Stop command</span>");
   expect(inline).toContain("Keep running");
@@ -38,7 +35,6 @@ test("Stop and the facts show once an activity is opened, and detail read on req
   expect(inline).toContain("Output · the last part");
   expect(inline).toContain('data-controller="agent-background-refresh"');
   const page = renderBackgroundPage(ctx, activity("writer", { running: false, startedBy: { itemKey: "toolu_2", label: "Tool call" } }), "<p>Write the migration</p>");
-  // The page's header carries what it is and what started it.
   expect(page).toContain("<dt>Kind</dt><dd>subagent</dd>");
   expect(page).toContain("<dt>Started by</dt><dd><a href=");
   expect(page).not.toContain("status-spinner");
@@ -46,6 +42,5 @@ test("Stop and the facts show once an activity is opened, and detail read on req
   expect(page).toContain("Write the migration");
   expect(page).not.toContain("agent-background-refresh");
   expect(page).not.toContain("/stop");
-  // A subagent's transcript closes with where its result reached the conversation.
   expect(backgroundReportHtml(ctx, "answer")).toContain('href="/workspaces/ws?agent=agent&amp;agentTarget=answer"');
 });

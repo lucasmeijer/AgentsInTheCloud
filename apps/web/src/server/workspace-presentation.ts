@@ -49,7 +49,6 @@ export interface WorkspacePaneWorkspaceTemplate {
 
 export interface WorkPaneContribution {
   iconHtml?: string;
-  /** Stable, type-native serialized identity supplied by the resource adapter. */
   key: string;
   label: string;
   kind: "resource" | "contextual";
@@ -63,7 +62,6 @@ export interface WorkPaneContribution {
 
 export interface WorkspacePanePresentation {
   workspaceTemplates: readonly WorkspacePaneWorkspaceTemplate[];
-  /** Already ordered by the workspace registry. */
   workspaces: readonly WorkspacePaneEntry[];
 }
 
@@ -159,7 +157,6 @@ function renderWorkspaceTemplateOption(workspaceTemplate?: WorkspacePaneWorkspac
 
 function renderWorkspaceTemplateOptions(presentation: WorkspacePanePresentation): string {
   const ordered = [...presentation.workspaceTemplates].sort((left, right) => (right.lastUsedAt ?? 0) - (left.lastUsedAt ?? 0) || left.title.localeCompare(right.title));
-  // Until the first template exists, the add action explains what a template is.
   const addWorkspaceTemplate = ordered.length
     ? contentRowHtml({
       width: "fill",
@@ -436,7 +433,6 @@ export function renderWorkspaceDeletionPresentation(workspaceId: string, deletio
   return `<div id="${domId("fixed_workspace", workspaceId)}" class="fixed-workspace-presentation workspace-deletion-presentation" data-workspace-id="${escapeHtml(workspaceId)}" data-workspace-commands="[]"><main class="workspace-deletion-state" data-deletion-status="${deletion.status}"${role}>${content}</main>${renderMobileWorkspaceBar()}</div>`;
 }
 
-/** The workspace chrome, and the islands within it that are published as their own regions. */
 export function renderWorkspacePresentation(presentation: WorkspacePresentation) {
   const islands = new LiveIslands();
   const id = workspacePresentationDomId(presentation.workspace.id);

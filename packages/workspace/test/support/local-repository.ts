@@ -5,7 +5,6 @@ import { isNotFoundError } from "@agents-in-the-cloud/core";
 import { decodeWorkingFileWrite, decodeRepositoryBatch, repositoryBatchRunner, type RepositoryRequest } from "../../src/git-batch.ts";
 import { blobArguments, decodeBlob, safeGitArguments, type Repository } from "../../src/git-repository.ts";
 
-/** Explicitly trusted host repositories for local tools and domain fixtures; application workspaces never use this adapter. */
 export function localRepository(root: string): Repository {
   const repository: Repository = {
     async gitResult(args) {

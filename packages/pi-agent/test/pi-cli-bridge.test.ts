@@ -41,7 +41,6 @@ test("exports enabled models, labels, capabilities and custom models without cre
   const serialized = JSON.stringify(config);
   for (const secret of ["custom-secret", "custom-header-secret", "real-account", "real-signature", "sk-ant-oat-real-secret", "refresh"]) expect(serialized).not.toContain(secret);
 
-  // These files must actually load through the same Pi runtime used by the CLI.
   const directory = await mkdtemp(join(tmpdir(), "pi-bridge-"));
   try {
     await writeFile(join(directory, "models.json"), JSON.stringify(config.models));
@@ -81,7 +80,6 @@ test("Codex receives a real access token and account header while the CLI gets o
 
 test("OpenAI placeholders keep the shape Pi uses to tell API keys from Sign in with ChatGPT", async () => {
   const openai = { ...model("openai", "openai-responses", "https://api.openai.com/v1"), maxTokens: 4000 };
-  // Pi omits request fields that Sign in with ChatGPT rejects, based on whether the key starts with `sk-`.
   async function cliRequestOmitsMaxOutputTokens(key: string): Promise<boolean> {
     let omitted: boolean | undefined;
     await streamOpenAIResponses({ ...openai, api: "openai-responses" }, normalizeContext({ messages: [{ role: "user", content: "hi", timestamp: 0 }] }), {
@@ -105,7 +103,6 @@ test("OpenAI placeholders keep the shape Pi uses to tell API keys from Sign in w
 
 test("Anthropic placeholders keep the shape Pi uses to tell API keys from Claude subscriptions", async () => {
   const anthropic = model("anthropic", "anthropic-messages", "https://api.anthropic.com");
-  // Pi signs in as a Claude subscription, with a bearer token, when the key contains `sk-ant-oat`.
   for (const [secret, header, subscription] of [["sk-ant-api03-secret", "x-api-key", false], ["sk-ant-oat01-secret", "authorization", true]] as const) {
     const runtime = fixture([anthropic], { anthropic: { auth: { apiKey: secret }, source: subscription ? "OAuth" : undefined } });
     expect(await piCliModelUnavailableReason(runtime, anthropic)).toBeUndefined();
@@ -115,7 +112,6 @@ test("Anthropic placeholders keep the shape Pi uses to tell API keys from Claude
     const value = subscription ? `Bearer ${key}` : key;
     const request = await createHttpHooks({ onRequest: createPiCliCredentialTransform(async () => runtime) }).httpHooks.onRequest(new Request("https://api.anthropic.com/v1/messages", { headers: { [header]: value, "user-agent": "claude-cli/2.1.280", "x-app": "cli" } }));
     expect(request.headers.get(header)).toBe(subscription ? `Bearer ${secret}` : secret);
-    // Subscription requests say they come from Pi rather than Claude Code.
     expect([request.headers.get("user-agent"), request.headers.get("x-app")]).toEqual(subscription ? ["pi", null] : ["claude-cli/2.1.280", "cli"]);
   }
 });
@@ -212,7 +208,6 @@ test("Pi cannot bypass path permissions by putting a bridge placeholder into a U
   const config = await createPiCliConfiguration(runtime, []);
   const hooks = createHttpHooks({ onRequest: createPiCliCredentialTransform(async () => runtime) }).httpHooks;
   await expect(hooks.onRequest(new Request(`https://custom.example/v1/${config.auth.custom!.key}`))).rejects.toThrow("cannot be injected into URL paths");
-  // Disallowed path use also fails when a legitimate header accompanies it.
   await expect(hooks.onRequest(new Request(`https://custom.example/v1/${config.auth.custom!.key}`, {
     headers: { authorization: `Bearer ${config.auth.custom!.key}` },
   }))).rejects.toThrow("cannot be injected into URL paths");

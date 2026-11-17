@@ -211,7 +211,6 @@ function replaceSecretPlaceholdersInHeaders(incomingHeaders: Headers, hostname: 
   }
   return headers ?? incomingHeaders;
 }
-// allowInPath covers the whole URL: path and query string.
 function replaceSecretPlaceholdersInUrl(url: string, hostname: string, entries: SecretEntry[]): string {
   const urlEntries = entries.filter((entry) => entry.allowInPath && matchesAnyHost(hostname, entry.hosts));
   if (urlEntries.length === 0) return url;

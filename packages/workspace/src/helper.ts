@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { AgentsInTheCloudCoreError, agentsInTheCloudDataPath, commandSignal, getAgentsInTheCloudRuntimeContext, requireDocker, runCommand, type CommandInput } from "@agents-in-the-cloud/core";
 import { closeWorkspaceHelper, openWorkspaceFile, readWorkspaceFile, readWorkspaceFileStream, runWorkspaceProcess, startWorkspaceProcess, statWorkspaceFiles, WorkspaceHelperError, WorkspaceHelperStatus, writeWorkspaceFile, type WorkspaceExecStart, type WorkspaceFile, type WorkspaceFileStat, type WorkspaceOpenFile, type WorkspaceProcess } from "@agents-in-the-cloud/workspace-helper";
 
-/** Shared with the app's ingress and egress sockets; the helper listens here as well. */
 export const workspaceParentSocketDirectory = "/run/agents-in-the-cloud-parent";
 
 export function workspaceHelperSocketPath(id: string): string {
@@ -34,7 +33,6 @@ export async function refreshWorkspaceHelper(
     return;
   }
   const state = ".local/state/agents-in-the-cloud-helper";
-  // The helper gives its socket to this directory's owner: the app.
   const directory = agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "workspaces", id, "home-local", state);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await rm(workspaceHelperSocketPath(id), { force: true });
@@ -58,7 +56,6 @@ function describeFailure(id: string, error: Error): Error {
   return new AgentsInTheCloudCoreError("workspace_unavailable", `Couldn’t reach workspace ${id}. It may be stopped, or made by an older AgentsInTheCloud and need recreating.\n${error.message}`);
 }
 
-/** Runs to completion; the ambient command signal cancels it. */
 export async function runInWorkspace(id: string, start: Omit<WorkspaceExecStart, "stdin" | "terminal">, options: { stdin?: CommandInput; signal?: AbortSignal; waitForReady?: boolean } = {}): Promise<{ exitCode: number; stdout: Buffer; stderr: string }> {
   try {
     const result = await runWorkspaceProcess(workspaceHelperSocketPath(id), start, { ...options, signal: options.signal ?? commandSignal() });
@@ -68,14 +65,12 @@ export async function runInWorkspace(id: string, start: Omit<WorkspaceExecStart,
   }
 }
 
-/** Runs as root, fails unless it succeeds, and returns stdout. */
 export async function requireRootInWorkspace(id: string, argv: string[], stdin?: CommandInput): Promise<string> {
   const result = await runInWorkspace(id, { argv, user: "root" }, { stdin });
   if (result.exitCode !== 0) throw new AgentsInTheCloudCoreError("workspace_command_failed", `${argv[0]} failed in workspace ${id}: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
   return result.stdout.toString();
 }
 
-/** Starts a long-lived process, such as an agent or a terminal client. */
 export function startInWorkspace(id: string, start: WorkspaceExecStart, options: { signal?: AbortSignal } = {}): WorkspaceProcess {
   const process = startWorkspaceProcess(workspaceHelperSocketPath(id), start, options);
   const exited = process.exited.catch((error: Error) => { throw describeFailure(id, error); });
@@ -91,12 +86,10 @@ async function describingFailure<T>(id: string, operation: Promise<T>): Promise<
   }
 }
 
-/** Reads a whole regular file; the signal, or else the ambient command signal, cancels it. */
 export function readFileInWorkspace(id: string, file: WorkspaceFile, options: { maxBytes: number; signal?: AbortSignal }): Promise<Buffer> {
   return describingFailure(id, readWorkspaceFile(workspaceHelperSocketPath(id), file, { maxBytes: options.maxBytes, signal: options.signal ?? commandSignal() }));
 }
 
-/** Opens a file as reading it would, and stops: fails the same way, e.g. with NOT_FOUND. */
 export async function checkFileInWorkspace(id: string, file: WorkspaceFile): Promise<void> {
   const reader = readWorkspaceFileStream(workspaceHelperSocketPath(id), file, { signal: commandSignal() }).getReader();
   try {
@@ -106,26 +99,21 @@ export async function checkFileInWorkspace(id: string, file: WorkspaceFile): Pro
   }
 }
 
-/** Describes each of these absolute paths without reading them; in request order. The signal, or else the ambient command signal, cancels it. */
 export async function statFilesInWorkspace(id: string, user: WorkspaceFile["user"], paths: string[], options: { signal?: AbortSignal } = {}): Promise<WorkspaceFileStat[]> {
   if (paths.length === 0) return [];
   return await describingFailure(id, statWorkspaceFiles(workspaceHelperSocketPath(id), user, paths, { signal: options.signal ?? commandSignal() }));
 }
 
-/** Which of these absolute paths are regular files `user` can read, following symlinks; in request order. */
 export async function existingFilesInWorkspace(id: string, user: WorkspaceFile["user"], paths: string[]): Promise<string[]> {
   return (await statFilesInWorkspace(id, user, paths)).filter((stat) => stat.kind === "regular" && stat.readable).map((stat) => stat.path);
 }
 
-/** Replaces or creates a file atomically, along with any missing folders. The signal, or else the ambient command signal, cancels it; one cancelled before the helper replaced the file leaves it as it was. */
 export function writeFileInWorkspace(id: string, file: WorkspaceFile, content: string | Uint8Array, options: { signal?: AbortSignal } = {}): Promise<void> {
   return describingFailure(id, writeWorkspaceFile(workspaceHelperSocketPath(id), file, content, { signal: options.signal ?? commandSignal() }));
 }
 
-/** Opens a regular file for reads of parts of it, all from the one open file; the signal, or else the ambient command signal, closes it. */
 export async function openFileInWorkspace(id: string, file: WorkspaceFile, options: { signal?: AbortSignal } = {}): Promise<WorkspaceOpenFile> {
   const opened = await describingFailure(id, openWorkspaceFile(workspaceHelperSocketPath(id), file, { signal: options.signal ?? commandSignal() }));
-  // A workspace that stops while the file is open fails its reads the way it fails the open.
   return {
     stat: () => describingFailure(id, opened.stat()),
     read: (offset, length) => describingFailure(id, opened.read(offset, length)),

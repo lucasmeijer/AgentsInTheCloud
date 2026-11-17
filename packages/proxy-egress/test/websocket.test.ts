@@ -135,7 +135,6 @@ test("MITM WebSockets preserve workspace identity, negotiation, head bytes, bina
   const beta = await f.proxy("beta");
   for (const [id, proxy] of [["alpha", alpha], ["beta", beta]] as const) {
     const wire = await proxy.connect();
-    // A frame arriving with the HTTP headers exercises the parser's client head buffer.
     wire.socket.write(Buffer.concat([Buffer.from(handshake("/echo", "ATELIER_WS_PLACEHOLDER", "Sec-WebSocket-Protocol: agents-in-the-cloud-test\r\n")), frame(Buffer.from("early"))]));
     const headers = await wire.headers();
     expect(headers).toContain("x-echo-authorization: Bearer [REDACTED]");
@@ -148,7 +147,6 @@ test("MITM WebSockets preserve workspace identity, negotiation, head bytes, bina
     expect(f.received.at(-1)!.get("host")).toStartWith("localhost:");
     expect(f.received.at(-1)!.get("proxy-authorization")).toBeNull();
     expect(f.received.at(-1)!.get("x-hop")).toBeNull();
-    // Larger than socket high-water marks; allow data to queue before consuming.
     const payload = Buffer.alloc(512 * 1024, 173);
     wire.socket.pause();
     wire.socket.write(frame(payload, 2));
@@ -284,7 +282,7 @@ test("negotiated permessage-deflate survives the bridge unchanged", async () => 
   const headers = await wire.headers();
   expect(headers).toContain("101");
   expect(headers).toContain("sec-websocket-extensions: permessage-deflate");
-  await wire.frame(); // Initial, uncompressed ready message.
+  await wire.frame();
   const message = Buffer.from("compressed WebSocket payload ".repeat(100));
   const compressed = deflateRawSync(message, { flush: constants.Z_SYNC_FLUSH, finishFlush: constants.Z_SYNC_FLUSH }).subarray(0, -4);
   const outgoing = frame(compressed);

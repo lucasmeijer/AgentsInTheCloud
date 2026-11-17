@@ -4,7 +4,6 @@ import { agentsInTheCloudThemes, isAgentsInTheCloudTheme, readThemeSetting, writ
 
 export const themeRegionId = "agents-in-the-cloud_theme";
 
-/** Contents of the page's theme region. Its controller applies the theme to the document. */
 export function themeRegionHtml(theme: AgentsInTheCloudTheme = readThemeSetting()): string {
   return `<span data-controller="agents-in-the-cloud-theme" data-agents-in-the-cloud-theme-name-value="${escapeHtml(theme)}"></span>`;
 }
@@ -20,7 +19,6 @@ export async function handleThemeSettingsRequest(request: Request, url: URL, the
   const theme = (await request.formData()).get("theme");
   if (!isAgentsInTheCloudTheme(theme)) return new Response("Unsupported theme", { status: 400 });
   await writeThemeSetting(theme);
-  // Every open page, including this one, applies it through the shell region.
   themeChanged();
   return stream("");
 }

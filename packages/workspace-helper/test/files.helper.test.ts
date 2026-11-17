@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { buildGoProgram } from "@agents-in-the-cloud/core";
 import { closeWorkspaceHelper, openWorkspaceFile, statWorkspaceFiles, WorkspaceHelperError, WorkspaceHelperStatus } from "../src/index.ts";
 
-// A real helper, running as root and looking at files as the agent's user, as in a workspace.
 let directory: string;
 let socket: string;
 let helper: Bun.Subprocess<"ignore", "inherit", "pipe">;
@@ -31,7 +30,6 @@ afterAll(async () => {
   closeWorkspaceHelper(socket);
   helper.kill();
   await helper.exited;
-  // The helper keeps its state as root.
   await Bun.spawn(["sudo", "-n", "rm", "-rf", directory]).exited;
 });
 

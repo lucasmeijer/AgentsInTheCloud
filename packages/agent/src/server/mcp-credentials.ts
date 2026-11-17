@@ -34,7 +34,6 @@ export function createAgentMcpCredentials(dataDir?: string) {
   };
 }
 
-/** CLI requests use bearer credentials, never browser cookies, and stay scoped to their ingress workspace. */
 export function authenticateAgentRequest(request: Request, authenticate: (token: string) => AgentMcpIdentity | undefined, workspaceId?: string): AgentMcpIdentity | Response {
   if (request.headers.has("origin")) return new Response("Browser origins are not allowed", { status: 403 });
   const token = request.headers.get("authorization")?.match(/^Bearer (\S+)$/i)?.[1];

@@ -1,6 +1,5 @@
 import { Controller } from "@hotwired/stimulus";
 
-/** Render once, then ease affected warning regions to their new natural heights. */
 export async function animateWarningChanges(regions: HTMLElement[], render: () => void | Promise<void>): Promise<void> {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     await render();
@@ -20,14 +19,12 @@ export async function animateWarningChanges(regions: HTMLElement[], render: () =
       { height: `${height}px`, marginBottom, boxSizing: "border-box", overflow: "clip" },
       { height: `${nextHeight}px`, marginBottom: nextMargin, boxSizing: "border-box", overflow: "clip" },
     ], {
-      // Design-system duration tokens are authored in milliseconds.
       duration: Number.parseFloat(style.getPropertyValue("--motion-enter")),
       easing: style.getPropertyValue("--motion-ease-out").trim(),
     });
   }
 }
 
-/** Animate server-confirmed warning updates, never hide a failed dismissal. */
 export class WarningBannersController extends Controller<HTMLElement> {
   connect(): void { document.addEventListener("turbo:before-stream-render", this.beforeRender); }
   disconnect(): void { document.removeEventListener("turbo:before-stream-render", this.beforeRender); }

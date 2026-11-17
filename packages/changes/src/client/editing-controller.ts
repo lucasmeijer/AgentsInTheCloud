@@ -10,7 +10,6 @@ import { moveCommentRanges } from "../editing-ranges.ts";
 type Viewer = CodeView<ChangesAnnotation, undefined>;
 type Stream = HTMLElement & { targetElements: HTMLElement[]; templateElement: HTMLTemplateElement };
 
-/** Both fresh Pierre headers and session updates use the same file-row state. */
 export function syncFileEditButtons(header: HTMLElement, editingPath: string | undefined, pending: boolean): void {
   const edit = header.querySelector<HTMLButtonElement>('[data-action="changes-edit#begin"]');
   if (!edit) return;
@@ -47,7 +46,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
     private accepted = false;
     private continuation?: () => void;
     private editor?: Editor<"file" | "file-diff", ChangesAnnotation, undefined>;
-    /** Reverting rewrites the draft, so its hunks follow the base and the current draft. */
     private reverting?: { base: string; comments: DiffLineAnnotation<ChangesAnnotation>[]; diff: FileDiffMetadata; signature: string; parse: typeof import("@pierre/diffs").parseDiffFromFile };
 
     connect(): void {
@@ -65,7 +63,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
     disconnect(): void {
       this.connection.abort();
       this.confirmationTarget.close();
-      // Component teardown is never a persistence action.
       if (this.model && !this.busy) void this.release(this.model.token).catch(error => console.error(error));
       this.model = undefined;
       this.history.clear();
@@ -100,7 +97,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       this.renderAvailability();
       try {
         const data = new FormData(); data.set("snapshot", this.snapshotIdValue); data.set("path", path);
-        // Load first so a failed editor import cannot abandon an acquired lease.
         const [{ Editor }, { parseDiffFromFile }] = await Promise.all([import("@pierre/diffs/edit"), import("@pierre/diffs")]);
         const html = await this.request("begin", data);
         const document = new DOMParser().parseFromString(html, "text/html");
@@ -158,7 +154,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       for (const version of this.history.keys()) if (!versions.has(version)) this.history.delete(version);
       if (this.reverting && this.diffDraft(this.model.path)) {
         const path = this.model.path;
-        // Pierre is still applying this change; replace the session's annotations once it has finished.
         queueMicrotask(() => {
           if (this.model?.path !== path) return;
           const item = this.viewer!.getItem(path)!;
@@ -199,7 +194,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       const scroll = this.element.querySelector<HTMLElement>('[data-changes-target="viewer"]')!.scrollTop;
       // SAFETY: The viewer model is the server-rendered list of file IDs.
       const files = (JSON.parse(this.element.querySelector('script[data-changes-target="model"]')!.textContent!) as { files: { path: string }[] }).files;
-      // The saved file stays open, including a previously unchanged file that now becomes a change.
       const collapsed = { ...Object.fromEntries(files.map(file => [file.path, this.viewer!.getItem(file.path)!.collapsed === true])), [this.model.path]: false };
       try {
         const data = new FormData();
@@ -208,7 +202,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
         const html = await this.request("save", data);
         this.finish(true);
         this.confirmationTarget.close();
-        // Transfer presentation only; all code, comments, counts and markup come from the server.
         shell.dataset.changesFileCollapse = JSON.stringify(collapsed);
         shell.dataset.changesScroll = String(scroll);
         window.Turbo!.renderStreamMessage(html);
@@ -225,7 +218,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       const files = (JSON.parse(this.element.querySelector('script[data-changes-target="model"]')!.textContent!) as { files: { path: string; revertible: boolean }[] }).files;
       return files.some(file => file.path === path && file.revertible);
     }
-    /** Re-diffs the draft against the base; reports whether the revert buttons moved. */
     private diffDraft(path: string): boolean {
       const reverting = this.reverting!;
       reverting.diff = reverting.parse({ name: path, contents: reverting.base }, { name: path, contents: this.text }, { context: 3 });
@@ -234,7 +226,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       reverting.signature = signature;
       return true;
     }
-    /** Comments keep their tracked positions; every hunk gets a revert button above it. */
     private annotations(path: string): DiffLineAnnotation<ChangesAnnotation>[] {
       const { comments, diff } = this.reverting!;
       const positions = new Map(this.ranges.map(range => [range.id, range]));
@@ -250,7 +241,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       const index = Number((event.currentTarget as HTMLElement).closest<HTMLElement>("[data-block]")!.dataset.block);
       const { diff } = this.reverting;
       this.editor!.applyEdits([revertBlockEdit(diff, changeBlocks(diff)[index]!)]);
-      // The clicked button is replaced with the new hunks; keep typing and undo in the editor.
       this.editor!.focus({ preventScroll: true });
     }
     async copy(): Promise<void> {
@@ -333,7 +323,6 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       const path = decodeURIComponent(url.pathname);
       const closesChanges = path.startsWith(`/workspaces/${this.workspaceIdValue}/work-views/`) && path.endsWith("/close") && path.includes('"type":"changes"');
       const leavesWorkspace = path.startsWith(`/workspaces/${this.workspaceIdValue}/`) && /\/(park|delete)$/.test(path);
-      // Turbo submits commit links (`data-turbo-stream`) as forms; they replace this comparison.
       const opensCommitLink = path === `/workspaces/${this.workspaceIdValue}/changes/open`;
       if (!closesChanges && !leavesWorkspace && !opensCommitLink) return;
       event.preventDefault(); event.stopImmediatePropagation();
@@ -341,13 +330,11 @@ export function createChangesEditController(Controller: WorkspaceClientControlle
       const submitter = (event as SubmitEvent).submitter;
       this.guard(() => form.requestSubmit(submitter));
     };
-    /** Whether rendering a stream into this target replaces the edit. Morphs keep permanent islands they still contain. */
     private replacedBy(stream: Stream, target: HTMLElement): boolean {
       if (target === this.element || this.element.contains(target)) return true;
       if (!target.contains(this.element)) return false;
       if (stream.getAttribute("method") !== "morph") return true;
       let island: HTMLElement | undefined;
-      // The target contains the edit, so every ancestor up to it exists.
       for (let element = this.element.parentElement!; element !== target; element = element.parentElement!) if (element.id && element.hasAttribute("data-turbo-permanent")) island = element;
       return !island || !stream.templateElement.content.querySelector(`#${CSS.escape(island.id)}`);
     }

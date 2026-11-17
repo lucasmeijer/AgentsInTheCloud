@@ -12,9 +12,7 @@ function resultText(block: ClaudeBlock): string {
 
 const dispatchArgsSchema = Type.Object({ description: Type.Optional(Type.String()), command: Type.Optional(Type.String()), subagent_type: Type.Optional(Type.String()) });
 
-/** A finished background command or subagent, named after the call that started it. */
 function taskMessage(task: Extract<ClaudeState["rows"][number], { kind: "task" }>, dispatch: ToolView | undefined): TranscriptItem {
-  // Claude's tool input is untrusted.
   const args = dispatch && Value.Check(dispatchArgsSchema, dispatch.args) ? dispatch.args : {};
   const durationMs = task.usage?.durationMs ?? (dispatch?.issuedAt ? task.timestamp - dispatch.issuedAt : undefined);
   const message: Extract<TranscriptItem, { type: "message" }> = {
@@ -33,20 +31,16 @@ function taskMessage(task: Extract<ClaudeState["rows"][number], { kind: "task" }
   return message;
 }
 
-/** Claude retries failed requests itself and records an error only once it gives up, ending the turn. */
 interface Turn { prompt?: TranscriptItem; command: boolean; working: WorkingTranscriptItem; endedAt: number; interrupted: boolean; error?: TranscriptItem }
 
-/** Claude rows and the block it is streaming, grouped like every other Agent's turns. `running` is whether Claude's latest turn is still going. */
 export function projectClaudeTranscript(state: Pick<ClaudeState, "rows" | "streaming">, running: boolean): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const tools = new Map<string, ToolView>();
   const positions = new Map<string, number>();
   let turn: Turn | undefined;
-  /** `steered` ends a turn's block where steering came in: Claude carries on, so its last text is still commentary. */
   const finish = (live = false, steered = false) => {
     if (!turn) return;
     const { working } = turn;
-    // The last reply after its final tool call answers the prompt; earlier text was commentary.
     const index = working.items.findLastIndex(item => item.type !== "note" && item.type !== "message");
     const final = !live && !steered && !turn.error && working.items[index]?.type === "text" ? working.items.splice(index, 1)[0] : undefined;
     if (final?.type === "text") final.final = true;
@@ -77,11 +71,8 @@ export function projectClaudeTranscript(state: Pick<ClaudeState, "rows" | "strea
     }
   };
   const rows = state.rows;
-  // Claude records a manual compaction before the /compact command that caused it.
   let compaction: TranscriptItem | undefined;
-  // A control command's output, such as "Set model to …", already shows in the footer.
   let controlOutput = false;
-  // Claude has yet to end its turn: a background task finishing now is absorbed into it, rather than reported in a turn of its own.
   let answering = false;
   const begin = (prompt: TranscriptItem, uuid: string, timestamp: number, steered = false) => {
     if (turn && steered) turn.endedAt = Math.max(turn.endedAt, timestamp);
@@ -132,7 +123,6 @@ export function projectClaudeTranscript(state: Pick<ClaudeState, "rows" | "strea
       const key = `${row.uuid}:output`;
       if (controlOutput) controlOutput = false;
       else if (row.error) activity({ type: "note", key, text: row.text, tone: "error" }, row.timestamp);
-      // A command's output answers it.
       else if (turn?.command) activity({ type: "text", key, text: row.text, final: false, live: false }, row.timestamp);
       else activity({ type: "note", key, text: row.text, tone: "system" }, row.timestamp);
     } else if (row.kind === "steer") {
@@ -150,7 +140,6 @@ export function projectClaudeTranscript(state: Pick<ClaudeState, "rows" | "strea
     assistantBlock(block, `${streaming.messageId}:${index}`, streaming.startedAt, true);
   }
   finish(running);
-  // Tool calls of a finished turn that never reported a result were cut short.
   for (const tool of tools.values()) if ((tool.status === "running" || tool.status === "streaming") && !running) tool.status = "error";
   return items;
 }

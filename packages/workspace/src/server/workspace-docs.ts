@@ -2,7 +2,6 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "@agents-in-the-cloud/core";
 
-/** Merge shared and package-owned documentation into the existing read-only bind mount. */
 export async function syncWorkspaceDocs(repositoryRoot: string, destination: string, buildCommit = process.env.ATELIER_COMMIT_ID): Promise<void> {
   const sources = [join(repositoryRoot, "docs", "deploy-in-workspace")];
   const packages = join(repositoryRoot, "packages");
@@ -35,7 +34,6 @@ export async function syncWorkspaceDocs(repositoryRoot: string, destination: str
   }
   for (const source of sources.sort()) await collect(source);
 
-  // Keep existing directory inodes: running workspaces have this tree bind-mounted.
   await mkdir(destination, { recursive: true });
   async function prune(relative = ""): Promise<void> {
     for (const entry of await readdir(join(destination, relative), { withFileTypes: true })) {

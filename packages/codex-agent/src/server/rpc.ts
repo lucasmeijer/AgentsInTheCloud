@@ -5,7 +5,6 @@ import { codexNotification, type CodexNotification, type Requests } from "./prot
 
 export class CodexRpcError extends Error {}
 
-/** Newline-delimited app-server RPC; replies can arrive out of request order. */
 export class CodexRpc {
   private nextId = 0;
   private readonly pending = new Map<number, { resolve(value: JsonValue): void; reject(error: Error): void }>();

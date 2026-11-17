@@ -14,10 +14,8 @@ const layoutStorageKey = "agents-in-the-cloud:changes-layout";
 const wrapStorageKey = "agents-in-the-cloud:changes-wrap";
 const unchangedStorageKey = "agents-in-the-cloud:changes-unchanged";
 const groupedStorageKey = "agents-in-the-cloud:changes-grouped";
-// Git paths never start with a slash, so these can't collide with a file.
 const groupItemPrefix = "/changes-group/";
 
-// Media previews sit on a file’s only, empty line; its number means nothing there.
 const viewerCSS = `${wordDiffCSS} [data-diffs-header] { background: var(--bg); } :host([data-changes-media]) [data-line-number-content] { visibility: hidden; }`;
 
 function createChangesController(Controller: WorkspaceClientControllerConstructor) {
@@ -68,7 +66,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
     private collapsed = false;
     private showUnchanged = false;
     private grouped = false;
-    /** The group key of each changed file: "main" or its bucket's index. */
     private groups = new Map<string, string>();
     private groupHeadings = new Map<string, HTMLTemplateElement>();
     private unchanged?: string[];
@@ -102,7 +99,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
       this.editable.clear();
     }
 
-    /** Show changed files, plus unchanged ones when asked, in path order or grouped by bucket. Unchanged files load once opened. */
     private compose(): void {
       const item = (path: string): CodeViewItem<ChangesAnnotation> => this.viewer!.getItem(path)
         ?? { id: path, type: "file", file: { name: path, contents: "Loading file…", lang: "text", cacheKey: `${this.snapshotIdValue}:loading:${path}` }, collapsed: true, version: 0 };
@@ -111,7 +107,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
         this.viewer!.setItems([...this.files, ...unchanged].sort((a, b) => a.localeCompare(b)).map(item));
         return;
       }
-      // Headings are collapsed placeholder items: CodeView lays out only files, each with a same-height header.
       const heading = (key: string): CodeViewItem<ChangesAnnotation> => ({ id: `${groupItemPrefix}${key}`, type: "file", file: { name: "", contents: "", lang: "text", cacheKey: `${this.snapshotIdValue}:group:${key}` }, collapsed: true, version: 0 });
       const items: CodeViewItem<ChangesAnnotation>[] = [];
       for (const key of this.groupHeadings.keys()) {
@@ -145,7 +140,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
       this.showUnchanged = localStorage.getItem(unchangedStorageKey) === "true";
       for (const template of this.element.querySelectorAll<HTMLTemplateElement>("template[data-changes-group]")) this.groupHeadings.set(template.dataset.changesGroup!, template);
       const groupedToggle = this.element.querySelector('[data-action="changes#toggleGrouped"]');
-      // The option only exists when the workspace has buckets.
       this.grouped = groupedToggle !== null && localStorage.getItem(groupedStorageKey) === "true";
       groupedToggle?.setAttribute("aria-checked", String(this.grouped));
       for (const radio of this.element.querySelectorAll<HTMLElement>("[data-layout]")) radio.setAttribute("aria-checked", String(radio.dataset.layout === this.layout));
@@ -192,7 +186,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
         unsafeCSS: viewerCSS,
         onPostRender: (node, _instance, _phase, context) => {
           node.toggleAttribute("data-changes-media", context.item.annotations?.some(annotation => annotation.metadata.kind === "media") === true);
-          // Unchanged files load on demand; there can be thousands of them.
           if (this.files.has(context.item.id) || !context.item.collapsed) void this.loadFile(context.item.id, abort.signal);
           if (context.type === "diff" && !this.element.dataset.codeEditing && this.loaded.has(context.item.id)) this.revealCommentLines(context.item, context.instance);
         },
@@ -288,7 +281,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
     }
 
     private syncCollapseControl(): void {
-      // Mixed states offer Collapse all; Expand all is only useful once everything is closed.
       this.collapsed = (this.files.size > 0 || this.hasOrphanDisclosureTarget)
         && (!this.hasOrphanDisclosureTarget || !this.orphansOpen)
         && [...this.files].every(path => this.viewer?.getItem(path)?.collapsed === true);
@@ -311,7 +303,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
         const script = document.querySelector<HTMLScriptElement>("script[data-changes-file]")!;
         // SAFETY: The Changes file endpoint serializes a CodeViewItem captured by this snapshot.
         const item = JSON.parse(script.textContent!) as CodeViewItem<ChangesAnnotation>;
-        // Hiding unchanged files removes them; they load again when shown and opened.
         const previous = this.viewer!.getItem(path);
         if (signal.aborted || !previous) return;
         const media = document.querySelector<HTMLTemplateElement>("template[data-changes-media]");
@@ -374,7 +365,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
     }
 
     private revealCommentLines(item: CodeViewDiffItem<ChangesAnnotation>, instance: VirtualizedFileDiff<ChangesAnnotation, undefined>): void {
-      // Pierre keeps annotations in collapsed context hidden. Reveal their exact line ranges.
       for (const annotation of item.annotations ?? []) if (annotation.metadata.kind === "comment" || annotation.metadata.kind === "draft") for (const line of [annotation.metadata.start, annotation.metadata.end]) {
         const key = `${item.id}:${annotation.side}:${line}`;
         if (this.revealedLines.has(key)) continue;
@@ -579,7 +569,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
       // SAFETY: The unchanged action is attached to the server-rendered checkbox menu item.
       (event.currentTarget as HTMLButtonElement).setAttribute("aria-checked", String(this.showUnchanged));
       if (!this.viewer) {
-        // An empty comparison has no viewer until there is something to list.
         if (this.showUnchanged && !this.abort) void this.mount();
         return;
       }
@@ -612,7 +601,6 @@ function createChangesController(Controller: WorkspaceClientControllerConstructo
         const item = this.viewer?.getItem(path);
         if (item) this.viewer!.updateItem({ ...item, collapsed: this.collapsed, version: (item.version ?? 0) + 1 });
       }
-      // Unchanged files only ever collapse together; expanding them all would load the whole repository.
       if (this.collapsed) for (const path of this.unchanged ?? []) {
         const item = this.viewer?.getItem(path);
         if (item && !item.collapsed) this.viewer!.updateItem({ ...item, collapsed: true, version: (item.version ?? 0) + 1 });
@@ -633,7 +621,6 @@ export const agentsInTheCloudClientModule: WorkspaceClientModule = {
     application.register("changes-diff-endpoints", createDiffEndpointsController(Controller));
     application.register("commit-link", createCommitLinkController(Controller));
     hooks.onBecomeVisible(({ pane }) => {
-      // Let Stimulus connect newly inserted views before requesting the refresh.
       requestAnimationFrame(() => {
         if (pane.dataset.workspaceSurfaceVisible !== "true") return;
         const element = pane.querySelector("[data-controller~='changes-diff-endpoints']");

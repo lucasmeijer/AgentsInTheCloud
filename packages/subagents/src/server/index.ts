@@ -41,7 +41,6 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
           const query = new URLSearchParams({ agent: target, agentTarget: message.id });
           return new Response(null, { status: 303, headers: { location: `/workspaces/${encodeURIComponent(workspaceId)}?${query}` } });
         }
-        // The subagent's page in its root Agent's pane, showing the message.
         const query = new URLSearchParams({ agent: child.rootId, background: child.id, message: message.id });
         return new Response(null, { status: 303, headers: { location: `/workspaces/${encodeURIComponent(workspaceId)}?${query}` } });
       }

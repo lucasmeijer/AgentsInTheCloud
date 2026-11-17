@@ -7,7 +7,6 @@ export type UninstallState = { state: "running" | "failed" | "complete"; descrip
 export type UninstallPlan = { token: string; workspaceCount: number };
 type Docker = (...args: string[]) => Promise<string>;
 
-/** Inventory is independent of app health and includes parked and orphaned workspace data. */
 export async function uninstallPlan(docker: Docker, dataDir = "/data/app"): Promise<UninstallPlan> {
   const labelled = await docker("ps", "-a", "--filter", "label=com.agents-in-the-cloud.type=workspace", "--format", '{{.ID}}\t{{.Label "com.agents-in-the-cloud.workspace-id"}}');
   const ids = new Set(labelled.split("\n").filter(Boolean).map(line => {
@@ -27,7 +26,6 @@ export async function uninstallPlan(docker: Docker, dataDir = "/data/app"): Prom
 
 const lines = (text: string) => text.split("\n").map(line => line.trim()).filter(Boolean);
 
-/** This Docker daemon belongs exclusively to System, never the host Docker daemon. */
 export async function uninstallManagedResources(options: {
   token: string;
   docker: Docker;
@@ -38,7 +36,6 @@ export async function uninstallManagedResources(options: {
   await progress("Stopping the app and all workspace containers");
   const running = lines(await docker("ps", "-q"));
   if (running.length) await docker("stop", "--time", "20", ...running);
-  // Freeze creation before checking the approved inventory. A changed plan requires new consent.
   if ((await uninstallPlan(docker, dataDir)).token !== token)
     throw new Error("Workspace inventory changed. Nothing has been deleted. Run --uninstall again to review the new count.");
   await progress("Deleting workspace and app containers");
@@ -54,7 +51,6 @@ export async function uninstallManagedResources(options: {
   await docker("image", "prune", "--all", "--force");
   await progress("Deleting projects, settings, credentials, conversations, and shared files");
   await rm(dataDir, { recursive: true, force: true });
-  // Image/containerd caches and Tailscale state disappear with the outer installation volume.
   await progress("Verifying managed resources are gone");
   if (lines(await docker("ps", "-aq")).length || lines(await docker("volume", "ls", "-q")).length ||
       lines(await docker("network", "ls", "--filter", "type=custom", "-q")).length ||

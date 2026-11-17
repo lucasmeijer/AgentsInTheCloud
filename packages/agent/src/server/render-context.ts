@@ -8,18 +8,12 @@ export interface AgentRenderContext {
   agentId: string;
   model?: ModelRef;
   branchId?: string;
-  /** Distinct DOM identities for the collapsed commentary projection. */
   commentary?: boolean;
-  /** Read-only external transcripts use their own detail routes. */
   transcriptBasePath?: string;
-  /** Preserve read-only native branch selection through lazy detail expansion. */
   transcriptQuery?: string;
   readOnly?: boolean;
-  /** Render working items inline instead of subscribing to builtin turn details. */
   inlineWorkingItems?: boolean;
-  /** Load completed working items through the transcript detail route when opened. */
   lazyCompletedWorkingItems?: boolean;
-  /** Final answers are JSON, as a script's one-shot agent's are, and show as code. */
   jsonFinalAnswers?: boolean;
 }
 
@@ -66,7 +60,6 @@ export function agentPath(ctx: AgentRenderContext, suffix: string): string {
   return `${ctx.transcriptBasePath ?? `/workspaces/${encodeURIComponent(ctx.workspaceId)}/agents/${encodeURIComponent(ctx.agentId)}`}${suffix}`;
 }
 
-/** A background activity's page or detail. Everything under this path belongs to the Agent, including lazy frames inside it. */
 export function backgroundActivityPath(ctx: AgentRenderContext, key: string, suffix = ""): string {
   return agentPath(ctx, `/background/${encodeURIComponent(key)}${suffix}`);
 }

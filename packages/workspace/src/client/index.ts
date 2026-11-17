@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { agentsInTheCloudObservableTerminalTheme, createObservableTerminalViewer, observableWebSocketUrl, type ObservableTerminalViewer } from "@agents-in-the-cloud/observable-terminal/client";
 
 export function createProvisionTerminalController(Controller: new (...args: never[]) => { element: Element }) {
@@ -24,7 +22,6 @@ export function createProvisionTerminalController(Controller: new (...args: neve
 
     private start(): void {
       if (this.viewer) return;
-      // Provisioning's terminal processes keep their own size, 120×30.
       const style = getComputedStyle(this.element);
       this.viewer = createObservableTerminalViewer({
         host: this.element,

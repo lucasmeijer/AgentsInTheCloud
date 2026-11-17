@@ -58,13 +58,11 @@ describe("workspace secrets", () => {
     expect(context.env.GITLAB_TOKEN).toBe("AGENTSINTHECLOUD_PROXY_READY_GITLAB_TOKEN");
     expect(context.env.BITBUCKET_API_TOKEN).toBe("AGENTSINTHECLOUD_PROXY_READY_BITBUCKET_API_TOKEN");
     expect(context.env.BITBUCKET_EMAIL).toBe("me@example.com");
-    // bkt reads its own variable names; the token stays a placeholder there too.
     expect(context.env.BKT_TOKEN).toBe(context.env.BITBUCKET_API_TOKEN);
     expect(context.env.BKT_USERNAME).toBe("me@example.com");
 
     const gitlab = await context.hooks.onRequest(new Request("https://gitlab.com/api/v4/user", { headers: { "private-token": context.env.GITLAB_TOKEN! } }));
     expect(gitlab.headers.get("private-token")).toBe("gitlab-secret");
-    // Git sends the credential helper's username and password as Basic auth.
     const basic = (password: string) => `Basic ${btoa(`x-bitbucket-api-token-auth:${password}`)}`;
     const bitbucket = await context.hooks.onRequest(new Request("https://bitbucket.org/team/repo.git/info/refs", { headers: { authorization: basic(context.env.BITBUCKET_API_TOKEN!) } }));
     expect(bitbucket.headers.get("authorization")).toBe(basic("bitbucket-secret"));
@@ -138,7 +136,6 @@ describe("workspace secrets", () => {
     const first = await load();
     const outbound = () => new Request("https://api.example.com/", { headers: { authorization: "Bearer AGENTSINTHECLOUD_PROXY_READY_TOKEN" } });
     expect((await first.hooks.onRequest(outbound())).headers.get("authorization")).toBe("Bearer first");
-    // The old process's environment is unchanged; callers explicitly supply the placeholder.
     expect(initial.env.TOKEN).toBeUndefined();
     await updateWorkspaceTemplateSecret(workspaceTemplate.id, secret.id, { envName: "TOKEN", hostPattern: "api.example.com", secretValue: "second" });
     expect((await (await load()).hooks.onRequest(outbound())).headers.get("authorization")).toBe("Bearer second");

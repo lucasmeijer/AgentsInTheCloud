@@ -18,7 +18,6 @@ export interface ActionLinkOptions {
   attributesHtml?: string;
 }
 
-/** Renders a native link using the canonical prominent-action treatment. */
 export function actionLinkHtml(options: ActionLinkOptions): string {
   const presentation = buttonPresentation(options.variant, options.content);
   const comparison = options.perimeterComparison;

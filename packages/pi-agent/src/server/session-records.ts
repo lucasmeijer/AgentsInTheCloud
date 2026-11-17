@@ -33,7 +33,6 @@ function imageDimensions(data: Uint8Array, mimeType: string): ImageDimensions | 
   return undefined;
 }
 
-// Long sessions hold tens of thousands of entries; compiled checks are much faster than interpreted ones.
 const sessionImagePart = Compile(Type.Object({
   type: Type.Literal("image"),
   mimeType: Type.Optional(Type.Unknown()),

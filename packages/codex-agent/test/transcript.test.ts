@@ -17,12 +17,10 @@ test("sub-agents are background activities: their latest activity says whether t
     id: "turn", itemsView: "full" as const, status: "completed" as const, error: null, startedAt: 1, completedAt: 2, durationMs: 1000,
     items: [activity("1", "started", "t-explorer", "/root/explorer"), activity("2", "started", "t-checker", "/root/explorer/checker"), activity("3", "started", "t-planner", "/root/planner"), activity("4", "completed", "t-explorer", "/root/explorer"), activity("5", "interrupted", "t-planner", "/root/planner")],
   }];
-  // Its own thread says whether a sub-agent still runs, and since when.
   const subagentThreads = new Map([["t-checker", { stopped: false, startedAt: 100_000, answers: new Map() }]]);
   expect(codexBackgroundActivities({ state: { turns }, subagentThreads }).find(activity => activity.key === "t-checker")?.startedAt).toBe(100_000);
   expect(codexBackgroundActivities({ state: { turns }, subagentThreads: new Map([["t-checker", { stopped: true, answers: new Map() }]]) }).find(activity => activity.key === "t-checker")).toMatchObject({ running: false, progress: "Stopped" });
   expect(codexBackgroundActivities({ state: { turns }, subagentThreads: new Map() }).map(({ key, title, running, parentKey, progress, startedBy }) => ({ key, title, running, parentKey, progress, startedBy }))).toEqual([
-    // Started under the ID of the spawn call; it keeps pointing there once finished.
     { key: "t-explorer", title: "explorer", running: false, parentKey: undefined, progress: undefined, startedBy: { itemKey: "1", label: "Incoming message" } },
     { key: "t-checker", title: "checker", running: true, parentKey: "t-explorer", progress: undefined, startedBy: { itemKey: "2", label: "Incoming message" } },
     { key: "t-planner", title: "planner", running: false, parentKey: undefined, progress: "Stopped", startedBy: { itemKey: "3", label: "Incoming message" } },

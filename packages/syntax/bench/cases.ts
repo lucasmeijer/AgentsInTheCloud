@@ -9,7 +9,6 @@ export function source(fixture: Fixture): string {
   return readFileSync(new URL(`../test/fixtures/slay/${fixture}.txt`, import.meta.url), "utf8");
 }
 
-/** Synthetic UTF-16 argument/text chunks, not the provider's unrecorded deltas. */
 export function* prefixes(text: string, chunkSize: number): Generator<string> {
   for (let end = chunkSize; end < text.length; end += chunkSize) yield text.slice(0, end);
   yield text;

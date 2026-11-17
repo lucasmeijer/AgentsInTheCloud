@@ -9,11 +9,9 @@ export interface PopupOptions {
   contentHtml: string;
   menuAttributesHtml?: string;
   placement?: "below" | "above";
-  /** Content-width menus can grow beyond the compact 340px limit, within the viewport. */
   width?: "compact" | "content";
 }
 
-/** Preferred menu interface: owns the anchor, trigger, ARIA linkage and behavior. */
 export function popupHtml(options: PopupOptions): string {
   return `<span class="popup-menu-anchor" data-controller="popup-menu">${buttonHtml({
     type: "button",

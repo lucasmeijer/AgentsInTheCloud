@@ -1,4 +1,3 @@
-/** Shared motion for a persistent pane or server-rendered replacement. Navigation stays feature-owned. */
 export type PageSlideDirection = "forward" | "back";
 
 let activeTransition: ViewTransition | undefined;
@@ -13,7 +12,6 @@ export async function slidePageChange(
   render: () => HTMLElement | Promise<HTMLElement>,
   direction: PageSlideDirection,
 ): Promise<void> {
-  // A new navigation finishes the previous visual transition, never its render.
   while (activeTransition) {
     activeTransition.skipTransition();
     await activeTransition.finished;

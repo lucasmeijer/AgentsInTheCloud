@@ -13,7 +13,6 @@ function controlValue(event: Event): string {
   return (event.target as HTMLSelectElement).value;
 }
 
-/** Only browser-owned specimen controls; all example markup is server rendered. */
 class CatalogueController extends Controller<HTMLElement> {
   static targets = ["entry", "nav", "status", "edge"];
   declare entryTargets: HTMLElement[];

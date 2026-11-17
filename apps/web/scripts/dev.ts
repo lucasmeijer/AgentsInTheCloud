@@ -202,7 +202,6 @@ function startServer(): void {
   })();
 }
 
-/** Restarts run one at a time, and requests made before a queued restart begins share it. Overlapping restarts would start two servers. */
 function restartServer(): Promise<void> {
   if (!restartQueued) {
     restartQueued = true;
@@ -239,7 +238,6 @@ async function restartServerOnce(): Promise<void> {
 function scheduleWorkspaceHelperBuild(changed: string): void {
   rememberRestartReason("workspace helper changed", changed);
   if (workspaceHelperTimer) clearTimeout(workspaceHelperTimer);
-  // Workspaces get the new tools directory when the server starts.
   workspaceHelperTimer = setTimeout(() => void (async () => {
     if (await buildWorkspaceHelper()) await restartServer();
   })(), 250);

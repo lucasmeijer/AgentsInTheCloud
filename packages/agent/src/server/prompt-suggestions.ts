@@ -13,7 +13,6 @@ function settingsFile(): string {
   return agentsInTheCloudDataPath(getAgentsInTheCloudRuntimeContext(), "prompt-suggestions.json");
 }
 
-/** One switch for every Agent type that can suggest the next prompt; on unless turned off. */
 export async function readPromptSuggestionsEnabled(): Promise<boolean> {
   return Value.Parse(settingsSchema, await readJsonSettings(settingsFile())).enabled ?? true;
 }

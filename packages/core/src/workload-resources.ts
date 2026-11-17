@@ -4,7 +4,6 @@ async function resources(): Promise<
   { workloadsCgroupParent: string } | undefined
 > {
   const text = await readTextIfExists(descriptor);
-  // A developer's local Docker context has no System-owned workload group.
   return text === undefined ? undefined : JSON.parse(text);
 }
 export async function workloadCgroupArgs(): Promise<string[]> {
@@ -13,7 +12,6 @@ export async function workloadCgroupArgs(): Promise<string[]> {
 }
 export async function workloadCommand(args: string[]): Promise<string[]> {
   if (!(await resources())) return args;
-  // Move only this child before exec; the app and its other requests stay protected.
   return [
     "sh",
     "-ec",

@@ -9,13 +9,11 @@ export async function getWorkspaceTemplateSshKnownHosts(scope: ConfigurationScop
   return findConfigurationRecord(await readWorkspaceTemplateStore(file), scope).sshKnownHosts ?? "";
 }
 
-/** Additional trust is supplied explicitly, never learned from an unverified network scan. */
 export async function setWorkspaceTemplateSshKnownHosts(scope: ConfigurationScope, input: string, file = workspaceTemplatesFile()): Promise<string> {
   const lines = input.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
   const directory = await mkdtemp(join(tmpdir(), "agents-in-the-cloud-host-keys-"));
   try {
     for (const line of lines) {
-      // Each record must include a host pattern and a public key (not an authorized_keys record).
       if (!/^(?:@(?:cert-authority|revoked)\s+)?\S+\s+(?:ssh-|ecdsa-|sk-)\S+\s+\S+/.test(line)) throw invalidArguments("Use known_hosts records: hostname key-type public-key. Verify keys with the server administrator first.");
       const path = join(directory, "known_hosts");
       await writeFile(path, `${line}\n`);
@@ -43,6 +41,5 @@ export async function prepareWorkspaceSshTrust(directory: string, workspaceTempl
 }
 
 export function workspaceGitSshCommand(knownHostsPath: string): string {
-  // Retain normal host-managed trust in addition to the explicit template trust file.
   return `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ${shellQuote(`UserKnownHostsFile=${knownHostsPath} ${join(dirname(knownHostsPath), "workspace_known_hosts")} ~/.ssh/known_hosts`)}`;
 }

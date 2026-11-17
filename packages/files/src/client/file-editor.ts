@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { setToggleValue, type ToggleChangeEvent } from "@agents-in-the-cloud/design-system/toggle/client";
 import { errorMessage, type WorkspaceClientControllerConstructor } from "@agents-in-the-cloud/shared";
 import { pierreHighlightOptions } from "@agents-in-the-cloud/syntax/diff-options";
@@ -9,7 +7,6 @@ import { editFileText, editorText } from "../editable-text.ts";
 import { FileDraft } from "../file-draft.ts";
 import { parseEditableFileResponse, parseFileSaveResponse, type EditableFileResponse } from "../protocol.ts";
 
-// Retain drafts and in-flight writes across Turbo frame replacements.
 const drafts = new Map<string, FileDraft>();
 const wrapStorageKey = "agents-in-the-cloud:file-editor-wrap";
 const backupErrors = new WeakMap<FileDraft, string>();
@@ -48,7 +45,6 @@ function fileDraft(url: string, file: EditableFileResponse): FileDraft {
       } else localStorage.removeItem(key);
       backupErrors.delete(draft);
     } catch (error) {
-      // Storage quotas and browser privacy settings must not prevent disk saves.
       backupErrors.set(draft, `Draft backup failed: ${errorMessage(error)}. Keep this tab open until saved.`);
     }
   });
@@ -193,12 +189,10 @@ export function createFileEditorController(Controller: WorkspaceClientController
         unsafeCSS: editorCSS,
         createEditor: (type, options, key) => new Editor(type, {
           ...options,
-          // Rounded selections paint concave corners in an opaque editor background; ours is transparent.
           roundedSelection: false,
           onAttach: (editor) => {
             const first = !this.editor;
             this.editor = editor;
-            // Positions requested before the editor attached are applied once it can place the caret.
             if (first) requestAnimationFrame(() => this.jumpTo(this.lineValue, this.columnValue));
           },
           onFocus: () => { this.showSource(); },
@@ -223,13 +217,11 @@ export function createFileEditorController(Controller: WorkspaceClientController
 
     private edited(event: EditorChangeEvent<EditorType, undefined, undefined>): void {
       this.text = event.file.contents;
-      // A response belongs to the document and editing choice that requested it.
       if (this.applyingDisk) {
         this.invalidateMarkdownRender();
         return;
       }
       this.showSource();
-      // Pierre reports sorted, non-overlapping changes against the previous document.
       this.draft!.edit(editFileText(this.draft!.content, event.changes.map(({ start, end, text }) => ({ from: start, to: end, insert: text }))));
       if (this.saveTimer) clearTimeout(this.saveTimer);
       this.saveTimer = setTimeout(() => void this.save(), 500);
@@ -295,7 +287,6 @@ export function createFileEditorController(Controller: WorkspaceClientController
       else this.setStatus("Saved", "saved");
     };
 
-    // Replace only the differing middle so the caret and scroll position survive disk updates.
     private replaceText(content: string): void {
       const previous = this.text;
       this.text = content;

@@ -10,7 +10,6 @@ export interface CliModelSettings { model?: string; thinkingLevel?: string }
 
 export function createCliModelSettings(options: {
   agentTypeId: string; label: string;
-  /** Omit provider to share enabled models across all connected providers. */
   provider?: string;
   unavailableReason?(runtime: Awaited<ReturnType<typeof createPiModelRuntime>>, model: ModelRef): Promise<string | undefined>;
   mapThinkingLevel(level: string, mapped: string | null | undefined): string | undefined;
@@ -31,7 +30,6 @@ export function createCliModelSettings(options: {
     if (selected) selected.selected = true;
     const selectedValue = selected ? modelRefValue(selected) : "";
     const selectedModel = selected ? runtime.getModel(selected.provider, selected.id) : undefined;
-    // Adapters translate Pi thinking levels when their CLI uses provider-native efforts.
     const thinkingLevels = selected && selectedModel ? [...new Set((await modelThinkingLevels(selected)).flatMap((level) => {
       const mapped = selectedModel.thinkingLevelMap?.[level];
       const thinkingLevel = options.mapThinkingLevel(level, mapped);
@@ -48,7 +46,6 @@ export function createCliModelSettings(options: {
     return renderLaunchModelSettings({ ...context, agentTypeId: options.agentTypeId, ...await choices(context.query.get("model") ?? undefined, context.query.get("thinkingLevel") ?? undefined) });
   }
 
-  /** Only available enabled models and supported thinking levels may reach the CLI. */
   async function prepare(parameters: JsonObject = {}): Promise<CliModelSettings> {
     const settings = { model: parameters.model, thinkingLevel: parameters.thinkingLevel };
     if (!Value.Check(settingsSchema, settings)) throw invalidArguments(`${options.label} model and thinkingLevel must be strings`);

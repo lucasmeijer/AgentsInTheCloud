@@ -20,7 +20,6 @@ export interface CustomOpenAIEndpointInput {
   maxTokens: number;
 }
 
-/** Safe to show in the connection form. Never include upstream response bodies or credentials. */
 export class CustomEndpointInputError extends Error {}
 
 function endpointSettings(input: CustomOpenAIEndpointInput) {
@@ -42,7 +41,6 @@ function endpointSettings(input: CustomOpenAIEndpointInput) {
 
 const modelListSchema = Type.Object({ data: Type.Array(Type.Object({ id: Type.String({ pattern: "\\S" }) })) });
 
-/** OpenAI's shared listing API supplies IDs, not reliable model capabilities or limits. */
 async function discoverModels(baseUrl: string, apiKey: string): Promise<string[]> {
   let response: Response;
   try {
@@ -61,9 +59,7 @@ async function discoverModels(baseUrl: string, apiKey: string): Promise<string[]
   return body.data.map(model => model.id.trim());
 }
 
-/** Creates independent, user-named providers in the existing custom configuration and credential store. */
 export async function connectCustomOpenAIEndpoint(input: CustomOpenAIEndpointInput, discover: boolean): Promise<string> {
-  // Validate URL and limits before sending a credential anywhere.
   const settings = endpointSettings(input);
   const key = input.apiKey.trim() || "local-no-auth";
   const modelId = input.modelId?.trim();

@@ -17,7 +17,6 @@ export function terminalInputForAccessoryKey(key: string): string {
 }
 
 export function controlModifiedTerminalInput(data: string): string {
-  // Cursor keys can arrive in normal or application-cursor mode.
   if (/^\x1b(?:\[|O)[ABCD]$/.test(data)) return `\x1b[1;5${data.at(-1)}`;
   if (data.length !== 1) return data;
   const code = data.toUpperCase().charCodeAt(0);
@@ -27,16 +26,13 @@ export function controlModifiedTerminalInput(data: string): string {
   return data;
 }
 
-/** A second Ctrl tap within this window locks Ctrl on. */
 const controlDoubleTapMs = 400;
 
-/** Shared Stimulus behavior for interactive terminal surfaces and their key bars. */
 export function createTerminalKeyBarController(Controller: WorkspaceClientControllerConstructor) {
   abstract class TerminalKeyBarController extends Controller {
     static targets = ["control"];
     declare readonly controlTarget: HTMLButtonElement;
     protected abstract readonly accessoryViewer: ObservableTerminalViewer | undefined;
-    /** One tap applies Ctrl to the next key only; a double tap keeps it on until tapped again. */
     private control: "off" | "next" | "locked" = "off";
     private controlTappedAt = 0;
 
@@ -63,7 +59,6 @@ export function createTerminalKeyBarController(Controller: WorkspaceClientContro
     }
 
     preserveTerminalFocus(event: MouseEvent): void {
-      // Cancel focus transfer only: cancelling pointerdown can suppress iOS clicks.
       if (event.button === 0) event.preventDefault();
     }
 

@@ -8,7 +8,6 @@ export async function nativeSnapshot(workspaceId: string) {
   const records = await owner.catalog();
   const agents = await owner.harness.commit(async tx => {
     const agents = [];
-    // A script's one-shot agents are code mode's, not delegation's.
     for (const record of records.filter(item => item.parentId && !isOneShotAgent(item))) agents.push({
       id: record.agentId, parentId: record.parentId!, rootId: record.rootId!, taskName: record.taskName!,
       status: await nativeStatus(tx, record), task: record.title,

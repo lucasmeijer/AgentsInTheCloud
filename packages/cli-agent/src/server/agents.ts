@@ -19,7 +19,6 @@ const agentSchema = Type.Object({
   // An Agent runs as the terminal process with its id. Ones started before
   // terminal processes ran in this tmux session instead, until they are restored.
   id: Type.String(), title: Type.String(), tmuxSession: Type.Optional(Type.String()), input: inputSchema,
-  // Older CLI tabs have no kind. Reading them must never execute their saved prompts.
   kind: Type.Optional(Type.String()), error: Type.Optional(Type.String()),
   model: Type.Optional(Type.String()), thinkingLevel: Type.Optional(Type.String()),
   historySlug: Type.Optional(Type.String()),
@@ -27,7 +26,6 @@ const agentSchema = Type.Object({
 const stateSchema = Type.Object({ agents: Type.Array(agentSchema) });
 const previousStateSchema = Type.Object({ sessions: Type.Array(agentSchema) });
 type CliAgentRecord = Static<typeof agentSchema>;
-/** An Agent's terminal: its process, or still being started. */
 export type CliAgentTerminal = { state: "starting" } | TerminalProcessState;
 const turnSettleTimeoutMs = 10_000;
 
@@ -36,7 +34,6 @@ export async function checkedWorkspaceShell(workspaceId: string, command: string
   if (result.exitCode !== 0) throw new Error(result.stderr.trim() || result.stdout.trim() || `Command failed (exit ${result.exitCode})`);
 }
 
-/** Write private session files in one workspace command, keeping contents off its command line. */
 export async function writeCliSessionFiles(workspaceId: string, session: Pick<CliAgentSession, "directory">, files: Record<string, string>): Promise<void> {
   const entries = Object.entries(files);
   const commands = entries.map(([name, content], index) => {
@@ -51,7 +48,6 @@ export function createCliAgents(adapter: CliAgentAdapter, onTitleChanged: (works
   let state: ReturnType<typeof createStore> | undefined;
   function createStore() {
     return createWorkspaceMetadataState(`${adapter.legacyId ?? adapter.id}-agents.json`, (value) => {
-      // Previous saved CLI Agent metadata called its Agent collection "sessions".
       if (Value.Check(previousStateSchema, value)) return { agents: value.sessions };
       return Value.Parse(stateSchema, value);
     }, () => ({ agents: [] }));
@@ -69,12 +65,10 @@ export function createCliAgents(adapter: CliAgentAdapter, onTitleChanged: (works
     return agent;
   }
 
-  // Called only inside the workspace queue, including the provisioning claim check.
   async function launch(workspaceId: string, input: WorkspaceAgentInput, settings: AgentWorkspaceParameters): Promise<string> {
     await adapter.requireSetup();
     const id = crypto.randomUUID();
     const agent: CliAgentRecord = { id, title: adapter.label, input, kind: adapter.id, model: settings.model, thinkingLevel: settings.thinkingLevel };
-    // Claim before side effects. Recovery must never submit the initial prompt twice.
     store().write(workspaceId, { agents: [...list(workspaceId), agent] });
     await start(workspaceId, agent, settings, input);
     if (!agent.error && input.text.trim()) void nameFromPrompt(workspaceId, agent).catch((error) => console.error(`Could not publish ${adapter.label} agent title ${id}`, error));
@@ -104,7 +98,6 @@ export function createCliAgents(adapter: CliAgentAdapter, onTitleChanged: (works
       const sessionDirectory = `/home/agents-in-the-cloud/.local/share/agents-in-the-cloud-agents/${id}`;
       const turnSignalCommand = `${sessionDirectory}/turn-signal.sh`;
       const launchSession: CliAgentSession = { id, directory: sessionDirectory, turnSignalCommand };
-      // $1 is the TurnBoundary the CLI reports.
       await writeCliSessionFiles(workspaceId, launchSession, { "turn-signal.sh": `#!/bin/sh
 exec curl --noproxy '*' --fail --silent --show-error --max-time 10 -X POST -H ${shellQuote("Authorization: Bearer " + connection.token)} ${shellQuote(new URL("/agent-turn-", connection.url).href)}"$1"
 ` });
@@ -121,7 +114,6 @@ exec curl --noproxy '*' --fail --silent --show-error --max-time 10 -X POST -H ${
       delete agent.error;
       store().write(workspaceId, { agents: list(workspaceId) });
     } catch (error) {
-      // Startup failure is durable agent state, shown in its tab rather than discarded.
       agent.error = errorMessage(error);
       store().write(workspaceId, { agents: list(workspaceId) });
       await revokeAgentMcp(workspaceId, id);
@@ -139,7 +131,6 @@ exec curl --noproxy '*' --fail --silent --show-error --max-time 10 -X POST -H ${
     const deadline = Date.now() + turnSettleTimeoutMs;
     while (!signal.aborted && !await adapter.turnSettled!(workspaceId, id)) {
       if (Date.now() >= deadline) {
-        // StopFailure may never write the normal stop marker; its timeout is expected.
         if (reason !== "stopFailure") console.error(`${adapter.label} history for ${id} did not settle within ${turnSettleTimeoutMs / 1000}s of its finished turn`);
         return;
       }
@@ -152,7 +143,6 @@ exec curl --noproxy '*' --fail --silent --show-error --max-time 10 -X POST -H ${
       if (!adapter.resumeScript) return;
       const processes = workspaceTerminalProcesses(workspaceId);
       for (const agent of list(workspaceId)) {
-        // Legacy placeholders are not runnable agents.
         if (agent.kind !== adapter.id && agent.kind !== adapter.legacyId) continue;
         // Its terminal gone, say after the workspace restarted, the Agent resumes. One that is
         // running belongs to this runtime, and one that ended stays ended until closed.
@@ -189,7 +179,6 @@ exec curl --noproxy '*' --fail --silent --show-error --max-time 10 -X POST -H ${
     if (result) await onTitleChanged(workspaceId, id, title, result.workspaceNamed);
   }
 
-  // The launch prompt names the tab; the same slug later names the exported history.
   async function nameFromPrompt(workspaceId: string, agent: CliAgentRecord): Promise<void> {
     const slug = await suggestSlug(agent);
     if (slug) await applyTitle(workspaceId, agent.id, slug, true);
@@ -220,7 +209,6 @@ exec curl --noproxy '*' --fail --silent --show-error --max-time 10 -X POST -H ${
     if (starting.has(agent.id)) return { state: "starting" };
     return workspaceTerminalProcesses(workspaceId).state(agent.id);
   }
-  /** An Agent started before terminal processes: its CLI stops, so that it can resume as a terminal process. */
   async function retireTmuxSession(workspaceId: string, agent: CliAgentRecord): Promise<void> {
     await checkedWorkspaceShell(workspaceId, `tmux kill-session -t ${shellQuote(`=${agent.tmuxSession}`)} 2>/dev/null || true`);
     delete agent.tmuxSession;

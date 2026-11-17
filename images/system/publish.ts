@@ -8,7 +8,6 @@ import { systemRepository as image } from "../../packages/shared/src/publishing.
 
 const root = resolve(import.meta.dir, "../..");
 
-/** Installations follow System on the same channel as their app, so stable apps never meet an untested System. */
 export async function publishSystem(run: Run, directory: string, check = false, stable = false) {
   if (!check && (await run(["git", "status", "--porcelain"])).stdout.trim())
     throw new Error("Commit changes before publishing System.");

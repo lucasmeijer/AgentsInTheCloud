@@ -68,7 +68,6 @@ export function navigateFilesViewHistory(workspaceId: string, id: string, direct
   filesViews.write(workspaceId, views);
 }
 
-/** Drops a deleted file or folder from every Files view's history. */
 export function forgetFilesPath(workspaceId: string, path: string): void {
   const views = listFilesViews(workspaceId);
   const kept = (entry: string) => entry !== path && !entry.startsWith(`${path}/`);

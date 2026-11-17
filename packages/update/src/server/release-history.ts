@@ -32,7 +32,6 @@ const githubReleaseSchema = Type.Object({ tag_name: Type.String(), body: Type.Un
 const comparisonSchema = Type.Object({ commits: Type.Array(Type.Object({ sha: Type.String({ pattern: "^[a-f0-9]{40}$" }) })), status: Type.Union([Type.Literal("ahead"), Type.Literal("behind"), Type.Literal("identical"), Type.Literal("diverged")]) });
 const revisionSchema = Type.String({ pattern: "^[a-f0-9]{40}$" });
 
-/** Published stable milestones in the update's ancestry, never draft notes or unrelated branches. */
 export async function fetchReleaseHistory(current: string, target: string, fetcher: HttpFetcher = fetch): Promise<{ releases: PublishedRelease[]; targetHasNotes: boolean; compareUrl: string }> {
   Value.Assert(revisionSchema, current);
   Value.Assert(revisionSchema, target);

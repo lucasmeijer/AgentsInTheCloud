@@ -11,7 +11,6 @@ function object(value: JsonValue | undefined): JsonObject { return isJsonObject(
 function preferences(stored: JsonObject, agentTypeId: string): JsonObject {
   const scoped = object(stored.agentPreferences)[agentTypeId];
   if (isJsonObject(scoped)) return scoped;
-  // Older settings used unscoped keys for the Built-in Agent only.
   return agentTypeId === "builtin" ? {
     activeModel: stored.activeModel ?? null,
     modelPreferences: stored.modelPreferences ?? {},

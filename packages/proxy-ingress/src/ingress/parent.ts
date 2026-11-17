@@ -44,7 +44,6 @@ export function createParentAgentsInTheCloudPublisher(socketPath = parentIngress
   } };
 }
 
-/** Resolve identity when publishing: first-install login can happen after app startup. */
 export function createTailscaleParentPublisher(socketPath = defaultTailscaleLocalApiSocketPath, portRange?: PortRange): ParentOriginPublisher {
   async function connectedPublisher(requireHttps: boolean) {
     const status: unknown = JSON.parse(await tailscaleLocalApiRequest(socketPath, "GET", "/localapi/v0/status"));
@@ -68,7 +67,6 @@ export function createTailscaleParentPublisher(socketPath = defaultTailscaleLoca
   };
 }
 
-/** The selected mode is independent from a mounted Tailscale socket. */
 export function createSystemOriginPublisher(portRange?: PortRange, fetcher: (url: string) => Promise<Response> = fetch): ParentOriginPublisher {
   const tailscale = createTailscaleParentPublisher(defaultTailscaleLocalApiSocketPath, portRange);
   return { kind: "system", refresh: true, async publish(port) {
@@ -82,7 +80,6 @@ export function createSystemOriginPublisher(portRange?: PortRange, fetcher: (url
   } };
 }
 
-/** A mounted parent directory is configuration even while its server is down. */
 export async function detectParentOriginPublisher(portRange?: PortRange, hasPath: (path: string) => boolean = existsSync): Promise<ParentOriginPublisher> {
   if (hasPath("/run/agents-in-the-cloud-parent")) return createParentAgentsInTheCloudPublisher();
   if (hasPath("/run/agents-in-the-cloud-system/access-v1")) return createSystemOriginPublisher(portRange);

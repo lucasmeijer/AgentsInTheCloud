@@ -32,7 +32,6 @@ type ProxyContext = { secrets: SecretContext; fetch: FetchUpstream; connect: Con
 export type WorkspaceEgressProxy = { close(): Promise<void> };
 const mitmTargetServers = new Map<string, Promise<MitmTargetServer>>();
 
-/** A policy-checked destination for direct connections; trusted upstream proxies check their own. */
 type ResolvedDestination = { address: string; family: 4 | 6 };
 
 type MitmConnectionContext = { context: ProxyContext; hostname: string };
@@ -274,7 +273,6 @@ async function startMitmTargetServer(ca: MitmCa, hostname: string): Promise<Mitm
       socket.end(connectErrorResponse(proxyFailure(new HttpRequestBlockedError("unknown MITM connection"))));
       return;
     }
-    // The CONNECT-bound hostname, never the inner Host header, selects the destination.
     const path = req.url || "/";
     req.url = `https://${connection.hostname}${path.startsWith("/") ? path : `/${path}`}`;
     void handleProxyUpgrade(connection.context, req, socket, head).catch(error => socket.end(connectErrorResponse(proxyFailure(error))));
@@ -349,7 +347,6 @@ async function handleProxyHttp(context: ProxyContext, req: IncomingMessage, res:
 }
 
 async function handleProxyUpgrade(context: ProxyContext, req: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
-  // Install a listener before asynchronous policy/credential work; disconnects cancel the bridge below.
   socket.on("error", () => socket.destroy());
   const target = new URL(requestTargetUrl(req));
   if (target.protocol === "ws:") target.protocol = "http:";
@@ -389,7 +386,6 @@ async function resolveAllowedDestination(context: ProxyContext, hostname: string
   for (const address of addresses) {
     const family = address.family === 6 ? 6 : 4;
     if (await hooks.isIpAllowed?.({ hostname, ip: address.address, family, port, protocol })) continue;
-    // Tell the agent (and through it, the user) how to open a private destination on purpose.
     if (isPrivateNetworkAddress(address.address)) throw new HttpRequestBlockedError(`destination not allowed: ${hostname} is on a private network. To allow it, add ${formatPrivateNetworkDestination(requestedPrivateNetworkDestination(hostname, port))} under Private network access in AgentsInTheCloud workspace settings.`);
     throw new HttpRequestBlockedError(`destination not allowed: ${hostname}`);
   }
@@ -397,7 +393,6 @@ async function resolveAllowedDestination(context: ProxyContext, hostname: string
   return { address: first.address, family: first.family === 6 ? 6 : 4 };
 }
 
-/** A DNS lookup that always answers with the policy-checked address. */
 function pinnedLookup(destination: ResolvedDestination): NonNullable<import("node:net").TcpSocketConnectOpts["lookup"]> {
   return (_hostname: string, options: { all?: boolean }, callback: (error: Error | null, address: string | Array<{ address: string; family: number }>, family?: number) => void) => {
     if (options?.all) callback(null, [{ address: destination.address, family: destination.family }]);

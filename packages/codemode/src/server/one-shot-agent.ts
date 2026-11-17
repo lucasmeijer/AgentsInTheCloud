@@ -13,25 +13,20 @@ import { Compile } from "typebox/compile";
 
 export const oneShotAgentToolName = "agent";
 
-/** Text on one line, cut to `length` with an ellipsis. */
 export function oneLine(text: string, length: number): string {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > length ? `${line.slice(0, length - 1)}…` : line;
 }
 const attempts = 3;
-/** The tools a one-shot agent may get; it never runs scripts or delegates. */
 const oneShotTools = ["read", "write", "edit", "bash"];
 const thinkingLevels: readonly string[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
-/** The call's agent, created once, so a rerun after a restart reattaches to it and its submissions. */
 const OneShotRun = defineDoc<{ conversationId?: ConversationId }>({
   kind: "agents-in-the-cloud.one-shot-run", version: 1, scope: "task", initial: () => ({}), checkpointWhen: () => true,
 });
 
-/** In the calling conversation: which agent a script's call ran, so its row on the script's card opens it. */
 export const oneShotAgentEntry = defineEntry<{ callId: string; agentId: string }>("agents-in-the-cloud.one-shot-agent");
 
-/** Run by code mode scripts only; installed with code mode, whose extension a one-shot agent does not get. */
 export function createOneShotAgentTool(models: Pick<Models, "getModel">) {
   return defineTool({
     name: oneShotAgentToolName,
@@ -45,9 +40,7 @@ export function createOneShotAgentTool(models: Pick<Models, "getModel">) {
       tools: Type.Optional(Type.Array(Type.String(), { description: `Subset of ${oneShotTools.join(", ")}; default: all.` })),
     }, { additionalProperties: false }),
     structuredOutputSchema: Type.Unknown(),
-    // Only scripts call it: a model would block its turn on it.
     callers: ["tools"],
-    // A rerun reattaches to the call's conversation; submissions are deduplicated by request ID.
     replay: "safe",
     async execute(args, api, context) {
       const fail = (text: string) => ({ output: [{ type: "text" as const, text }], isError: true });
@@ -59,7 +52,6 @@ export function createOneShotAgentTool(models: Pick<Models, "getModel">) {
         if (!(error instanceof Error)) throw error;
         return fail(`Invalid schema: ${error.message}`);
       }
-      // A rerun reattaches to the agent it created, even if its model has since gone.
       const existing = await api.snapshot(OneShotRun, api.taskId, context);
       let choice: { model: { provider: string; modelId: string }; thinkingLevel: ModelThinkingLevel; tools: string[] } | undefined;
       if (existing?.conversationId === undefined) {
@@ -89,7 +81,6 @@ export function createOneShotAgentTool(models: Pick<Models, "getModel">) {
         if (!caller) throw new Error("Calling conversation is not the selected branch");
         const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
         const agentId = randomUUID();
-        // It starts as a copy of the caller's agent: keep its instructions, but no scripts of its own.
         const copied = await tx.doc(AgentDoc, created.id);
         const installed = api.registry.tools();
         const excluded = new Set(installed.filter(({ tool }) => tool.name === CODEMODE_TOOL_NAME || tool.name === oneShotAgentToolName).map(({ extension }) => extension));
@@ -112,7 +103,6 @@ export function createOneShotAgentTool(models: Pick<Models, "getModel">) {
         run.conversationId = created.id;
         return created.id;
       }, context);
-      // Once it has run, what it used goes with the result, failed or not: its cost is the caller's too.
       const ran = async (result: { output: { type: "text"; text: string }[]; isError?: boolean; structuredOutput?: JsonValue }) => {
         const usage = await api.snapshot(UsageDoc, conversationId, context);
         const buckets = [...Object.values(usage?.models ?? {}), ...Object.values(usage?.tools ?? {})];

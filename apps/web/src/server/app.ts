@@ -79,18 +79,12 @@ const jsonStringSchema = Type.String();
 export interface WebAppDeps {
   registry: WorkspaceRegistry;
   workspaceModules?: WorkspaceModule[];
-  /** Event bus passed through to the agent module routes. */
   events?: AgentsInTheCloudEventBus;
   devReload?: boolean;
-  /** Create the container + default agent etc. for an already-registered workspace id. */
   provisionWorkspace(id: string, options: { init?: WorkspaceInitInstruction; context?: WorkspaceCreationContext; run: WorkspaceProvisionRun }): Promise<void>;
-  /** Test/embedding override. Production obtains this contribution from the Changes module. */
   deletionReview?: WorkspaceDeletionReview;
-  /** Force-remove the workspace container. */
   destroyWorkspace(id: string): Promise<void>;
-  /** Persist parked state and stop or start its workspace container. Defaults to setWorkspaceParked. */
   persistWorkspaceParked?(id: string, parked: boolean): Promise<void>;
-  /** Receives background task failures. Defaults to console.error. */
   logError?(message: string): void;
   workspaceRemovedHandlers?: Array<(workspaceId: string) => void | Promise<void>>;
 }
@@ -140,7 +134,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
   const workPresentationIntents = new Map<string, { key: string; revision: string }>();
   type SurfaceState = { kind: "workspace"; presentation: FixedWorkspacePresentation }
     | { kind: "regions"; regions: readonly LiveRegion[]; live?: WorkspaceAgentPane["live"] };
-  /** A workspace's chrome, and the Agent pane and Work view body its presentation selects. */
   const presentationSurfaceKinds = new Set<string>(["workspace", ...paneSurfaceKinds]);
   const surfaces = new Map<string, { workspaceId: string; kind: string; resource: ReturnType<typeof createLiveResource<SurfaceState>> }>();
   const reportPresentationError = (error: Error) => logError(
@@ -186,7 +179,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
           ? { kind: "workspace", presentation: (await workspacePresentationBundle(workspaceId)).presentation }
           : { kind: "regions", regions: [{ target: workspaceMountId(workspaceId), html: entry.phase.deletion
             ? deletionPresentation(entry, entry.phase.deletion) : workspaceBootMountHtml(entry) }] };
-        // Pane content belongs to the chrome of a running workspace; a parked one has no mount.
         if (!running || entry.parked || parking.has(workspaceId)) return { kind: "regions", regions: [] };
         if (kind === "agent-pane") return agentPaneSurface(workspaceId, key);
         return { kind: "regions", regions: await workViewBodyRegions(workspaceId, key) };
@@ -267,7 +259,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
   }
 
   const persistWorkspaceParked = deps.persistWorkspaceParked ?? setWorkspaceParked;
-  /** Workspaces whose Agents are being suspended for parking, before the registry marks them parked. */
   const parking = new Set<string>();
   let suppressParkedStateCallbacks = false;
 
@@ -485,15 +476,12 @@ export function createWebApp(deps: WebAppDeps): WebApp {
     return requestAcceptsJson(request) ? jsonResponse({ dismissed: true }) : turboStreamResponse("");
   }
 
-  /** The chrome holds every pane, empty; the selected panes' content has surfaces of its own. */
   function workspaceRegions(presentation: FixedWorkspacePresentation): readonly LiveRegion[] {
     const { html, islands } = renderWorkspacePresentation(presentation);
     return [{ target: workspaceMountId(presentation.workspace.id), html, children: islands }];
   }
 
-  /** An Agent pane is published as its shell; the Agent's own channel publishes its content. */
   async function agentPaneSurface(workspaceId: string, agentId: string): Promise<SurfaceState> {
-    // A closed Agent's pane leaves the chrome; its subscription ends with it.
     if (!(await agentTabs.list({ workspaceId })).some(agent => agent.id === agentId)) return { kind: "regions", regions: [] };
     const pane = await agentTabs.render({ workspaceId, agentId });
     return { kind: "regions", regions: [{ target: paneContentId(workspaceId, "agent-pane", agentId), html: pane.html }], live: pane.live };
@@ -503,7 +491,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
     const attachments = await attachWorkspaceModules(workspaceId);
     const storedWorkViews = await presentationStore.listWorkViews(workspaceId);
     const view = workViewPresentations(workspaceId, attachments.flatMap(attachment => attachment.workViews ?? []), storedWorkViews).find(candidate => candidate.key === key);
-    // A closed Work view's pane leaves the chrome; an unavailable one keeps what its body last showed.
     if (!view || view.availability.phase === "unavailable") return [];
     const { reference } = storedWorkViews.find(stored => workViewKey(stored.reference) === key)!;
     return [{ target: paneContentId(workspaceId, "work-view-body", key), html: await workViewAdapterByType.get(reference.type)!.render({ workspaceId, reference }) }];
@@ -513,7 +500,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
     const workspaceTemplateId = workspaceTemplateIdOfInit(entry.init);
     const snapshot = provisioning.snapshot(entry.id);
     const failed = entry.phase.kind === "provisioningPhase" && entry.phase.status === "failed";
-    // Waiting means a step failed and needs a decision; done is not a failure.
     const needsDecision = failed || snapshot?.status === "failed" || snapshot?.status === "waiting";
     const deleteButton = buttonHtml({ type: "submit", variant: "danger", content: { kind: "caption", caption: "Delete workspace" } });
     const deleteAction = needsDecision ? `<form class="workspace-boot-actions" method="post" action="/workspaces/${encodeURIComponent(entry.id)}/delete">${deleteButton}</form>` : "";
@@ -559,12 +545,10 @@ export function createWebApp(deps: WebAppDeps): WebApp {
     const surface = entry ? surfaceFor(CableTopics.module("surface", entry.id, { kind: "workspace" })) : undefined;
     const state = await surface?.read();
     let mounts = workspaceMounts(selectedId);
-    // The selected mount shows what its surfaces publish, and its Agent pane what that Agent's channel publishes.
     if (entry && state) {
       mounts = placeLiveRegions(mounts, surface!.regions(state), workspaceMountId(entry.id));
       if (state.kind === "workspace") {
         const { agents, workViews } = state.presentation;
-        // The page opens on the selection the presentation would choose without remembered navigation.
         const agent = agents.find(candidate => candidate.id === initialSelection?.agent)?.id ?? agents[0]?.id;
         const workView = workViews.find(view => view.key === initialSelection?.workView)?.key;
         const panes: { kind: PaneSurfaceKind; key: string }[] = [
@@ -796,7 +780,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
       return workspaceCreatedJsonResponse(id);
     }
 
-    // The template picker posts a form; automation and older callers may post no body at all.
     const form = request.headers.get("content-type")?.includes("form") ? await request.formData() : undefined;
     const workspaceTemplateReference = String(form?.get("workspaceTemplate") ?? "");
     const init = workspaceTemplateReference ? workspaceInitFromTemplate(await workspaceTemplateRoutes.byReference(workspaceTemplateReference)) : undefined;
@@ -936,7 +919,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
 
   function cancelWorkspaceDeletionEndpoint(id: string, request: Request): Response {
     if (!deletion.cancel(id)) return turboStreamResponse("", { status: 409 });
-    // The registry phase change restores the mount through the same path as startup.
     return requestAcceptsJson(request) ? jsonResponse({ cancelled: true }) : turboStreamResponse("");
   }
 
@@ -1072,7 +1054,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
   async function openWorkspaceModuleWorkView(workspaceId: string, reference: WorkspaceWorkViewReference, request: Request, options: { select?: boolean } = {}): Promise<Response> {
     return await serializePresentationMutation(workspaceId, async () => {
       const { key } = await openAvailableWorkView(workspaceId, reference);
-      // Navigation GETs can open a view too; they do not pass through the POST invalidation path.
       invalidateWorkspace(workspaceId);
       return turboStreamResponse(options.select === false || (requestAcceptsJson(request) && !wantsStream(request)) ? "" : presentWorkViewTurboStream(workspaceId, key));
     });
@@ -1337,7 +1318,6 @@ export function createWebApp(deps: WebAppDeps): WebApp {
         const error = thrown instanceof Error ? thrown : new Error(String(thrown));
         if (error instanceof AgentsInTheCloudCoreError && error.code === "agent_setup_required" && !requestAcceptsJson(request)) {
           const setup = await route(new Request(new URL(String(error.details!.setupUrl), request.url), { headers: { accept: "text/vnd.turbo-stream.html" } }));
-          // A rejected launch must keep its prompt and attachment draft intact.
           return new Response(setup.body, { status: 422, headers: setup.headers });
         }
         return requestAcceptsJson(request) ? problemJsonResponse(error) : errorPage(error);

@@ -7,7 +7,6 @@ import {
   type WorkspaceHttpAppBackend,
 } from "@agents-in-the-cloud/shared";
 
-/** Keep workspace routing credentials out of browser traffic and app requests. */
 export function backendTransport(backend: WorkspaceHttpAppBackend, headers: Headers) {
   headers = new Headers(headers);
   headers.delete(workspaceGatewayHostHeader);

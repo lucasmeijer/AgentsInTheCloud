@@ -4,10 +4,8 @@ import type { createCliModelSettings } from "@agents-in-the-cloud/cli-agent/serv
 import type { NativeAgentRuntime, NativeAgents } from "./agents.ts";
 import type { NativeAgentRendering } from "./render.ts";
 
-/** Path parameters of every native Agent route. */
 export const nativeAgentParameters = ["id", "agentId"].map(name => ({ name, in: "path", required: true, schema: { type: "string" } }));
 
-/** Registers a native Agent type: its tabs, launch settings, live channel and routes. */
 export function createNativeAgentModule<Runtime extends NativeAgentRuntime>(options: {
   id: string; agentTypeId: string; label: string; iconHtml: string;
   createAgents(getEvents: () => AgentsInTheCloudEventBus): NativeAgents<Runtime>;

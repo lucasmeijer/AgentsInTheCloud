@@ -48,9 +48,7 @@ class CableShellController extends Controller<HTMLElement> {
 }
 function unchangedSubtree(current: Element, next: Element): boolean {
   if (!current.isEqualNode(next)) return false;
-  // Form controls keep what was typed in properties, not attributes: those morphs must run.
   if (current.matches("input, textarea, select") || current.querySelector("input, textarea, select")) return false;
-  // isEqualNode ignores template contents; serialization includes them.
   return !(current instanceof HTMLTemplateElement || current.querySelector("template")) || current.outerHTML === next.outerHTML;
 }
 

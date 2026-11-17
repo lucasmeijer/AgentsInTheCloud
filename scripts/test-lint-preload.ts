@@ -14,7 +14,6 @@ const runId = process.env.BUN_TEST_WORKER_ID ? process.ppid : process.pid;
 function claimLint(): boolean {
   mkdirSync(lockDir, { recursive: true });
   const now = Date.now();
-  // Old locks would make a reused process ID skip linting.
   for (const name of readdirSync(lockDir)) {
     const path = join(lockDir, name);
     if (now - statSync(path).mtimeMs > staleLockMs) rmSync(path, { force: true });

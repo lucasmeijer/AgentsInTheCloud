@@ -32,7 +32,6 @@ const payloadSchema = Type.Object({
   })), Type.Null()])),
 });
 
-/** ChatGPT's account endpoint, also used by the Codex CLI. Not a public, versioned API. */
 export async function fetchCodexSubscriptionUsage(accessToken: string, fetcher: Fetcher = fetch): Promise<SubscriptionUsage> {
   let claims: Static<typeof claimsSchema>;
   try {

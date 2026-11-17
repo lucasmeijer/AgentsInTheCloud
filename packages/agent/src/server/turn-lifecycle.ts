@@ -4,13 +4,10 @@ import { publishWorkspaceAgentBusy } from "./workspace-agent-busy.ts";
 
 type AgentTurnIdentity = { workspaceId: string; agentId: string };
 export type AgentTurnFinishReason = "stop" | "stopFailure";
-/** Resolves once the agent's own record of its finished turn is complete; other agents resolve at once. */
 type TurnSettler = (workspaceId: string, agentId: string, signal: AbortSignal, reason: AgentTurnFinishReason) => Promise<void>;
 const turnSettlers = new Set<TurnSettler>();
-// Agent IDs are unique across Workspaces.
 const settlingTurns = new Map<string, AbortController>();
 
-/** Every finished turn waits for all settlers, including turns of sessions restored after a restart. */
 export function registerAgentTurnSettler(settler: TurnSettler): void {
   turnSettlers.add(settler);
 }
@@ -20,7 +17,6 @@ export function abandonSettlingTurn(agentId: string): void {
   settlingTurns.delete(agentId);
 }
 
-/** Start settlement without waiting, so the CLI hook can return and flush its history. */
 export function handleAgentTurnBoundary(identity: AgentTurnIdentity, started: boolean, reason: AgentTurnFinishReason, events: AgentsInTheCloudEventBus): void {
   abandonSettlingTurn(identity.agentId);
   if (started) {
@@ -38,7 +34,6 @@ export function handleAgentTurnBoundary(identity: AgentTurnIdentity, started: bo
 
 async function finishTurn({ workspaceId, agentId }: AgentTurnIdentity, signal: AbortSignal, reason: AgentTurnFinishReason, events: AgentsInTheCloudEventBus): Promise<void> {
   await Promise.all([...turnSettlers].map((settle) => settle(workspaceId, agentId, signal, reason)));
-  // A newer turn boundary or revocation owns the busy state now.
   if (signal.aborted) return;
   settlingTurns.delete(agentId);
   publishWorkspaceAgentBusy({ workspaceId, agentKey: agentKey(agentId), busy: false });

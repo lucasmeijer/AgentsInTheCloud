@@ -8,7 +8,6 @@ import { escapeHtml } from "@agents-in-the-cloud/shared";
 import { agentsInTheCloudUrlHtml } from "../agents-in-the-cloud-url.ts";
 import { response } from "@agents-in-the-cloud/shared/http";
 
-// The System access API and marker retain their existing protocol spelling.
 export const connectionModeManaged = () => existsSync("/run/agents-in-the-cloud-system/access-v1");
 const schema = Type.Object({ mode: Type.Union([Type.Literal("localhost"), Type.Literal("tailscale")]), connectionState: Type.String(), authUrl: Type.Optional(Type.String()), origin: Type.Optional(Type.String()), error: Type.Optional(Type.String()) });
 export async function renderConnectionModeSettings(): Promise<string> {

@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-/** Regenerates helper/workspacehelperv1 from proto/, with the plugin versions pinned in go.mod. */
 import { $ } from "bun";
 import { fileURLToPath } from "node:url";
 

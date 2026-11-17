@@ -58,7 +58,6 @@ async function build(tag: string, dockerfile: string) {
 function manager(digest: string) {
   return new UpdateManager({
     detectRuntime: async () => ({ currentDigest: `sha256:${"0".repeat(64)}` }),
-    // Fixture registry supplies immutable manifests; preparation is the production code.
     fetchMetadata: async () => ({ digest, requiredSystemVersion: 0 }),
     readSystemVersion: async () => 1,
     prepareUpdate: (reference, progress) => prepareUpdate(`${registry}/agents-in-the-cloud@${reference.split("@")[1]}`, progress),
@@ -110,7 +109,6 @@ const beforeWorkspaces = await workspaceIds();
 assert(beforeWorkspaces.length > 0, "keep at least one workspace running to verify updates preserve it");
 const previousChannel = await readFile("/data/app/update.json", "utf8").catch((error) => { if (error.code === "ENOENT") return undefined; throw error; });
 try {
-  // A transient runtime outage must recover the same container, not replace it.
   await docker("pause", "agents-in-the-cloud");
   try {
     await wait("runtime health failure", async () => {
@@ -184,7 +182,6 @@ try {
   assert.deepEqual(await workspaceIds(), beforeWorkspaces);
   log.push("Unhealthy app exposed logs, preserved workspaces and recovered on retry");
 
-  // Restore the exact initial production app, keeping this acceptance fixture out of normal use.
   const fixtureApp = await appId();
   if (previousChannel === undefined) { const process = Bun.spawn(["rm", "-f", "/data/app/update.json"]); await process.exited; }
   else await writeFile("/data/app/update.json", previousChannel);

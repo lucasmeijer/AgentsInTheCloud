@@ -1,6 +1,5 @@
 import type { AgentsInTheCloudEventBus } from "@agents-in-the-cloud/core";
 
-/** AgentsInTheCloud guidance for every agent, whether AgentsInTheCloud runs its loop or it connects through MCP. */
 export const sharedAgentsInTheCloudInstructions = `You are running inside of an online coding tool called AgentsInTheCloud.
 Your execution environment is an ephemeral container. There's no need to clean it up after you are done. It's an ubuntu os. You are
 allowed to use "sudo apt install" to install anything you need.
@@ -29,7 +28,6 @@ That can be showing proof through screenshots. It can be by spinning up a dev se
 Browser view to it. It can be to start a program in a tmux session and use present to point a Terminal view to it.
 It can be by recording a video. You will optimize for your users evaluation convenience, without the user having to explicitely ask for it`;
 
-/** Only AgentsInTheCloud's own transcript renders embed, file and commit URLs. */
 export const agentsInTheCloudSystemPrompt = `${sharedAgentsInTheCloudInstructions}
 
 Use Markdown for prose and tables, images, svg, latex/math ($..$ for inline and $$ on separate lines around display equations) , and fenced Mermaid for static node-and-edge diagrams.
@@ -45,7 +43,6 @@ To point the user at commits in the /work repository, write a commit URL in angl
 - \`<agents-in-the-cloud://commit/working>\` for all uncommitted changes, \`<agents-in-the-cloud://commit/staged>\` for staged ones. \`working\` and \`staged\` also work as either end of a range, e.g. \`<base>..working\`. They show the live state when clicked.
 `;
 
-/** Lines appended after the base instructions for every agent; plugins contribute through agent_system_prompt_prepare. */
 export async function prepareAppendedAgentsInTheCloudInstructions(events: AgentsInTheCloudEventBus | undefined, workspaceId: string, agentId: string, lines: string[] = []): Promise<string[]> {
   const appended = [...lines];
   await events?.emit("agent_system_prompt_prepare", { workspaceId, agentId, lines: appended });

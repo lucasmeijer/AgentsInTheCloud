@@ -10,7 +10,6 @@ function status(value: string): ToolView["status"] {
   return "ok";
 }
 
-/** Codex reports its shell invocation as a quoted command, not an argv array. */
 function bashStatement(command: string): string {
   const wrapper = /^(?:\/bin\/|\/usr\/bin\/)?(?:bash|sh)\s+-[il]*c\s+(['"])([\s\S]*)\1$/.exec(command);
   if (!wrapper) return command;
@@ -19,7 +18,7 @@ function bashStatement(command: string): string {
   let statement = "";
   for (let index = 0; index < script.length; index++) {
     const character = script[index]!;
-    if (character === quote) return command; // Not a single quoted script argument.
+    if (character === quote) return command;
     if (quote === '"' && character === "\\" && index + 1 < script.length) {
       const next = script[index + 1]!;
       if ('"\\$`\n'.includes(next)) {
@@ -34,16 +33,13 @@ function bashStatement(command: string): string {
 }
 
 type SubagentActivity = Extract<ThreadItem, { type: "subAgentActivity" }>;
-/** The Agent's own sub-agents, which are its background activities: a message from one links to it, and carries the answer Codex keeps in its thread. */
 export interface CodexSubagents { answer(activity: SubagentActivity): string | undefined }
 
-/** A finished turn's answer: its final message, or its last one when Codex didn't mark phases. */
 export function codexFinalAnswer(turn: Turn): Extract<ThreadItem, { type: "agentMessage" }> | undefined {
   const messages = turn.items.filter(item => item.type === "agentMessage");
   return messages.findLast(message => message.phase === "final_answer") ?? (turn.status === "completed" && messages.every(message => message.phase === null) ? messages.at(-1) : undefined);
 }
 
-/** Codex items retain their own IDs and semantics; no Pi messages or journal entries. */
 function projectCodexItem(item: ThreadItem, live: boolean, subagents: CodexSubagents | undefined): TranscriptItem {
   const key = item.id;
   switch (item.type) {

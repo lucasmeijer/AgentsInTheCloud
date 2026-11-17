@@ -17,7 +17,6 @@ async function check(path: typeof paths[number], fixture: typeof fixtures[number
   expect(result.exitCode).toBe(0);
   expect(result.samples.length, "all requested updates completed").toBe(result.expectedUpdates);
   expect(report.maxHighlightMs, "maximum shared server highlight budget (ms)").toBeLessThan(maxHighlightMs);
-  // Includes cold first renders: Highlights needs no engine or grammar warm-up.
   expect(report.maxUpdateMs, "render operation budget (ms)").toBeLessThan(maxUpdateMs);
   if (chunkSize) expect(report.totalMs, "entire uncoalesced streaming replay budget (ms)").toBeLessThan(maxStreamMs);
 }

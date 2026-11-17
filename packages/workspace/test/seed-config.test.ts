@@ -18,7 +18,6 @@ beforeEach(async () => {
   bin = join(directory, "bin");
   await mkdir(host);
   await mkdir(bin);
-  // Run the actual install script without requiring root or a local service user.
   await writeFile(join(bin, "su"), '#!/bin/sh\nexec /bin/sh -c "$5" "$6" "$7"\n');
   await writeFile(join(bin, "install"), '#!/bin/sh\ncp "$7" "$8"\nchmod 600 "$8"\n');
   await chmod(join(bin, "su"), 0o755);

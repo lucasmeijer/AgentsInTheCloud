@@ -6,7 +6,6 @@ import { fetchGitHubCopilotSubscriptionUsage } from "../../src/server/github-cop
 const credential: OAuthCredential = { type: "oauth", refresh: "github-token", access: "copilot-token", expires: 0 };
 const usage = (payload: JsonObject, signIn = credential) => fetchGitHubCopilotSubscriptionUsage(signIn, async () => Response.json(payload));
 
-// Shapes follow responses reported by other Copilot usage tools; the endpoint is undocumented.
 const pro = {
   copilot_plan: "individual", quota_reset_date: "2026-11-01", quota_reset_date_utc: "2026-11-01T00:00:00.000Z",
   quota_snapshots: {

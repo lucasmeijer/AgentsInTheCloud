@@ -9,7 +9,6 @@ export function restoreAppSettingsDestination(): boolean {
   return true;
 }
 
-/** Browser-owned panel focus and history. Native disclosures own inline expansion. */
 export class AppSettingsController extends Controller<HTMLElement> {
   static targets = ["frame", "developer"];
   declare readonly developerTargets: HTMLDetailsElement[];
@@ -107,7 +106,6 @@ export class AppSettingsController extends Controller<HTMLElement> {
     };
   };
   private dismissForNavigation(): void {
-    // Let the destination own focus rather than returning to the settings opener.
     this.opener = undefined;
     this.close();
   }

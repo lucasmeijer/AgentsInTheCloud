@@ -60,7 +60,6 @@ async function renderMarkdownEndpoint(workspaceId: string, request: Request, url
   const text = await request.text();
   const options = sourcePath?.startsWith("/") ? { sourcePath, frontmatter: true } : { frontmatter: true };
   const stats = await statFilesInWorkspace(workspaceId, "agents-in-the-cloud", markdownFileReferenceCandidates(text, options));
-  // Only files Files can open: readable regular files, not symlinks.
   const openable = stats.filter((stat) => stat.kind === "regular" && stat.readable && !stat.symlink).map((stat) => stat.path);
   return response(renderMarkdown(workspaceId, text, { ...options, filesViewId, linkableFiles: new Set(openable) }));
 }

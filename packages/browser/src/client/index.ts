@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import type { WorkspaceClientControllerConstructor, WorkspaceClientModule } from "@agents-in-the-cloud/shared";
 
 function createBrowserAddressController(Controller: WorkspaceClientControllerConstructor): WorkspaceClientControllerConstructor {

@@ -85,7 +85,6 @@ docker() {
 `;
   const script = installer
     .replace("tee /etc/modules-load.d/agents-in-the-cloud-system.conf", "tee /dev/null")
-    // Mock terminal availability and answers; these tests exercise Docker orchestration.
     .replace('{ [ -t 0 ]; } 2>/dev/null <"$prompt_input"', "true")
     .replace(
       'IFS= read -r -t 120 "$1" <"$prompt_input"',
@@ -411,7 +410,6 @@ test("confirmed uninstall delegates cleanup, polls status, then removes only Sys
   expect(result.output).toContain("DOCKER stop --time 120 agents-in-the-cloud-system");
   expect(result.output).toContain("DOCKER rm agents-in-the-cloud-system");
   expect(result.output).toContain("DOCKER volume rm agents-in-the-cloud-system");
-  // Background run_quiet commands are captured in the log after foreground output.
   expect(result.output.indexOf("http://supervisor/uninstall")).toBeLessThan(result.output.indexOf("DOCKER stop --time 120"));
   expect(result.output).not.toContain("DOCKER system prune");
   expect(result.output).not.toContain("DOCKER pull");

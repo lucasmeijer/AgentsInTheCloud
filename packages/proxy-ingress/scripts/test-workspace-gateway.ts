@@ -147,7 +147,6 @@ async function exerciseIngress(gatewayUrl: string, token: string) {
     for (const method of ["POST", "OPTIONS"]) {
       const response = await request(`${origin}/origin-check`, { method, headers: { origin, "access-control-request-method": "POST", "access-control-request-headers": "X-App" }, body: method === "POST" ? "form body" : undefined });
       assert.equal(response.status, 200);
-      // Ingress strips cross-origin grants even from successful same-origin replies.
       for (const name of ["access-control-allow-origin", "timing-allow-origin", "access-control-allow-credentials", "access-control-allow-methods", "access-control-allow-headers"]) {
         assert.equal(response.headers.get(name), null);
       }

@@ -10,7 +10,6 @@ export function scanFingerprint(value: string): string {
   return `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
 }
 
-/** Recognize OpenSSH's strict-checking diagnostics for both unknown and changed identities. */
 export function sshHostTrustFailure(output: string): { host: string; port: number; changed: boolean } | undefined {
   if (!output.includes("Host key verification failed")) return;
   const changed = output.includes("REMOTE HOST IDENTIFICATION HAS CHANGED");
@@ -31,7 +30,6 @@ export function unknownSshHost(output: string): { host: string; port: number } |
   return failure && !failure.changed ? { host: failure.host, port: failure.port } : undefined;
 }
 
-/** A scan is evidence to verify, not proof of the server's identity. */
 export async function scanSshHost(host: string, port: number): Promise<SshTrustCandidate> {
   const { stdout } = await runCommand(["ssh-keyscan", "-T", "5", "-p", String(port), host]);
   const records = stdout.toString().split("\n").filter((line) => line && !line.startsWith("#")).map((line) => {

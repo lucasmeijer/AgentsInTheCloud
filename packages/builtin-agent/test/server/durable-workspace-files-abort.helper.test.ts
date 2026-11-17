@@ -10,11 +10,9 @@ import { buildGoProgram } from "@agents-in-the-cloud/core";
 import { closeWorkspaceHelperConnection, workspaceHelperSocketPath } from "@agents-in-the-cloud/workspace";
 import { WorkspaceFileSystem } from "../../src/server/durable-workspace-files.ts";
 
-// Stopping a tool call must not wait for a workspace helper that stopped answering, e.g. in a frozen container.
 const workspaceId = "files-abort";
 let directory: string;
 let helper: Bun.Subprocess<"ignore", "inherit", "pipe">;
-/** The helper itself, which sudo runs as a child. */
 let helperPid: string;
 
 const signal = (name: string, pid: string | number) => Bun.spawn(["sudo", "-n", "kill", `-${name}`, String(pid)]).exited;
@@ -25,7 +23,6 @@ beforeAll(async () => {
   await buildGoProgram(fileURLToPath(new URL("../../../workspace-helper/helper", import.meta.url)), binary, `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`);
   const socket = workspaceHelperSocketPath(workspaceId);
   await mkdir(dirname(socket), { recursive: true });
-  // Detached: sudo stops its process group when the helper is stopped.
   helper = Bun.spawn(["sudo", "-n", binary, "--listen", socket, "--state", join(directory, "state")], { stdout: "inherit", stderr: "pipe", detached: true });
   const stderr = helper.stderr.pipeThrough(new TextDecoderStream()).getReader();
   let log = "";
@@ -47,7 +44,6 @@ afterAll(async () => {
   await Bun.spawn(["sudo", "-n", "rm", "-rf", directory]).exited;
 });
 
-/** What `operation` settles with when aborted while the helper doesn't answer, or `undefined` if it doesn't within `ms`. */
 async function abortedWhileUnanswered(operation: (context: Context) => Promise<{ ok: boolean }>, ms = 2_000) {
   const abort = new AbortController();
   await signal("STOP", helperPid);
@@ -73,7 +69,6 @@ const operations = {
 
 test.each(Object.entries(operations))("an aborted %s ends while the helper doesn't answer", async (_name, operation) => {
   const env = new WorkspaceFileSystem(workspaceId, directory);
-  // Connect first, so the stopped helper only stops answering calls.
   await env.exists("anything", BACKGROUND_CONTEXT);
   expect(await abortedWhileUnanswered((context) => operation(env, context))).toEqual(aborted);
 }, 30_000);

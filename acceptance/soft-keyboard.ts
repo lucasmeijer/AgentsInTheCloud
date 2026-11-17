@@ -78,7 +78,6 @@ const sel = {
   terminalInput: ".gespenst__input",
 };
 const bottom = (box: Box): number => box ? box[1] + box[3] : Number.NaN;
-/** The keyboard's top edge in page coordinates, from the visual viewport. */
 const keyboardTop = (frame: Frame): number => frame.viewport[0] + frame.viewport[1];
 
 async function navigate(path: string, ready: string): Promise<void> {
@@ -99,7 +98,6 @@ async function visible(selector: string): Promise<boolean> {
   return page.evaluate<boolean>(`[...document.querySelectorAll(${JSON.stringify(selector)})].some((e) => e.checkVisibility())`);
 }
 
-/** Screen point (in points) of an element's center, plus an optional offset. */
 async function point(selector: string, offset: { x?: number; y?: number } = {}): Promise<{ x: number; y: number }> {
   const result = await page.evaluate<{ x: number; y: number } | null>(`(() => {
     const element = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.checkVisibility());
@@ -117,7 +115,6 @@ async function tap(selector: string, offset: { x?: number; y?: number } = {}): P
   await sim.tap(target.x, target.y);
 }
 
-/** A tap on plain transcript text: outside the text field, and not on a control. */
 async function tapTranscriptText(): Promise<void> {
   const target = await page.evaluate<{ x: number; y: number }>(`(() => {
     const t = [...document.querySelectorAll(".agent-pane .agent-transcript")].find((e) => e.checkVisibility());
@@ -129,13 +126,11 @@ async function tapTranscriptText(): Promise<void> {
   await sim.tap(target.x, target.y);
 }
 
-/** The ✓ (Done) key on the keyboard's input accessory bar. */
 async function tapDone(): Promise<void> {
   const viewport = await page.evaluate<number>("visualViewport.height + visualViewport.offsetTop");
   await sim.tap(sim.screen.width - 41, sim.screen.height - await page.evaluate<number>("innerHeight") + viewport + 33);
 }
 
-/** The soft keyboard's return key (iPhone 15 Pro, portrait, English QWERTY). */
 async function tapReturn(): Promise<void> {
   await sim.tap(343, 758);
 }
@@ -177,7 +172,7 @@ async function transition(recorder: ScenarioRecorder, label: string, action: () 
   let movie: Uint8Array | undefined;
   try {
     await page.startTrace();
-    await Bun.sleep(80); // Capture the pre-action arrangement before an immediate edit.
+    await Bun.sleep(80);
     t = await page.mark(label);
     await action();
     await Bun.sleep(options.waitMs ?? 1600);
@@ -187,14 +182,12 @@ async function transition(recorder: ScenarioRecorder, label: string, action: () 
   }
   const analysis = analyseTransition(trace, t);
   await recorder.trace(trace, label);
-  // Native scrolling moves content continuously; it is not a layout transition.
   const checks = options.oneStep === false ? [] : oneStepChecks(analysis, { correctionAllowed: options.correctionAllowed, expectChange: options.expectChange });
   recorder.add(...checks.map((result) => ({ ...result, name: `${label} — ${result.name}` })));
   if (movie) {
     const file = `video-${label.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.mp4`;
     await recorder.file(file, movie);
     const path = join(recorder.directory, file);
-    // A terminal printing output is content, not layout: its settled box is left out.
     const terminal = options.maskTerminal ? settled(analysis).terminal : null;
     const offset = sim.screen.height - await page.evaluate<number>("document.documentElement.clientHeight");
     const video = await analyseKeyboardVideo(path, { masks: terminal ? [[terminal[0] * 3, (terminal[1] + offset) * 3, terminal[2] * 3, terminal[3] * 3]] : [] });
@@ -228,11 +221,9 @@ async function openComposer(): Promise<void> {
   }
 }
 
-// ─── Built-in agent ─────────────────────────────────────────────────────────
 await navigate(builtinPath, sel.transcript);
 
 await scenario("ios-D12-first-focus", "D12: focusing the composer for the first time on this device (nothing remembered): the keyboard is detected and the page arranged; one correction is allowed.", async (recorder) => {
-  // Nothing remembered: the module reads its memory when the page loads.
   await page.evaluate<boolean>('(localStorage.removeItem("agents-in-the-cloud:software-keyboard"), true)');
   await navigate(builtinPath, sel.transcript);
   await openComposer();
@@ -294,7 +285,6 @@ await scenario("ios-D7-D23-typing-mode", "D7/D23: while the keyboard is up only 
   recorder.add(
     check("Send sits in the composer's bottom-right corner", placement.send[1] + placement.send[3] <= placement.composer[1] + placement.composer[3] && placement.composer[1] + placement.composer[3] - (placement.send[1] + placement.send[3]) <= 12 && close(placement.send[0] + placement.send[2], placement.composer[0] + placement.composer[2] - 4, 8), `send ${JSON.stringify(placement.send.map(Math.round))}, composer ${JSON.stringify(placement.composer.map(Math.round))}`),
     check("The text takes the composer's full width", close(placement.input[2], placement.composer[2], 2), `text field ${Math.round(placement.input[2])}px wide, composer ${Math.round(placement.composer[2])}px`),
-    // Two controls of 62.5px, each with its 4px inset above and below.
     check("The text field is at least two controls tall", placement.input[3] >= 2 * (62.5 + 8) - 1, `text field ${Math.round(placement.input[3])}px tall, min ${2 * (62.5 + 8)}px`),
   );
   const hidden = await page.evaluate<string[]>(`[".agent-composer-pane .composer-footer", ".agent-composer-pane .composer-prompt-template-buttons", ".agent-composer-pane .composer-attach", ".agent-composer-pane .composer-close", ".agent-composer-pane .composer-dictation"].filter((s) => [...document.querySelectorAll(s)].some((e) => e.checkVisibility()))`);
@@ -324,7 +314,6 @@ await scenario("ios-composer-tap-and-column", "On the phone itself: a tap anywhe
     await tapDone();
     await Bun.sleep(1200);
   } else recorder.add(check("Prompt template buttons staged", false, "this workspace has no prompt templates with composer buttons"));
-  // The column: one button per row, all sharing the right edge.
   const measure = (): Promise<{ column: boolean; composer: number; max: number }> => page.evaluate(`(() => {
     const c = [...document.querySelectorAll(".agent-composer-pane > .composer")].find((e) => e.checkVisibility());
     const slots = [...c.querySelectorAll(".composer-button")].map((e) => e.getBoundingClientRect());
@@ -366,7 +355,6 @@ await scenario("ios-composer-tap-and-column", "On the phone itself: a tap anywhe
   const dictate = await point(".agent-composer-pane [data-dictation-composer-target=\"button\"]");
   await sim.tap(dictate.x, dictate.y);
   await Bun.sleep(2000);
-  // First use on a fresh simulator asks for the microphone.
   if (await page.evaluate<string>(`[...document.querySelectorAll('.agent-composer-pane [data-dictation-composer-target="button"]')].find((e) => e.checkVisibility()).dataset.state`) === "loading") await sim.tap(271, 473);
   await Bun.sleep(5000);
   const dictated = await measure();
@@ -377,14 +365,12 @@ await scenario("ios-composer-tap-and-column", "On the phone itself: a tap anywhe
   await Bun.sleep(300);
 });
 
-// ─── Pi CLI agent ───────────────────────────────────────────────────────────
 await navigate(piPath, ".cli-agent-body .observable-terminal-host");
 
 await scenario("ios-D12-composer-to-terminal", "D12/D14/D16: moving focus from the composer to the Pi terminal is one snap: the composer collapses, the terminal moves up above the key row and the keyboard stays.", async (recorder) => {
   await openComposer();
   await tap(sel.input);
   await Bun.sleep(1500);
-  // The stage's centre is on the terminal: the typing composer covers the bottom, the floating stack is hidden.
   const { before, after } = await transition(recorder, "composer → terminal", () => tap(sel.stage));
   recorder.add(
     check("D14: composer collapsed", after.composer === null, JSON.stringify(after.composer)),
@@ -449,7 +435,6 @@ await scenario("ios-D2-D17-send", "D2/D17: sending on mobile closes the composer
   await Bun.sleep(5000);
 });
 
-// ─── Terminal view ───────────────────────────────────────────────────────────
 await navigate(terminalPath, ".terminal-view .observable-terminal-host");
 
 async function terminalLines(): Promise<string[]> {
@@ -476,14 +461,12 @@ await scenario("ios-D15-D16-terminal-tab", "D15/D16: in a focused Terminal view 
   await transition(recorder, "dismiss", () => tapDone());
 });
 
-// ─── Rotation (D20) ─────────────────────────────────────────────────────────
 await navigate(piPath, ".cli-agent-body .observable-terminal-host");
 
 await scenario("ios-D20-rotation", "D20: rotating with the keyboard down resizes each terminal once after rotation settles; with the keyboard up the resize waits until the keyboard goes away.", async (recorder) => {
   const pi = Object.keys(await tmuxSizes(setup.workspaceId)).find((name) => name.startsWith("pi-"))!;
   const since = (start: number) => page.resizes.slice(start);
   const describe = (resizes: typeof page.resizes): string => resizes.map((item) => `${item.payload} on ${item.url.replace(/^.*\/workspaces\/[^/]+\//, "").replace(/\?.*$/, "")}`).join(", ") || "none";
-  // Every connected terminal (the Pi agent, and the Terminal view kept alive in the background) resizes at most once; Pi exactly once.
   const oncePerTerminal = (resizes: typeof page.resizes): boolean => {
     const counts = new Map<string, number>();
     for (const item of resizes) counts.set(item.url, (counts.get(item.url) ?? 0) + 1);
@@ -505,7 +488,6 @@ await scenario("ios-D20-rotation", "D20: rotating with the keyboard down resizes
     check("Keyboard down: each terminal resizes once after rotating to landscape", oncePerTerminal(toLandscape) && landscape !== portrait, `${describe(toLandscape)}; Pi tmux ${portrait} → ${landscape}`),
     check("Keyboard down: each terminal resizes once after rotating back", oncePerTerminal(back) && await piSize() === portrait, `${describe(back)}; Pi tmux → ${await piSize()}`),
   );
-  // Keyboard up: the resize waits until the keyboard goes away.
   await tap(sel.stage, { y: -80 });
   await Bun.sleep(1500);
   const typing = await page.evaluate<boolean>("document.documentElement.classList.contains('software-keyboard-visible')");

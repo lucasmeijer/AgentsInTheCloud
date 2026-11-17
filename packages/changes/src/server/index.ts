@@ -23,7 +23,6 @@ import { captureChanges, commitHistory, InvalidDiffEndpoints, workingTree, type 
 
 const reference = { type: "changes" } as const;
 const referenceSchema = Type.Object({ type: Type.Literal("changes") });
-/** Buckets are re-read whenever the whole view or a new comparison renders, so saved settings show up on the next refresh. */
 type ChangesState = ChangesPublication<ChangesSnapshot> & { buckets: readonly ChangeBucket[]; clients: Map<string, number> };
 let invalidateWorkspace: (workspaceId: string) => void;
 const states = new Map<string, Promise<ChangesState>>();
@@ -33,7 +32,6 @@ function current(workspaceId: string): Promise<ChangesState> {
     state = Promise.all([captureChanges(workspaceRepository(workspaceId)), workspaceChangeBuckets(workspaceId)]).then(([snapshot, buckets]) => {
       const clients = new Map<string, number>(), root = workspaceRepository(workspaceId);
       return Object.assign(new ChangesPublication(snapshot, {
-        // A removed workspace's late refresh has no one to show it to.
         capture: previous => states.get(workspaceId) === state ? refreshChanges(root, previous) : Promise.resolve(previous),
         published: () => { if (states.get(workspaceId) !== state) return; clients.clear(); invalidateWorkspace(workspaceId); },
       }), { buckets, clients });
@@ -54,7 +52,6 @@ function unchanged(workspaceId: string, snapshot: ChangesSnapshot): Promise<Set<
   return paths;
 }
 const isUnchanged = async (workspaceId: string, snapshot: ChangesSnapshot, path: string) => (await unchanged(workspaceId, snapshot)).has(path);
-/** Unchanged working-tree text files can be edited like changed ones. */
 function editableUnchangedFile(snapshot: ChangesSnapshot, path: string, file: UnchangedFile): ChangesFile | undefined {
   return snapshot.endpoints.target === workingTree && file.kind === "text" ? { path, change: "modified", kind: "text", newContents: file.text, newMode: file.mode } : undefined;
 }
@@ -115,7 +112,6 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
         return label === undefined ? response("Commit not found", { status: 404 }) : response(label, { headers: { "Cache-Control": "private, max-age=31536000, immutable" } });
       }
       const state = await current(workspaceId), ticket = state.select(), previous = state.snapshot;
-      // A later selection owns the comparison; still bring Changes forward.
       if (await state.publishSelection(ticket, () => openCommitLink(root, previous, link))) state.clients.clear();
       return await context.openWorkView(workspaceId, reference);
     }
@@ -123,7 +119,6 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
     if (noticeRoute) {
       if (request.method !== "POST") return textResponse("Method not allowed", { status: 405 });
       const workspaceId = noticeRoute[0]!, { snapshot } = await current(workspaceId), history = String((await request.formData()).get("history"));
-      // A newer link may have set a new notice since this one was shown.
       if (history === snapshot.history.id) snapshot.notice = undefined;
       return turboStreamResponse(replace(noticeId(workspaceId, history), renderNotice(workspaceId, history)));
     }
@@ -151,7 +146,6 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
         if (!Value.Check(editSaveSchema, input) || input.ranges.some(range => range.end < range.start)) throw new EditError("Invalid file edit.", 400);
         const state = await current(workspaceId), root = workspaceRepository(workspaceId), ticket = state.select();
         let saved: ChangesSnapshot | undefined;
-        // The save owns this browser's comparison; a later selection (say, from another browser) still wins.
         let published: ChangesSnapshot | undefined;
         try {
           published = await state.publishSelection(ticket, async () => saved = saved
@@ -159,18 +153,15 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
             : await changesEdits.save(workspaceId, root, input.token, input.contents, input.ranges,
               (snapshot, path, contents, positions) => reviewComments.relocate(workspaceId, snapshot, path, contents, positions)));
         } catch (error) {
-          // Only capturing again (after the workspace changed during the save) can fail once the file is written.
           if (!saved) throw error;
           console.error("Could not refresh Changes after a save", error);
         }
         if (published) state.clients.clear();
-        // Saving moved comments, even when a later selection superseded the save.
         invalidateWorkspace(workspaceId);
         // Unpublished: a later selection may not show the saved file (it may have captured before the save, or fail),
         // or capturing failed; refresh for it. The file is written either way, so a failed refresh doesn't fail the save.
         if (!published) await state.changed().catch(error => console.error("Could not refresh Changes after a save", error));
         const next = published ?? await state.settled();
-        // Saving captures a new history, with this edit's Working tree and whatever changed in the workspace meanwhile.
         return turboStreamResponse(replace(changesBodyId(workspaceId, input.history), renderChanges(workspaceId, next, state.buckets)));
       } catch (error) {
         if (!(error instanceof EditError)) throw error;
@@ -259,7 +250,6 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
       const skip = Number(url.searchParams.get("skip"));
       if (!Number.isInteger(skip) || skip !== history.loaded) return textResponse("Invalid history page", { status: 400 });
       const page = await commitHistory(workspaceRepository(workspaceId), history, skip);
-      // A refresh may have replaced this history while Git was reading its pinned tips.
       if (state.snapshot.history !== history || history.loaded !== skip) return new Response(null, { status: 204 });
       history.commits.push(...page.commits);
       history.loaded += page.commits.length;
@@ -277,9 +267,7 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
     state.clients.set(order.client, order.sequence);
     const ticket = state.select();
     let buckets: readonly ChangeBucket[] = state.buckets;
-    // The browser's own history; it is older than the server's when, say, an open code edit kept a refresh out.
     const shown = order.history, upToDate = shown === previous.history.id;
-    // Existing HTTP field names map to the canonical Diff endpoints model.
     const requestedEndpoints = { target: data.get("end"), base: data.has("start") ? data.get("start") === "" ? null : data.get("start") : undefined };
     let next: ChangesSnapshot | undefined;
     try {
@@ -305,7 +293,6 @@ export const agentsInTheCloudServerModule: WorkspaceModule = {
       if (state.superseded(ticket)) return new Response(null, { status: 204 });
       return turboStreamResponse(replace(errorId(workspaceId, shown), renderError(workspaceId, shown, invalid ? error.message : `Couldn’t generate this comparison: ${error.message}`)), { status: invalid ? 422 : 500 });
     }
-    // Last request wins. A slow earlier capture must not publish or overwrite a newer selection.
     if (!next) return new Response(null, { status: 204 });
     state.buckets = buckets;
     invalidateWorkspace(workspaceId);

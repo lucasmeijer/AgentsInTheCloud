@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { decodeCableServerMessage, liveRegionDigestsSchema, liveShownAttribute, serializeCableIdentifier, type AgentsInTheCloudCableClient, type CableClientMessage, type CableIdentifier, type CableSubscription, type CableSubscriptionOptions, type WorkspaceVisibilityReport } from "@agents-in-the-cloud/shared";
 import { Value } from "typebox/value";
 
@@ -21,7 +19,6 @@ type DesiredSubscription = {
   subscriptionId?: string;
 };
 
-/** A live region the page shows: the element it was applied to, and the digest of its markup. */
 type ShownRegion = { element: WeakRef<Element>; digest: string };
 
 export type CableStreamRenderer = (html: string, isCurrent: () => boolean, onApplied: () => void, onRegion: (target: string, digest: string | undefined) => void) => void;
@@ -32,7 +29,6 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
   // again (switching back to a workspace, reconnecting) only receives regions that changed.
   const shownRegions = new Map<string, Map<string, ShownRegion>>();
 
-  /** Subscriptions to one channel that differ only in parameters, like a workspace surface's selection, render the same regions. */
   function shownRegionsKey(identifier: CableIdentifier): string {
     return serializeCableIdentifier(identifier.channel === "module" ? { ...identifier, params: {} } : identifier);
   }
@@ -46,7 +42,6 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
     regions.set(target, { element: new WeakRef(element), digest });
   }
 
-  /** Regions still in the page as they were applied: a target whose element was replaced or removed shows something else. */
   function shownDigests(identifier: CableIdentifier): Record<string, string> | undefined {
     const regions = shownRegions.get(shownRegionsKey(identifier));
     if (!regions) return undefined;
@@ -120,7 +115,6 @@ export function createAgentsInTheCloudCableClient(renderStreams: CableStreamRend
     }
   }
 
-  /** Applies a subscription's streams while it stays current, noting the regions they show. */
   function render(html: string, message: { identifier: CableIdentifier; subscriptionId: string }, subscription: DesiredSubscription, onApplied: () => void): void {
     const isCurrent = () => matchingSubscription(message.identifier, message.subscriptionId) === subscription;
     renderStreams(html, isCurrent, onApplied, (target, digest) => showRegion(message.identifier, target, digest));

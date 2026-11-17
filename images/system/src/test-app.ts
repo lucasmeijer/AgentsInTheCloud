@@ -52,7 +52,6 @@ Bun.serve({
         !Value.Check(Type.String({ minLength: 1, pattern: "^(?!-)[^\\s]+$" }), image)
       )
         return new Response("Expected image reference", { status: 400 });
-      // Already loaded test images avoid a registry. Real app releases pull here.
       if (!(await command(["docker", "image", "ls", "-q", image])))
         await command(["docker", "pull", image]);
       const response = await fetch("http://127.0.0.1:3001/update", {

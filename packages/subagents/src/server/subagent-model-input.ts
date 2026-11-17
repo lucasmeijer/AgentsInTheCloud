@@ -14,7 +14,6 @@ export class SubagentModelInput {
     this.messages.set(token, message);
     return token;
   }
-  /** Convert before provider serialization, so each non-native API gets its normal user-message encoding. */
   forModel(message: AgentMessageInput, api: string, timestamp: number) {
     return { role: "user" as const, content: api === "openai-codex-responses" ? this.placeholder(message) : message.content.map((part) => part.text).join("\n"), timestamp };
   }

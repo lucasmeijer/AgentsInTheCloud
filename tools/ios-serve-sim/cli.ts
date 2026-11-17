@@ -72,7 +72,6 @@ async function main() {
     default:
       throw Error(`Unknown wrapper command: ${command}. Use exec to run serve-sim commands.`);
   }
-  // The remote guardian owns cleanup, including abrupt loss of the workspace.
   ssh.push('-T', host);
   if (remote) ssh.push(remote);
   const child = Bun.spawn(ssh, { stdin: managed ? 'pipe' : 'inherit', stdout: 'inherit', stderr: 'inherit' });

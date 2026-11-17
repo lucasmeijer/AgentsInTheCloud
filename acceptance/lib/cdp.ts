@@ -1,9 +1,7 @@
 import { chromium, type Browser, type CDPSession } from "@playwright/test";
 import { samplerSource, type Trace } from "./trace.ts";
 
-/** A page in the workspace's Chrome, driven only through the DevTools protocol. */
 export class ChromePage {
-  /** Resize messages the client sent on terminal WebSockets. */
   readonly resizes: { url: string; payload: string; t: number }[] = [];
   private readonly sockets = new Map<string, string>();
 
@@ -27,7 +25,6 @@ export class ChromePage {
 
   async layout(kind: "mobile" | "desktop"): Promise<void> {
     if (kind === "mobile") {
-      // iPhone 15 Pro: 393×852 CSS pixels with touch. No soft keyboard appears here.
       await this.cdp.send("Emulation.setDeviceMetricsOverride", { width: 393, height: 852, deviceScaleFactor: 3, mobile: true });
       await this.cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
     } else {
@@ -75,7 +72,6 @@ export class ChromePage {
     return point;
   }
 
-  /** A tap on mobile (touch events, as a finger would), a click on desktop. */
   async tap(selector: string, offset: { x?: number; y?: number } = {}): Promise<void> {
     const point = await this.center(selector);
     await this.tapAt(point.x + (offset.x ?? 0), point.y + (offset.y ?? 0));
@@ -92,7 +88,6 @@ export class ChromePage {
     }
   }
 
-  /** Hold a finger (or the mouse) down on an element. Returns a release function. */
   async press(selector: string): Promise<() => Promise<void>> {
     const { x, y } = await this.center(selector);
     if (this.mobile) {
@@ -126,7 +121,6 @@ export class ChromePage {
     return Buffer.from(data, "base64");
   }
 
-  /** The workspace's Chrome has no audio input: give pages a synthetic microphone (a quiet tone). */
   async fakeMicrophone(): Promise<void> {
     await this.cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `navigator.mediaDevices.getUserMedia = async () => {
       const context = new AudioContext();

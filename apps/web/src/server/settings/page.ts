@@ -112,7 +112,6 @@ export async function renderSettingsFrame(request: Request, sectionId?: string):
   if (sectionId === "git-identity") sectionId = "commit-identity";
   const contributions = listSettingsContributions();
   if (sectionId && !contributions.some(contribution => contribution.id === sectionId) && sectionId !== "developer-tools" && sectionId !== "url") throw invalidArguments(`settings section not found: ${sectionId}`);
-  // Opening the panel never waits for a contribution's I/O. Each section owns its request.
   const inline = new Map(contributions
     .filter(contribution => !disclosureSections.has(contribution.id))
     .map(({ id, label }) => [id, `<turbo-frame class="app-settings-section-frame" id="${sectionFrameId(id)}" src="/settings/sections/${id}"><section class="settings-sec" id="settings-sec-${id}"><span role="status">Loading ${escapeHtml(label)}…</span></section></turbo-frame>`]));
@@ -177,7 +176,6 @@ export async function handleSettingsPageRequest(request: Request, url: URL, opti
       : { deleted: 0, errors: ["Workspace deletion is not available."] };
     return stream(replace("settings_force_delete_workspaces", renderForceDeleteWorkspaces(result)));
   }
-  // Retain the old POST URL as an external boundary for existing clients.
   if ((url.pathname === "/settings/commit-identity" || url.pathname === "/settings/git-identity") && request.method === "POST") {
     const form = await request.formData();
     try {

@@ -3,16 +3,13 @@ import { buttonHtml } from "../button/button-html.ts";
 import { Icons } from "../icons/icons-html.ts";
 
 export interface WarningBannerOptions {
-  /** Without a title, the message shares the dismiss row to save space. */
   title?: string;
   message?: string;
   actionsHtml?: string;
   role?: "status" | "alert";
-  /** Persisted dismissal posts a state token; local dismissal binds a browser action. */
   dismiss?: { action: string; state: string } | { buttonAttributesHtml: string; label?: string };
 }
 
-/** A persistent warning with optional actions and a single-click dismissal. */
 export function warningBannerHtml(options: WarningBannerOptions): string {
   let dismiss = "";
   if (options.dismiss) {

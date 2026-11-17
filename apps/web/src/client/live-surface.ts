@@ -72,7 +72,6 @@ class LiveSurfaceController extends Controller<HTMLElement> {
 }
 
 export async function prepareLiveSurface(element: HTMLElement): Promise<void> {
-  // Newly inserted server HTML connects at Stimulus's next mutation checkpoint.
   if (!mounts.has(element)) await new Promise<void>(resolve => setTimeout(resolve, 0));
   const mount = mounts.get(element);
   if (!mount) throw new Error(`Live surface did not connect: ${element.id}`);
@@ -84,5 +83,4 @@ export function registerLiveSurfaces(): void { registerWorkspaceControllers({ "l
 
 export function releaseLiveSurface(element: HTMLElement): void { mounts.get(element)?.release(); }
 
-/** Ends the surface's subscription; the element keeps showing what it last published. */
 export function stopLiveSurface(element: HTMLElement): void { mounts.get(element)?.stop(); }

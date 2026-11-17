@@ -3,7 +3,6 @@ import { durableWorkspaceOwner } from "./runtime.ts";
 import { allowWorkspaceAgentResume } from "./runtime.ts";
 import { listWorkspaceAgents } from "./agent-store.ts";
 
-/** Legacy transcripts are read-only. Resume committed native tasks, never synthetic input. */
 export async function resumeInterruptedAgentSessions(workspaceId: string, events: AgentsInTheCloudEventBus): Promise<void> {
   try {
     allowWorkspaceAgentResume(workspaceId);

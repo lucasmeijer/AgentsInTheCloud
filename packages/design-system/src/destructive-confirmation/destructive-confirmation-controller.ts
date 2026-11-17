@@ -1,7 +1,6 @@
 import { Controller } from "@hotwired/stimulus";
 import { PopupPosition } from "../popup/popup-position.ts";
 
-/** A top-layer confirmation, with an in-flow opt-out and native form owner. */
 export class DestructiveConfirmationController extends Controller<HTMLElement> {
   private triggerButton!: HTMLButtonElement;
   private confirmation!: HTMLElement;
@@ -31,11 +30,9 @@ export class DestructiveConfirmationController extends Controller<HTMLElement> {
     this.confirmation.removeEventListener("toggle", this.syncOpenState);
   }
 
-  // Let Cancel take its natural width before PopupPosition measures the open popover.
   private readonly prepareState = (event: ToggleEvent): void => {
     this.finishEntrance();
     const confirming = event.newState === "open";
-    // A fading-out confirmation must not remain actionable.
     this.confirmation.inert = !confirming;
     this.triggerButton.setAttribute("aria-expanded", String(confirming));
     this.triggerButton.classList.replace(confirming ? this.initialVariant : "secondary", confirming ? "secondary" : this.initialVariant);
@@ -56,13 +53,11 @@ export class DestructiveConfirmationController extends Controller<HTMLElement> {
   private animateEntrance(): void {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const style = getComputedStyle(this.confirmation);
-    // The moving button must never catch a second click intended for the opt-out.
     this.confirmation.inert = true;
     this.entrance = this.confirmation.animate([
       { transform: "scale(.96)", opacity: 0 },
       { transform: "scale(1)", opacity: 1 },
     ], {
-      // Shared design-system duration tokens are authored in milliseconds.
       duration: Number.parseFloat(style.getPropertyValue("--motion-enter")),
       easing: style.getPropertyValue("--motion-ease-out").trim(),
     });
