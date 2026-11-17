@@ -79,8 +79,13 @@ turbo-frame { display: contents; }
 .workspace-empty-arrow path { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; }
 .workspace-empty-arrow marker path { fill: var(--accent); stroke: none; }
 .is-first-workspace-destination { color: var(--accent); background: color-mix(in srgb, var(--accent) 26%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
-.workspace-detail-mount:not(.visible) { display: none; }
-.workspace-detail-mount.visible { display: block; }
+/* Hidden workspaces keep their rendering state, so showing one again needn't restyle and lay out its
+   whole transcript. They sit behind the visible one and skip their contents, which can't be focused or seen. */
+.workspace-detail-host { position: relative; }
+.workspace-detail-mount:not(.visible) { position: absolute; inset: 0; z-index: -1; content-visibility: hidden; }
+/* Skipped content still runs its animations. Pause the endless ones there, naming them so that
+   hiding or showing a workspace restyles only these elements rather than everything in it. */
+:is(.workspace-detail-mount:not(.visible), .fixed-shell-surface:not(.is-active)) :is(.activity-spinner, .status-spinner, .status-dot.running, .status-list__marker, .activity-button__perimeter, .activity-button__perimeter rect, .progress-button__perimeter, .progress-button__perimeter rect, .agent-completion-spinner, .changes-spinner, .fixed-shell-availability-mark, .content-row__label-text) { animation-play-state: paused; }
 .fixed-shell-work-pane .fixed-shell-live-body { background-image: var(--work-background-image); }
 .fixed-shell-live-body, .fixed-shell-live-body > * { width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .fixed-shell-app *, .fixed-shell-app *::before, .fixed-shell-app *::after { box-sizing: border-box; }
@@ -180,9 +185,10 @@ turbo-frame { display: contents; }
 .fixed-shell-workspace-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 var(--text-body)/var(--leading-standard) var(--font-sans); }
 .fixed-shell-workspace-title small { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fixed-shell-agent-bodies, .fixed-shell-work-bodies { position: relative; height: 100%; min-height: 0; overflow: hidden; }
-.fixed-shell-surface { position: absolute; inset: 0; display: none; min-width: 0; min-height: 0; overflow: auto; }
+/* Like hidden workspaces, inactive Agents and Work views keep their rendering state behind the active one. */
+.fixed-shell-surface { position: absolute; inset: 0; min-width: 0; min-height: 0; overflow: auto; }
 .fixed-shell-surface:focus { outline: none; }
-.fixed-shell-surface.is-active { display: block; }
+.fixed-shell-surface:not(.is-active) { z-index: -1; content-visibility: hidden; }
 .fixed-shell-live-body { min-width: 0; min-height: 100%; }
 
 .fixed-shell-work-pane { position: relative; min-width: 360px; flex: 1; }
