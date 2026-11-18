@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./json-request": "./src/json-request.ts",
     "./json-settings": "./src/json-settings.ts"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-import { isJsonObject } from "@agents-in-the-cloud/core";
+import { isJsonObject } from "@agents-in-the-cloud/core/json-request";
 
 interface ObservableTerminalResizeMessage {
   type: "resize";
