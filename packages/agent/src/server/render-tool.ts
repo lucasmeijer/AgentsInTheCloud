@@ -82,7 +82,7 @@ function toolPresentation(tool: ToolView): ToolPresentation {
 }
 
 function tailFrameAttributes(ctx: AgentRenderContext, key: string): string {
-  return `id="${ids.detailFrame(ctx, key)}" data-controller="agent-tail-frame" data-action="turbo:frame-load->agent-tail-frame#loaded"`;
+  return `id="${ids.detailFrame(ctx, key)}" data-controller="agent-tail-frame" data-action="turbo:frame-load->agent-tail-frame#loaded turbo:before-morph-element->agent-tail-frame#keepUntilLoaded"`;
 }
 
 function lazyTranscriptItemFrame(ctx: AgentRenderContext, key: string): string {

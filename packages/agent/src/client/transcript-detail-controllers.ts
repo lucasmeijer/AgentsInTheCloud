@@ -27,6 +27,21 @@ export function createAgentTailFrameController(Controller: StimulusControllerCon
         transcript: transcript ? { element: transcript, top: transcript.scrollTop } : undefined,
       };
     }
+    /** A running tool shows its detail inline and opens; when it finishes, the server sends a frame that
+     * loads the detail on opening instead. Its disclosure stays open, so morphing would empty the detail
+     * until that load arrives, collapsing and scrolling the transcript. Take the frame's new attributes
+     * and load it now, keeping the current detail until the finished one replaces it. */
+    keepUntilLoaded(event: Event): void {
+      if (event.target !== this.element) return;
+      // SAFETY: Turbo emits this event with its morph descriptor; removals carry no new element.
+      const { newElement } = (event as CustomEvent<{ newElement?: Node }>).detail;
+      if (!(newElement instanceof HTMLElement) || newElement.hasChildNodes() || !newElement.dataset.src) return;
+      if (!this.element.hasChildNodes() || !this.element.closest("details")?.open) return;
+      event.preventDefault();
+      for (const name of this.element.getAttributeNames()) if (!newElement.hasAttribute(name)) this.element.removeAttribute(name);
+      for (const name of newElement.getAttributeNames()) this.element.setAttribute(name, newElement.getAttribute(name)!);
+      this.element.setAttribute("src", newElement.dataset.src);
+    }
     loaded(): void {
       const previous = this.previous;
       this.previous = undefined;
