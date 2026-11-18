@@ -3,6 +3,24 @@ import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { setSupervisorRoutes } from "./tailscale.ts";
 
+test("Serve rejects an interrupted response so supervisor operations can finish", async () => {
+  const directory = await mkdtemp("/tmp/agents-in-the-cloud-serve-");
+  const socket = `${directory}/api.sock`;
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { ETag: "1", "Content-Length": "100" });
+    response.write("{");
+    setTimeout(() => response.destroy(), 20);
+  });
+  await new Promise<void>((resolve) => server.listen(socket, resolve));
+  try {
+    await expect(setSupervisorRoutes("agents-in-the-cloud.test", 3000, socket)).rejects.toThrow();
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(directory, { recursive: true });
+  }
+});
+
 test("Serve compare-and-set retries contention and preserves preview routes", async () => {
   const directory = await mkdtemp("/tmp/agents-in-the-cloud-serve-");
   const socket = `${directory}/api.sock`;
